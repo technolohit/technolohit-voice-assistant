@@ -49,7 +49,10 @@ jobs:
           set -euo pipefail
           mkdir -p ~/.ssh
           install -m 600 /dev/null ~/.ssh/voice_deploy_key
-          printf '%s\n' "${{ secrets.VOICE_DEPLOY_SSH_KEY }}" > ~/.ssh/voice_deploy_key
+          printf '%s\n' "${{ secrets.VOICE_DEPLOY_SSH_KEY }}" \
+            | sed 's/\\n/\n/g' \
+            | tr -d '\r' > ~/.ssh/voice_deploy_key
+          chmod 600 ~/.ssh/voice_deploy_key
           ssh-keyscan -H "${{ secrets.VOICE_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Deploy voice-bridge

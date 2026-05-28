@@ -77,6 +77,16 @@ VOICE_DEPLOY_SSH_KEY
 VOICE_DEPLOY_PATH
 ```
 
+`VOICE_DEPLOY_SSH_KEY` must be the private key, including:
+
+```text
+-----BEGIN OPENSSH PRIVATE KEY-----
+...
+-----END OPENSSH PRIVATE KEY-----
+```
+
+The workflow accepts either normal multiline paste or escaped `\n` newlines and writes the key with `chmod 600`.
+
 `VOICE_DEPLOY_PATH` should point to the server directory containing the production Docker Compose files, for example:
 
 ```text
