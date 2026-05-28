@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+db/backups/*.sql
+voice-bridge/recordings/
+voice-bridge/node_modules/
+rag-api/.venv/
+rag-api/**/__pycache__/
+rag-api/**/*.pyc
+*.log
+*.tgz

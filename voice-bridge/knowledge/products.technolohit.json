@@ -1,0 +1,102 @@
+{
+  "version": "products-2026-05-21-v1",
+  "description": "Editable TechnoloHit product catalog for short German phone answers. Keep answers factual, phone-friendly, and free of pricing, ranking, or compliance guarantees.",
+  "products": [
+    {
+      "id": "smart_website",
+      "number": 1,
+      "name": "Smart Website",
+      "short_name": "Smart Websites",
+      "aliases_de": [
+        "Smart Website",
+        "intelligente Website",
+        "intelligente Webseite",
+        "smarte Webseite"
+      ],
+      "phone_short_de": "Eine Smart Website verbindet Website, lokale Sichtbarkeit, KI-Chat und Anfrage-Erfassung. Möchten Sie prüfen lassen, ob das zu Ihrem Unternehmen passt?",
+      "phone_detail_de": "Sie ist keine reine Online-Visitenkarte, sondern soll KMU bei Sichtbarkeit, Kundenfragen und Leads helfen. Möchten Sie das prüfen lassen?",
+      "forbidden_claims": [
+        "Google Platz 1 Garantie",
+        "garantierte Leads",
+        "garantierte Umsatzsteigerung"
+      ]
+    },
+    {
+      "id": "aiseoq",
+      "number": 2,
+      "name": "AISeoQ",
+      "short_name": "AISeoQ",
+      "aliases_de": [
+        "AISeoQ",
+        "AI SEO Q",
+        "SEO Arbeitsbereich",
+        "SEO Workspace"
+      ],
+      "phone_short_de": "AISeoQ hilft Agenturen und IT-Teams, Websites mit Wettbewerbern zu vergleichen und SEO-Maßnahmen abzuleiten. Prüfen Sie eigene oder Kundenprojekte?",
+      "phone_detail_de": "AISeoQ ist für Analyse, Wettbewerbsvergleich und Kundenreports gedacht. Möchten Sie prüfen, ob es zu Ihren Projekten passt?",
+      "forbidden_claims": [
+        "Ranking-Garantien",
+        "automatische SEO-Erfolge"
+      ]
+    },
+    {
+      "id": "botinteg",
+      "number": 3,
+      "name": "Botinteg",
+      "short_name": "Botinteg",
+      "aliases_de": [
+        "Botinteg",
+        "Bot Integ",
+        "KI Chatbot",
+        "Chatbot",
+        "Automatisierung"
+      ],
+      "phone_short_de": "Botinteg ist für KI-Chatbots und einfache Automatisierung, etwa FAQ, Lead-Erfassung und Website-Abläufe. Geht es eher um Chatbot oder Automatisierung?",
+      "phone_detail_de": "Botinteg verbindet wiederkehrende Fragen, Leads und einfache Abläufe mit Website oder Social Media. Möchten Sie dafür eine erste Einschätzung?",
+      "forbidden_claims": [
+        "jede Integration ohne Prüfung",
+        "vollständige Prozessautomatisierung ohne Setup"
+      ]
+    },
+    {
+      "id": "lokalki",
+      "number": 4,
+      "name": "LokalKI",
+      "short_name": "LokalKI",
+      "aliases_de": [
+        "LokalKI",
+        "lokale KI",
+        "private KI",
+        "Offline KI",
+        "interne KI"
+      ],
+      "phone_short_de": "LokalKI ist eine private KI-Lösung für sensible Daten in kontrollierten oder lokalen Umgebungen. Geht es um interne Dokumente oder Datenschutz?",
+      "phone_detail_de": "LokalKI ist für interne Dokumente und sensible Daten in kontrollierten Umgebungen gedacht. Möchten Sie das mit dem Team prüfen?",
+      "forbidden_claims": [
+        "absolute Sicherheit",
+        "DSGVO-Garantie",
+        "Rechtsberatung"
+      ]
+    },
+    {
+      "id": "voice_agent",
+      "number": 5,
+      "name": "Digitale Rezeption",
+      "short_name": "digitale Rezeption",
+      "aliases_de": [
+        "Digitale Rezeption",
+        "Voice Agent",
+        "AI Voice Agent",
+        "Telefonassistent",
+        "Sprachassistent"
+      ],
+      "phone_short_de": "Die digitale Rezeption nimmt Anrufe an, beantwortet erste Fragen und bereitet Rückrufwünsche oder Leads vor. Möchten Sie das für Ihr Unternehmen prüfen?",
+      "phone_detail_de": "Sie unterstützt das Team am Telefon und bereitet wichtige Gesprächspunkte oder Rückrufwünsche vor. Möchten Sie das für Ihr Unternehmen prüfen?",
+      "forbidden_claims": [
+        "vollständiger Ersatz für Mitarbeitende",
+        "perfekte Erkennung aller Gespräche",
+        "automatische Terminbuchung ohne Integration"
+      ]
+    }
+  ]
+}

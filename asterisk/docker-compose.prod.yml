@@ -1,0 +1,4 @@
+services:
+  voice-bridge:
+    image: ${VOICE_BRIDGE_IMAGE:-thnhit/technhvoice:voice-bridge-latest}
+    build: null

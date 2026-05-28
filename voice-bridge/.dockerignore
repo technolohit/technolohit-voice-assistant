@@ -1,0 +1,9 @@
+.env
+.env.*
+recordings/
+node_modules/
+npm-debug.log
+*.log
+.git/
+.DS_Store
+voice-bridge-deploy.tgz

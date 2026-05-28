@@ -1,0 +1,24 @@
+{
+  "name": "technolohit-voice-bridge",
+  "version": "0.1.0",
+  "description": "TechnoloHit Voice Assistant — AudioSocket bridge with Postgres persistence",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "qa:dialogue": "node scripts/qa-dialogue-text.js",
+    "tts:greeting": "node scripts/generate-greeting-openai.js",
+    "audio:convert": "sh scripts/convert-greeting.sh",
+    "audio:build": "npm run tts:greeting && npm run audio:convert"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "openai": "^6.38.0",
+    "pg": "^8.13.1"
+  },
+  "license": "UNLICENSED"
+}

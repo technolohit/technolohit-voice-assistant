@@ -1,0 +1,6 @@
+asyncpg==0.29.0
+fastapi==0.115.6
+openai==1.59.7
+pydantic==2.10.4
+pydantic-settings==2.7.1
+uvicorn[standard]==0.34.0

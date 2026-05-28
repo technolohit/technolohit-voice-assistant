@@ -1,0 +1,31 @@
+{
+  "version": "faqs-2026-05-21-v1",
+  "description": "Short deterministic FAQ answers for unknown-but-common caller questions.",
+  "faqs": [
+    {
+      "id": "how_to_start",
+      "keywords_de": ["wie", "start", "anfang", "beginnen", "loslegen", "nächste schritte"],
+      "answer_de": "Am einfachsten starten wir mit einer kurzen Ersteinschätzung Ihres aktuellen Stands. Danach empfiehlt unser Team den passenden nächsten Schritt."
+    },
+    {
+      "id": "what_to_send_email",
+      "keywords_de": ["e-mail", "email", "was schreiben", "welche infos", "welche informationen", "zusenden"],
+      "answer_de": "In Ihrer E-Mail reichen drei Punkte: Ihr Ziel, Ihre aktuelle Situation und eine Rückrufnummer. Unser Team meldet sich dann mit einer konkreten Empfehlung."
+    },
+    {
+      "id": "pricing_general",
+      "keywords_de": ["preis", "kosten", "was kostet", "angebot", "budget"],
+      "answer_de": "Die Kosten hängen vom Umfang ab. Unser Team gibt Ihnen nach einer kurzen Einordnung eine passende und transparente Empfehlung."
+    },
+    {
+      "id": "implementation_time",
+      "keywords_de": ["dauer", "zeit", "wie lange", "umsetzung", "wann fertig"],
+      "answer_de": "Die Umsetzungszeit hängt vom Umfang ab. Nach einer kurzen Prüfung kann unser Team einen realistischen Zeitrahmen nennen."
+    },
+    {
+      "id": "support_scope",
+      "keywords_de": ["support", "betreuung", "hilfe", "wartung", "begleitung"],
+      "answer_de": "Ja, unser Team begleitet bei Bedarf auch nach dem Start weiter. Der genaue Rahmen hängt davon ab, welche Lösung Sie einsetzen."
+    }
+  ]
+}
