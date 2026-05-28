@@ -1,0 +1,99 @@
+name: Deploy Voice Stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      voice_bridge_tag:
+        description: "Docker tag for voice-bridge, for example voice-bridge-v1.0.0 or voice-bridge-abc1234"
+        required: true
+      deploy_rag_api:
+        description: "Deploy rag-api too"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      rag_api_tag:
+        description: "Docker tag for rag-api, required only when deploy_rag_api=true"
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  DOCKER_IMAGE: thnhit/technhvoice
+
+jobs:
+  deploy:
+    name: Deploy On Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${{ inputs.voice_bridge_tag }}" =~ ^voice-bridge-[A-Za-z0-9._-]+$ ]]; then
+            echo "voice_bridge_tag must start with voice-bridge-"
+            exit 1
+          fi
+          if [[ "${{ inputs.deploy_rag_api }}" == "true" && ! "${{ inputs.rag_api_tag }}" =~ ^rag-api-[A-Za-z0-9._-]+$ ]]; then
+            echo "rag_api_tag must start with rag-api- when deploy_rag_api=true"
+            exit 1
+          fi
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/voice_deploy_key
+          printf '%s\n' "${{ secrets.VOICE_DEPLOY_SSH_KEY }}" > ~/.ssh/voice_deploy_key
+          ssh-keyscan -H "${{ secrets.VOICE_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy voice-bridge
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.VOICE_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.VOICE_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
+          VOICE_BRIDGE_IMAGE: thnhit/technhvoice:${{ inputs.voice_bridge_tag }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}' && \
+             VOICE_BRIDGE_IMAGE='${VOICE_BRIDGE_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml pull voice-bridge && \
+             VOICE_BRIDGE_IMAGE='${VOICE_BRIDGE_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge && \
+             docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}' && \
+             docker logs --tail=80 technolohit-voice-bridge"
+
+      - name: Deploy rag-api
+        if: ${{ inputs.deploy_rag_api == 'true' }}
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.VOICE_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.VOICE_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
+          RAG_API_IMAGE: thnhit/technhvoice:${{ inputs.rag_api_tag }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '${DEPLOY_PATH}' && \
+             RAG_API_IMAGE='${RAG_API_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml pull technolohit-rag-api && \
+             RAG_API_IMAGE='${RAG_API_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d technolohit-rag-api && \
+             docker inspect technolohit-rag-api --format 'running_image={{.Config.Image}}' && \
+             docker logs --tail=80 technolohit-rag-api"
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Deploy Request"
+            echo
+            echo "- voice-bridge: \`${DOCKER_IMAGE}:${{ inputs.voice_bridge_tag }}\`"
+            echo "- deploy rag-api: \`${{ inputs.deploy_rag_api }}\`"
+            if [[ "${{ inputs.deploy_rag_api }}" == "true" ]]; then
+              echo "- rag-api: \`${DOCKER_IMAGE}:${{ inputs.rag_api_tag }}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

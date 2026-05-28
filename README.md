@@ -38,6 +38,7 @@ npm run db:migrate:voice
 npm run db:test:voice
 npm run db:migrate:knowledge
 npm run docker:release:voice-bridge
+npm run docker:release:rag-api
 ```
 
 Run `voice-bridge` locally:
@@ -70,6 +71,7 @@ Operational docs:
 - `voice-bridge/README.md`
 - `rag-api/README.md`
 - `asterisk/README.md`
+- `docs/release-and-cicd.md`
 - `docs/voice-database.md`
 - `docs/asterisk-easybell-registration.md`
 - `docs/dockerhub-voice-deploy.md`

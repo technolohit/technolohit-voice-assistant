@@ -1,0 +1,120 @@
+name: Docker Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      publish_latest:
+        description: "Also publish service-latest tags"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  DOCKER_IMAGE: thnhit/technhvoice
+
+jobs:
+  docker:
+    name: Build And Push Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set build metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          version_tag=""
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            version_tag="${GITHUB_REF_NAME}"
+          fi
+
+          publish_latest="true"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            publish_latest="${{ inputs.publish_latest }}"
+          fi
+
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=${version_tag}" >> "$GITHUB_OUTPUT"
+          echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login To Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata for voice-bridge
+        id: voice_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=raw,value=voice-bridge-${{ steps.meta.outputs.short_sha }}
+            type=raw,value=voice-bridge-latest,enable=${{ steps.meta.outputs.publish_latest == 'true' }}
+            type=raw,value=voice-bridge-${{ steps.meta.outputs.version_tag }},enable=${{ steps.meta.outputs.version_tag != '' }}
+
+      - name: Build and push voice-bridge
+        uses: docker/build-push-action@v6
+        with:
+          context: ./voice-bridge
+          push: true
+          tags: ${{ steps.voice_meta.outputs.tags }}
+          labels: ${{ steps.voice_meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ steps.meta.outputs.version_tag || steps.meta.outputs.short_sha }}
+            IMAGE_TAG=voice-bridge-${{ steps.meta.outputs.version_tag || steps.meta.outputs.short_sha }}
+            GIT_SHA=${{ github.sha }}
+
+      - name: Docker metadata for rag-api
+        id: rag_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=raw,value=rag-api-${{ steps.meta.outputs.short_sha }}
+            type=raw,value=rag-api-latest,enable=${{ steps.meta.outputs.publish_latest == 'true' }}
+            type=raw,value=rag-api-${{ steps.meta.outputs.version_tag }},enable=${{ steps.meta.outputs.version_tag != '' }}
+
+      - name: Build and push rag-api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./rag-api
+          push: true
+          tags: ${{ steps.rag_meta.outputs.tags }}
+          labels: ${{ steps.rag_meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ steps.meta.outputs.version_tag || steps.meta.outputs.short_sha }}
+            IMAGE_TAG=rag-api-${{ steps.meta.outputs.version_tag || steps.meta.outputs.short_sha }}
+            GIT_SHA=${{ github.sha }}
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Docker Images"
+            echo
+            echo "Repository: \`${DOCKER_IMAGE}\`"
+            echo
+            echo "Voice bridge tags:"
+            echo '${{ steps.voice_meta.outputs.tags }}' | sed 's/^/- /'
+            echo
+            echo "RAG API tags:"
+            echo '${{ steps.rag_meta.outputs.tags }}' | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"

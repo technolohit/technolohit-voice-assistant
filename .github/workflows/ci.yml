@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Voice Assistant Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install voice-bridge dependencies
+        run: npm ci
+        working-directory: voice-bridge
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find scripts voice-bridge/src voice-bridge/scripts \
+            -type f -name '*.js' \
+            -not -path '*/node_modules/*' \
+            -print0 | xargs -0 -n1 node --check
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install RAG API dependencies
+        run: pip install -r rag-api/requirements.txt
+
+      - name: Check Python syntax
+        run: |
+          python -m compileall -q rag-api
+          find rag-api -type d -name __pycache__ -prune -exec rm -rf {} +
+
+      - name: RAG API static contract tests
+        run: python rag-api/tests/test_contract_static.py
+
+      - name: Secret and artifact guard
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden_files="$(
+            find . \
+              -path './.git' -prune -o \
+              -path './node_modules' -prune -o \
+              -path './voice-bridge/node_modules' -prune -o \
+              -path './rag-api/.venv' -prune -o \
+              \( -name '.env' -o -name '*.pyc' -o -path '*/__pycache__/*' -o -path '*/recordings/*' \) \
+              -print
+          )"
+
+          if [ -n "$forbidden_files" ]; then
+            echo "Forbidden local/runtime artifacts found:"
+            echo "$forbidden_files"
+            exit 1
+          fi
+
+          if grep -RInE 'sk-proj-|OPENAI_API_KEY=sk-|VOICE_DB_PASSWORD=[^<[:space:]]|RAG_DB_PASSWORD=[^<[:space:]]|DOCKERHUB_TOKEN=|VOICE_DEPLOY_SSH_KEY=' \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude-dir=__pycache__ \
+            --exclude=ci.yml \
+            .; then
+            echo "Possible secret found in repository content."
+            exit 1
+          fi

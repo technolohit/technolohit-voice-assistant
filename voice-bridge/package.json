@@ -1,6 +1,6 @@
 {
   "name": "technolohit-voice-bridge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TechnoloHit Voice Assistant — AudioSocket bridge with Postgres persistence",
   "private": true,
   "type": "module",

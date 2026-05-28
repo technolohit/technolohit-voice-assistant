@@ -1,6 +1,6 @@
 {
   "name": "technolohit-voice-assistant",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TechnoloHit Asterisk, voice-bridge, and RAG services for the live phone assistant.",
   "private": true,
   "type": "module",
@@ -9,6 +9,9 @@
     "docker:build:voice-bridge": "bash scripts/docker/build-voice-bridge.sh",
     "docker:push:voice-bridge": "bash scripts/docker/push-voice-bridge.sh",
     "docker:release:voice-bridge": "bash scripts/docker/release-voice-bridge.sh",
+    "docker:build:rag-api": "bash scripts/docker/build-rag-api.sh",
+    "docker:push:rag-api": "bash scripts/docker/push-rag-api.sh",
+    "docker:release:rag-api": "bash scripts/docker/release-rag-api.sh",
     "db:migrate:voice": "node scripts/db-migrate-voice-postgres.js",
     "db:migrate:knowledge": "node scripts/db-migrate-knowledge-postgres.js",
     "db:test:voice": "node scripts/db-test-voice-postgres.js"
