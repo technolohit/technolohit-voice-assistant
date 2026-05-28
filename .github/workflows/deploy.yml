@@ -61,15 +61,21 @@ jobs:
           DEPLOY_HOST: ${{ secrets.VOICE_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.VOICE_DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           VOICE_BRIDGE_IMAGE: thnhit/technhvoice:${{ inputs.voice_bridge_tag }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '${DEPLOY_PATH}' && \
-             VOICE_BRIDGE_IMAGE='${VOICE_BRIDGE_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml pull voice-bridge && \
-             VOICE_BRIDGE_IMAGE='${VOICE_BRIDGE_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge && \
-             docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}' && \
-             docker logs --tail=80 technolohit-voice-bridge"
+            "DOCKERHUB_USERNAME='${DOCKERHUB_USERNAME}' DOCKERHUB_TOKEN='${DOCKERHUB_TOKEN}' DEPLOY_PATH='${DEPLOY_PATH}' VOICE_BRIDGE_IMAGE='${VOICE_BRIDGE_IMAGE}' bash -se" <<'REMOTE'
+          set -euo pipefail
+          printf '%s\n' "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          cd "$DEPLOY_PATH"
+          VOICE_BRIDGE_IMAGE="$VOICE_BRIDGE_IMAGE" docker compose -f docker-compose.yml -f docker-compose.prod.yml pull voice-bridge
+          VOICE_BRIDGE_IMAGE="$VOICE_BRIDGE_IMAGE" docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+          docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}'
+          docker logs --tail=80 technolohit-voice-bridge
+          REMOTE
 
       - name: Deploy rag-api
         if: ${{ inputs.deploy_rag_api == 'true' }}
@@ -78,15 +84,21 @@ jobs:
           DEPLOY_HOST: ${{ secrets.VOICE_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.VOICE_DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           RAG_API_IMAGE: thnhit/technhvoice:${{ inputs.rag_api_tag }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '${DEPLOY_PATH}' && \
-             RAG_API_IMAGE='${RAG_API_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml pull technolohit-rag-api && \
-             RAG_API_IMAGE='${RAG_API_IMAGE}' docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d technolohit-rag-api && \
-             docker inspect technolohit-rag-api --format 'running_image={{.Config.Image}}' && \
-             docker logs --tail=80 technolohit-rag-api"
+            "DOCKERHUB_USERNAME='${DOCKERHUB_USERNAME}' DOCKERHUB_TOKEN='${DOCKERHUB_TOKEN}' DEPLOY_PATH='${DEPLOY_PATH}' RAG_API_IMAGE='${RAG_API_IMAGE}' bash -se" <<'REMOTE'
+          set -euo pipefail
+          printf '%s\n' "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          cd "$DEPLOY_PATH"
+          RAG_API_IMAGE="$RAG_API_IMAGE" docker compose -f docker-compose.yml -f docker-compose.prod.yml pull technolohit-rag-api
+          RAG_API_IMAGE="$RAG_API_IMAGE" docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d technolohit-rag-api
+          docker inspect technolohit-rag-api --format 'running_image={{.Config.Image}}'
+          docker logs --tail=80 technolohit-rag-api
+          REMOTE
 
       - name: Summary
         shell: bash
