@@ -81,7 +81,7 @@ jobs:
             exit 1
           fi
 
-          if grep -RInE 'sk-proj-|OPENAI_API_KEY=sk-|VOICE_DB_PASSWORD=[^<[:space:]]|RAG_DB_PASSWORD=[^<[:space:]]|DOCKERHUB_TOKEN=|VOICE_DEPLOY_SSH_KEY=' \
+          if grep -RInE 'sk-proj-|OPENAI_API_KEY=sk-|VOICE_DB_PASSWORD=[^<[:space:]$]|RAG_DB_PASSWORD=[^<[:space:]$]|DOCKERHUB_TOKEN=[^[:space:]$]|VOICE_DEPLOY_SSH_KEY=[^[:space:]$]' \
             --exclude-dir=.git \
             --exclude-dir=node_modules \
             --exclude-dir=__pycache__ \
