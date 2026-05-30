@@ -427,7 +427,8 @@ SELECT
   caller_phone_normalized,
   metadata->>'caller_phone_source' AS caller_phone_source
 FROM voice.call_sessions
-ORDER BY started_at DESC
+WHERE started_at IS NOT NULL
+ORDER BY started_at DESC NULLS LAST
 LIMIT 20;
 ```
 
@@ -763,7 +764,8 @@ Ask sysadmin to provide or verify these before production rollout.
 docker exec central_postgres psql -U "$POSTGRES_USER" -d technolohit_growth -P pager=off -c "
 SELECT id, started_at, caller_phone_raw, caller_phone_normalized, metadata->>'caller_phone_source' AS source
 FROM voice.call_sessions
-ORDER BY started_at DESC
+WHERE started_at IS NOT NULL
+ORDER BY started_at DESC NULLS LAST
 LIMIT 20;"
 ```
 

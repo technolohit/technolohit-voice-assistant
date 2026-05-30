@@ -41,7 +41,7 @@ node --check voice-bridge/src/caller-id.js
 cd voice-bridge && npm test
 # From voice-bridge/ (Windows PowerShell: use node directly, not npm run -- --scenario)
 node scripts/qa-dialogue-text.js --scenario caller_id_callback
-# All 14 dialogue QA scenarios (see ci.yml list) — PASS
+# All dialogue QA scenarios in ci.yml, including hotfix scenarios, pass
 # npm test includes RAG fail-closed: missing URL, timeout (local hang server), unreachable port
 ```
 
@@ -49,6 +49,28 @@ node scripts/qa-dialogue-text.js --scenario caller_id_callback
 
 - Added `lead-dashboard/**/__pycache__/` and `lead-dashboard/**/*.pyc` to `.gitignore` (aligned with `rag-api/`).
 - Removed nine accidentally tracked `lead-dashboard` `.pyc` files from git index; bytecode should never be committed.
+
+## Live-call hotfix (2026-05-30)
+
+Live testing of `voice-bridge-v1.1.0` showed two regressions:
+
+- `Kurze Erklaerung` after the AI Assistant compact offer repeated the compact offer instead of explaining the product.
+- User-facing responses still used `Rueckruf` / `zurueckrufen` wording, which must be avoided in spoken output.
+
+Implemented hotfix:
+
+- Added deterministic handling for short explanation requests after `product_compact_offer`.
+- Added a concise Digitale Rezeption explanation followed by an email/phone choice.
+- Added outbound response sanitization that replaces Rueckruf/zurueckrufen variants with telephone/contact wording.
+- Kept inbound Rueckruf recognition as a phone/contact signal.
+- Added dialogue QA scenarios: `voice_agent_short_explanation`, `rueckruf_input_maps_to_phone`, and `no_rueckruf_output`.
+- Updated last-call SQL examples to exclude NULL `started_at` smoke rows and use `ORDER BY started_at DESC NULLS LAST`.
+
+Caller ID production finding:
+
+- Production `voice.call_sessions.caller_phone_raw` and `caller_phone_normalized` are empty for real calls.
+- The assistant must therefore keep asking for the phone number when caller ID is absent.
+- Sysadmin must wire caller ID into the AudioSocket UUID payload if caller-ID-based callback permission is required.
 
 ## Runtime Behavior Verified (local code inspection)
 
@@ -82,7 +104,10 @@ Caller ID DB:
 ```sql
 SELECT id, started_at, caller_phone_raw, caller_phone_normalized,
        metadata->>'caller_phone_source' AS caller_phone_source
-FROM voice.call_sessions ORDER BY started_at DESC LIMIT 20;
+FROM voice.call_sessions
+WHERE started_at IS NOT NULL
+ORDER BY started_at DESC NULLS LAST
+LIMIT 20;
 ```
 
 RAG:

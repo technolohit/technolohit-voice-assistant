@@ -75,8 +75,11 @@ jobs:
             caller_id_callback
             caller_id_missing_callback
             voice_agent_ai_assistant
+            voice_agent_short_explanation
             voice_agent_ki_assistent
             voice_agent_telefonassistent
+            rueckruf_input_maps_to_phone
+            no_rueckruf_output
             unclear_input
             unknown_intent
             gate6_business_fallback

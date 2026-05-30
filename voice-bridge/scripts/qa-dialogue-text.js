@@ -74,6 +74,23 @@ function excludes(text, part) {
   return !normalizeText(text).includes(normalizeText(part));
 }
 
+function hasBannedCallbackOutput(text) {
+  const normalized = normalizeText(text);
+  return /\b(ruckruf|rueckruf|ruckrufnummer|rueckrufnummer|zuruckrufen|zurueckrufen|zuruckruft|zurueckruft)\b/i.test(
+    normalized
+  );
+}
+
+function noBannedCallbackOutputChecks(results) {
+  return results.map((entry) =>
+    assertCondition(
+      `turn ${entry.turn} has no banned callback wording`,
+      !hasBannedCallbackOutput(entry.assistant),
+      entry.assistant
+    )
+  );
+}
+
 function buildQaConfig({ ragEnabled = false } = {}) {
   process.env.VOICE_ASSISTANT_ENABLED = "true";
   process.env.VOICE_LOG_TRANSCRIPT_PREVIEW = "false";
@@ -198,8 +215,7 @@ const SCENARIOS = {
         assertCondition(
           "Telefon -> phone request",
           includesAll(phoneChoice.assistant, ["telefonnummer"]) ||
-            includesAll(phoneChoice.assistant, ["zuruckrufen"]) ||
-            includesAll(phoneChoice.assistant, ["zurückrufen"]),
+            includesAll(phoneChoice.assistant, ["telefonisch kontaktieren"]),
           phoneChoice.assistant
         ),
         assertCondition(
@@ -216,7 +232,8 @@ const SCENARIOS = {
           "Nein danke -> warm goodbye",
           includesAll(close.assistant, ["wiederh"]) || includesAll(close.assistant, ["danke"]),
           close.assistant
-        )
+        ),
+        ...noBannedCallbackOutputChecks(results)
       ];
     }
   },
@@ -266,15 +283,15 @@ const SCENARIOS = {
         assertCondition(
           "missing caller ID -> spoken phone request once",
           includesAll(phoneChoice.assistant, ["unter welcher telefonnummer"]) &&
-            (includesAll(phoneChoice.assistant, ["zuruckrufen"]) ||
-              includesAll(phoneChoice.assistant, ["zurückrufen"])),
+            includesAll(phoneChoice.assistant, ["telefonisch"]),
           phoneChoice.assistant
         ),
         assertCondition(
           "not caller ID permission prompt",
           excludes(phoneChoice.assistant, "von der sie gerade anrufen"),
           phoneChoice.assistant
-        )
+        ),
+        ...noBannedCallbackOutputChecks(results)
       ];
     }
   },
@@ -292,15 +309,99 @@ const SCENARIOS = {
         assertCondition(
           "offers explanation or callback",
           includesAll(turn.assistant, ["erklaerung", "erklärung", "kurze erklarung", "kurze erklärung"]) ||
-            includesAll(turn.assistant, ["ruckruf", "rückruf"]),
+            includesAll(turn.assistant, ["telefonisch", "kontakt"]),
           turn.assistant
         ),
         assertCondition(
           "no full product menu",
           excludes(turn.assistant, "welches thema interessiert sie am meisten"),
           turn.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  voice_agent_short_explanation: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: ["Ich interessiere mich für AI Assistant.", "Kurze Erklärung bitte.", "Telefonisch bitte."],
+    assert(results) {
+      const offer = results[0];
+      const explanation = results[1];
+      const phoneChoice = results[2];
+      return [
+        assertCondition(
+          "voice agent compact offer recognized",
+          offer.normalized_intent === "product_selection_voice_agent" &&
+            (includesAll(offer.assistant, ["ki-telefonassistent"]) ||
+              includesAll(offer.assistant, ["digitale rezeption"])),
+          `${offer.normalized_intent}: ${offer.assistant}`
+        ),
+        assertCondition(
+          "short explanation answers instead of reasking compact offer",
+          includesAll(explanation.assistant, ["digitale rezeption"]) &&
+            includesAll(explanation.assistant, ["anrufe"]) &&
+            (includesAll(explanation.assistant, ["e-mail"]) ||
+              includesAll(explanation.assistant, ["telefonisch"])),
+          explanation.assistant
+        ),
+        assertCondition(
+          "explanation not repeated compact offer",
+          excludes(explanation.assistant, "kurze erklärung oder") &&
+            excludes(explanation.assistant, "kurze erklarung oder"),
+          explanation.assistant
+        ),
+        assertCondition(
+          "after explanation phone path asks for phone when caller ID missing",
+          includesAll(phoneChoice.assistant, ["telefonnummer"]) &&
+            includesAll(phoneChoice.assistant, ["telefonisch"]),
+          phoneChoice.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  rueckruf_input_maps_to_phone: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: ["Rückruf bitte."],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "inbound Rueckruf maps to phone/contact path",
+          turn.normalized_intent === "callback_request" ||
+            turn.normalized_intent === "contact_preference_phone" ||
+            includesAll(turn.assistant, ["telefon"]) ||
+            includesAll(turn.assistant, ["e-mail"]),
+          `${turn.normalized_intent}: ${turn.assistant}`
+        ),
+        assertCondition(
+          "outbound response does not say Rueckruf variants",
+          !hasBannedCallbackOutput(turn.assistant),
+          turn.assistant
         )
       ];
+    }
+  },
+  no_rueckruf_output: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: [
+      "Ich interessiere mich für AI Assistant.",
+      "Kurze Erklärung bitte.",
+      "Telefonisch bitte.",
+      "0170 1234567.",
+      "Nein danke."
+    ],
+    assert(results) {
+      return noBannedCallbackOutputChecks(results);
     }
   },
   voice_agent_ki_assistent: {
@@ -638,7 +739,9 @@ Windows PowerShell: run from voice-bridge/ with the node command above (npm run 
 
 Scenarios:
   smart_website_email, smart_website_phone, caller_id_callback, caller_id_missing_callback,
-  voice_agent_ai_assistant, voice_agent_ki_assistent, voice_agent_telefonassistent,
+  voice_agent_ai_assistant, voice_agent_short_explanation,
+  voice_agent_ki_assistent, voice_agent_telefonassistent,
+  rueckruf_input_maps_to_phone, no_rueckruf_output,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional

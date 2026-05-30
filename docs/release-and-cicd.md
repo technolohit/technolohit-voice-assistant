@@ -175,7 +175,10 @@ Caller ID DB evidence:
 ```bash
 docker exec central_postgres psql -U "$POSTGRES_USER" -d technolohit_growth -P pager=off -c "
 SELECT id, started_at, caller_phone_raw, caller_phone_normalized, metadata->>'caller_phone_source' AS source
-FROM voice.call_sessions ORDER BY started_at DESC LIMIT 20;"
+FROM voice.call_sessions
+WHERE started_at IS NOT NULL
+ORDER BY started_at DESC NULLS LAST
+LIMIT 20;"
 ```
 
 RAG runtime verification:
@@ -209,6 +212,8 @@ VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-previous-tag docker compose -
 | Caller ID + phone callback | Permission under current number; no spoken phone repeat |
 | No caller ID + phone callback | One phone question; no duplicate permission |
 | `AI Assistant` interest | Compact voice-agent offer; no full menu |
+| `AI Assistant` + `Kurze Erklärung bitte` | Short Digitale Rezeption explanation; no compact-offer loop |
+| `Rückruf bitte` input | Routes to phone contact path, but assistant does not say `Rückruf` or `zurückrufen` |
 | Unclear audio | Short repeat request |
 | Unknown intent | Short topic clarification; no greeting loop |
 | RAG disabled | Call continues with FAQ/templates/fallback |

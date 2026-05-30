@@ -58,9 +58,9 @@ const DEFAULT_HANDOFF_CHOICE_QUESTION =
 const EMAIL_DETAIL_REQUEST_TEXT =
   "Welche E-Mail-Adresse dürfen wir für die Rückmeldung verwenden?";
 const PHONE_DETAIL_REQUEST_TEXT =
-  "Gerne. Unter welcher Telefonnummer darf unser Team Sie zurückrufen?";
+  "Gerne. Unter welcher Telefonnummer darf unser Team Sie telefonisch kontaktieren?";
 const CALLER_ID_CALLBACK_PERMISSION_TEXT =
-  "Gerne. Darf unser Team Sie unter der Nummer zurückrufen, von der Sie gerade anrufen?";
+  "Gerne. Darf unser Team Sie unter der Nummer telefonisch kontaktieren, von der Sie gerade anrufen?";
 const CALLBACK_NUMBER_CONFIRM_PERMISSION_TEXT = CALLER_ID_CALLBACK_PERMISSION_TEXT;
 const CONTACT_PERMISSION_TEXT = "Danke. Darf unser Team Sie dazu kontaktieren?";
 const CONTACT_PERMISSION_REASK_TEXT = "Darf unser Team Sie dazu kontaktieren?";
@@ -109,6 +109,8 @@ const DETAIL_RETRY_LIMIT = 1;
 const CONTACT_PREFERENCE_RETRY_LIMIT = 3;
 const PERMISSION_RETRY_LIMIT = 1;
 const UNKNOWN_INTENT_LOOP_LIMIT = 2;
+const BANNED_OUTBOUND_CALLBACK_PATTERN =
+  /\b(?:rückruf(?:nummer|wunsch|wünsche|wuensche)?|rueckruf(?:nummer|wunsch|wuensche)?|ruckruf(?:nummer|wunsch|wunsche)?|zurückrufen|zurueckrufen|zuruckrufen|zurückruft|zurueckruft|zuruckruft)\b/i;
 const KNOWLEDGE_SOURCE = "voice-bridge/knowledge/technolohit.md";
 const PRODUCT_CATALOG_SOURCE = "voice-bridge/knowledge/products.technolohit.json";
 const FAQ_CATALOG_SOURCE = "voice-bridge/knowledge/faqs.technolohit.json";
@@ -470,7 +472,26 @@ function normalizeAssistantResponse(text, config) {
   for (const [token, value] of protectedTokens.entries()) {
     restored = restored.replaceAll(token, value);
   }
-  return trimToChars(restored, maxResponseChars(config));
+  return trimToChars(sanitizeAssistantOutput(restored), maxResponseChars(config));
+}
+
+function sanitizeAssistantOutput(text) {
+  const bannedGlobal =
+    /\b(?:rückruf(?:nummer|wunsch|wünsche|wuensche)?|rueckruf(?:nummer|wunsch|wuensche)?|ruckruf(?:nummer|wunsch|wunsche)?|zurückrufen|zurueckrufen|zuruckrufen|zurückruft|zurueckruft|zuruckruft)\b/gi;
+  return String(text ?? "")
+    .replace(bannedGlobal, (match) => {
+      const lower = match.toLowerCase();
+      if (lower.includes("nummer")) return "Telefonnummer";
+      if (lower.includes("wunsch") || lower.includes("wünsche") || lower.includes("wuensche")) return "Kontaktwunsch";
+      if (lower.includes("zur")) return "telefonisch kontaktiert";
+      return "telefonische Kontaktaufnahme";
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function responseHasBannedCallbackWording(text) {
+  return BANNED_OUTBOUND_CALLBACK_PATTERN.test(String(text ?? ""));
 }
 
 function protectInlineTokens(text) {
@@ -908,22 +929,29 @@ function isCompactProductInterestPhrase(text) {
 function buildCompactProductInterestResponse(config, productId) {
   if (productId === "voice_agent") {
     return normalizeAssistantResponse(
-      "Verstanden, es geht um den KI-Telefonassistenten und die digitale Rezeption. Kurze Erklärung oder Rückruf durch unser Team?",
+      "Verstanden, es geht um den KI-Telefonassistenten und die digitale Rezeption. Kurze Erklärung oder telefonischer Kontakt durch unser Team?",
       config
     );
   }
   const policy = productPolicyById(productId);
   if (!policy) return unknownResponse(config);
   return normalizeAssistantResponse(
-    `Verstanden, es geht um ${policy.displayName}. Möchten Sie dazu eine kurze Erklärung, oder soll unser Team Sie zurückrufen?`,
+    `Verstanden, es geht um ${policy.displayName}. Möchten Sie dazu eine kurze Erklärung, oder soll unser Team Sie telefonisch kontaktieren?`,
     config
   );
 }
 
 function isProductExplanationChoice(text) {
   const lower = normalizeForIntent(text);
-  return /\b(erklar|erklär|erklaer|erklaeren|erklären|mehr dazu|kurz mehr|wie funktioniert|was ist|details)\b/i.test(
-    lower
+  const compact = lower.replace(/[^a-z0-9]/g, "");
+  return (
+    /\b(erklar|erklär|erklaer|erklaeren|erklären|mehr dazu|mehr informationen|kurz mehr|kurze info|wie funktioniert|was ist|was ist das genau|details)\b/i.test(
+      lower
+    ) ||
+    compact.includes("kurzerklarung") ||
+    compact.includes("kurzeerklarung") ||
+    compact.includes("erklarmirdas") ||
+    compact.includes("erklaermirdas")
   );
 }
 
@@ -939,7 +967,7 @@ function appendRagFollowUpQuestion(text, config) {
   const base = normalizeAssistantResponse(text, config);
   if (!base) return base;
   if (/\?\s*$/.test(base)) return base;
-  const followUp = "Haben Sie dazu noch eine kurze Frage, oder soll unser Team Sie zurückrufen?";
+  const followUp = "Haben Sie dazu noch eine kurze Frage, oder soll unser Team Sie telefonisch kontaktieren?";
   return normalizeAssistantResponse(`${base} ${followUp}`, config);
 }
 
@@ -1053,6 +1081,12 @@ function productSelectionResponse(config, catalog, productId) {
 function productDetailResponse(config, catalog, productId) {
   const policy = productPolicyById(productId);
   if (!policy) return normalizeAssistantResponse(UNKNOWN_FALLBACK_TEXT, config);
+  if (productId === "voice_agent") {
+    return normalizeAssistantResponse(
+      "Die Digitale Rezeption beantwortet Anrufe, fragt das Anliegen ab und notiert wichtige Infos. Möchten Sie per E-Mail starten oder telefonisch?",
+      config
+    );
+  }
   const assembled = assembleLimitedResponse({
     prefix: policy.pitchShort,
     mandatorySuffix: policy.mandatoryInterestQuestion,
@@ -1456,7 +1490,7 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
         return null;
       }
       if (isProductExplanationChoice(callerText) || intent === "product_more_detail_request") {
-        productState.productDialogueState = "product_pitch_interest_question";
+        markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
         const detailResponse = productDetailResponse(config, catalog, productState.selectedProduct);
         return {
           text: detailResponse,
