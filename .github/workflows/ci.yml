@@ -88,6 +88,7 @@ jobs:
             v3_explanation_then_phone_handoff
             v3_sales_depth_before_handoff
             v3_post_completion_product_question
+            v3_email_contact_closing
             v3_pricing_after_contact_capture
             voice_agent_ki_assistent
             voice_agent_telefonassistent

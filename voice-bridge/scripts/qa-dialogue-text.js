@@ -869,6 +869,42 @@ const SCENARIOS = {
       ];
     }
   },
+  v3_email_contact_closing: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Eigene Unternehmen.",
+      "Leads sammeln mit dem Assistenten.",
+      "Auf der Website und auch am Telefon.",
+      "Per E-Mail."
+    ],
+    assert(results) {
+      const email = results[4];
+      const hasClosingQuestion =
+        includesAll(email.assistant, ["kurze frage"]) ||
+        includesAll(email.assistant, ["verabschieden"]) ||
+        includesAll(email.assistant, ["noch eine frage"]);
+      return [
+        assertCondition(
+          "email path includes configured contact email",
+          email &&
+            email.normalized_intent === "contact_preference_email" &&
+            includesAll(email.assistant, ["info@technolohit.com"]),
+          email ? `${email.normalized_intent}: ${email.assistant}` : "missing email turn"
+        ),
+        assertCondition(
+          "email path includes closing or follow-up question",
+          email && hasClosingQuestion && String(email.assistant).trim().length > 40,
+          email?.assistant || "missing email turn"
+        ),
+        assertCondition(
+          "email response is not empty or silent",
+          email && normalizeText(email.assistant).length > 30,
+          email?.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   v3_pricing_after_contact_capture: {
     context: {
       callerPhoneNormalized: "+491701234567",
@@ -1289,6 +1325,7 @@ Scenarios:
   v3_live_customer_type_loop, v3_fuer_meine_firma, v3_repeated_unclear_no_loop,
   v3_rag_fail_closed_explanation, v3_explanation_then_phone_handoff,
   v3_sales_depth_before_handoff, v3_post_completion_product_question,
+  v3_email_contact_closing,
   v3_pricing_after_contact_capture,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,

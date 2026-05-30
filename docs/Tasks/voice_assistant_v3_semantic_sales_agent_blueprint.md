@@ -592,6 +592,7 @@ AI Assistant bitte -> explanation -> Telefonisch bitte -> phone handoff (v3_expl
 AI Assistant bitte -> concrete use case -> sales reflection + follow-up before handoff (v3_sales_depth_before_handoff)
 After contact capture -> product relation question (Website vs KI-Assistent) answered, not human_or_ai (v3_post_completion_product_question)
 After contact capture -> pricing concise, no website redirect (v3_pricing_after_contact_capture)
+E-Mail contact path -> guidance plus short closing question, no silence (v3_email_contact_closing)
 Existing customer -> asks company/customer number
 RAG timeout -> deterministic fallback
 ```

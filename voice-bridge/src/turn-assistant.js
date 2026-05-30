@@ -41,6 +41,7 @@ import {
   isV3SalesFlowEnabled,
   shouldDeferToPhoneIntake
 } from "./sales-dialogue-manager.js";
+import { emailContactReferenceText, splitEmailDirectIntakeParts } from "./email-intake-closing.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -695,12 +696,6 @@ function configuredContactEmail(config) {
 
 function configuredWebsiteUrl(config) {
   return String(config?.assistant?.websiteUrl || "").trim();
-}
-
-function emailContactReferenceText(config) {
-  const address = configuredContactEmail(config);
-  if (address) return `Sie können uns an ${address} schreiben.`;
-  return "Die E-Mail-Adresse finden Sie auf unserer Website.";
 }
 
 function contactDeclinedText(config) {
@@ -2511,9 +2506,25 @@ function softIntakeTriggerText(intent, config, callerText) {
 async function completeEmailDirectIntake(config, ctx, turnIndex, detectedIntent, intake) {
   const product = ensureProductState(turnState(ctx));
   const policy = productPolicyById(product?.selectedProduct || "") || null;
-  const emailReference = emailContactReferenceText(config);
   const emailInstruction = policy?.emailInstruction || "Schreiben Sie uns bitte kurz Ihr Anliegen und Ihre wichtigsten Fragen.";
-  const confirmationText = `${emailReference} ${emailInstruction}`;
+  const { body: emailBody, closing: emailClosing } = splitEmailDirectIntakeParts(config, emailInstruction);
+  let assembledEmail = assembleLimitedResponse({
+    prefix: emailBody,
+    mandatorySuffix: emailClosing,
+    config,
+    maxSentencesOverride: 4,
+    maxCharsOverride: Math.max(maxResponseChars(config), 300)
+  });
+  if (!responseContainsFinalCloseQuestion(assembledEmail.text, emailClosing)) {
+    assembledEmail = assembleLimitedResponse({
+      prefix: emailContactReferenceText(config),
+      mandatorySuffix: emailClosing,
+      config,
+      maxSentencesOverride: 3,
+      maxCharsOverride: Math.max(maxResponseChars(config), 300)
+    });
+  }
+  const confirmationText = sanitizeAssistantOutput(assembledEmail.text);
   const contactEmail = configuredContactEmail(config);
   console.log(
     `[voice-assistant] email intake turn_index=${turnIndex} voice_contact_email_configured=${Boolean(contactEmail)}`
@@ -2554,7 +2565,7 @@ async function completeEmailDirectIntake(config, ctx, turnIndex, detectedIntent,
   intake.leadCreated = Boolean(leadId);
 
   return {
-    text: normalizeAssistantResponse(confirmationText, config),
+    text: confirmationText,
     detectedIntent,
     finalResponseTemplate: "email_instruction",
     intake

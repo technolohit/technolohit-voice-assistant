@@ -33,9 +33,11 @@ Based on v1.3.0 live-call evidence (`docs/Tasks/logs.txt`):
 
 New modules: `product-intent-routing.js`, `post-completion-router.js`.
 
-New QA scenarios: `v3_sales_depth_before_handoff`, `v3_post_completion_product_question`, `v3_pricing_after_contact_capture`.
+New QA scenarios: `v3_sales_depth_before_handoff`, `v3_post_completion_product_question`, `v3_pricing_after_contact_capture`, `v3_email_contact_closing`.
 
-Re-ran full CI dialogue list (**24 scenarios**) — all pass.
+**Email contact closing (2026-05-30):** `completeEmailDirectIntake` now appends a short follow-up/closing question via `email-intake-closing.js` so the E-Mail path does not end in silence after guidance.
+
+Re-ran full CI dialogue list (**25 scenarios**) — all pass.
 
 ## Architecture delivered
 
@@ -61,6 +63,7 @@ ASR diagnostics (optional)
 | `voice-bridge/src/asr-diagnostics.js` | QA diagnostic records + offline fixture eval |
 | `voice-bridge/src/product-intent-routing.js` | Product/relation vs human/AI priority; post-capture pricing wording |
 | `voice-bridge/src/post-completion-router.js` | Post-lead QA: prompt-only vs direct product/pricing answers |
+| `voice-bridge/src/email-intake-closing.js` | E-Mail contact path: guidance + short closing/follow-up question |
 
 ## Environment flags (default: off)
 
@@ -98,7 +101,7 @@ Summary metadata includes `lead_policy_strict_callback: true|false` for auditabi
 | 4 RAG sales answerer | Done | Behind `VOICE_RAG_SALES_ANSWERER_ENABLED` + RAG flags |
 | 5 ASR diagnostics | Done | Logging hook + `npm run eval:asr-fixture` |
 | 6 Lead policy | Done | `post-call-summary` / `post-call-lead` use stricter guards |
-| 7 CI QA matrix | Done | 24 dialogue scenarios green locally + eval in CI |
+| 7 CI QA matrix | Done | 25 dialogue scenarios green locally + eval in CI |
 | 8 Controlled rollout | Pending | Requires sysadmin verification on target host |
 
 ## Live failure fixture
@@ -120,7 +123,8 @@ node scripts/qa-dialogue-text.js --scenario v3_live_customer_type_loop
 | `npm test` | Pass (46 tests) |
 | `node --check` on changed JS | Pass |
 | `npm run eval:asr-fixture` | Pass (7 semantic turns) |
-| CI dialogue matrix (24 scenarios) | Pass (`scripts/run-ci-dialogue-scenarios.ps1`) |
+| CI dialogue matrix (25 scenarios) | Pass (`scripts/run-ci-dialogue-scenarios.ps1`) |
+| `v3_email_contact_closing` | Pass |
 | `v3_sales_depth_before_handoff` | Pass |
 | `v3_post_completion_product_question` | Pass |
 | `v3_pricing_after_contact_capture` | Pass |
