@@ -75,6 +75,38 @@ function excludes(text, part) {
   return !normalizeText(text).includes(normalizeText(part));
 }
 
+const CUSTOMER_TYPE_MENU_LOOP_SNIPPET =
+  "sagen sie bitte kurz: eigenes unternehmen, kundenprojekt";
+
+function hasProductExplanationContent(text) {
+  return includesAll(text, ["digitale rezeption"]) || includesAll(text, ["anrufe"]);
+}
+
+function hasUsefulSalesFollowUpQuestion(text) {
+  const haystack = normalizeText(text);
+  const asksSomething =
+    haystack.includes("?") ||
+    /\b(geht es|mochten sie|was mochten|was soll|wie|welche|soll unser)\b/i.test(haystack);
+  if (!asksSomething) return false;
+  return (
+    includesAll(text, ["eigenes unternehmen"]) ||
+    includesAll(text, ["kundenprojekt"]) ||
+    includesAll(text, ["verpasste anrufe"]) ||
+    includesAll(text, ["lead"]) ||
+    includesAll(text, ["verbessern"]) ||
+    includesAll(text, ["ziel"]) ||
+    includesAll(text, ["bereits kunde"])
+  );
+}
+
+function acknowledgesOwnCompany(text) {
+  return (
+    includesAll(text, ["eigenes unternehmen"]) ||
+    includesAll(text, ["eigenem unternehmen"]) ||
+    includesAll(text, ["ordne das als eigenes unternehmen"])
+  );
+}
+
 function hasBannedCallbackOutput(text) {
   const normalized = normalizeText(text);
   return /\b(ruckruf|rueckruf|ruckrufnummer|rueckrufnummer|zuruckrufen|zurueckrufen|zuruckruft|zurueckruft)\b/i.test(
@@ -92,18 +124,26 @@ function noBannedCallbackOutputChecks(results) {
   );
 }
 
-function buildQaConfig({ ragEnabled = false } = {}) {
+function buildQaConfig({ ragEnabled = false, v3Enabled = true } = {}) {
   process.env.VOICE_ASSISTANT_ENABLED = "true";
   process.env.VOICE_LOG_TRANSCRIPT_PREVIEW = "false";
   process.env.VOICE_QA_LOG_TRANSCRIPT_PREVIEW = "false";
   if (!process.env.VOICE_CONTACT_EMAIL) process.env.VOICE_CONTACT_EMAIL = "info@technolohit.com";
   if (!process.env.VOICE_WEBSITE_URL) process.env.VOICE_WEBSITE_URL = "www.technolohit.com";
   process.env.VOICE_RAG_ENABLED = ragEnabled ? "true" : "false";
+  process.env.VOICE_SEMANTIC_INTENT_ENABLED = v3Enabled ? "true" : "false";
+  process.env.VOICE_CONVERSATION_REPAIR_ENABLED = v3Enabled ? "true" : "false";
+  process.env.VOICE_SEMANTIC_INTENT_MODE = "deterministic";
+  process.env.VOICE_RAG_SALES_ANSWERER_ENABLED = ragEnabled ? "true" : "false";
+  process.env.VOICE_RAG_QA_MODE = ragEnabled ? "true" : "false";
 
   const config = loadConfig();
   config.assistant.enabled = true;
   config.assistant.qaTextMode = true;
   config.rag.enabled = ragEnabled;
+  config.semanticIntent.enabled = v3Enabled;
+  config.conversationRepair.enabled = v3Enabled;
+  config.rag.salesAnswererEnabled = ragEnabled;
   return config;
 }
 
@@ -597,8 +637,8 @@ const SCENARIOS = {
         assertCondition(
           "short explanation is answered inside sales flow",
           explanation.normalized_intent === "sales_product_explanation" &&
-            includesAll(explanation.assistant, ["digitale rezeption"]) &&
-            includesAll(explanation.assistant, ["eigenes unternehmen"]),
+            hasProductExplanationContent(explanation.assistant) &&
+            hasUsefulSalesFollowUpQuestion(explanation.assistant),
           `${explanation.normalized_intent}: ${explanation.assistant}`
         ),
         ...noBannedCallbackOutputChecks(results)
@@ -618,9 +658,12 @@ const SCENARIOS = {
         assertCondition(
           "new prospect gets qualification question",
           customerType.normalized_intent === "sales_customer_type_new_prospect" &&
-            (includesAll(customerType.assistant, ["verpasste anrufe"]) ||
+            (acknowledgesOwnCompany(customerType.assistant) ||
+              includesAll(customerType.assistant, ["verbessern"]) ||
+              includesAll(customerType.assistant, ["verpasste anrufe"]) ||
               includesAll(customerType.assistant, ["lead-erfassung"]) ||
-              includesAll(customerType.assistant, ["fragen"])),
+              includesAll(customerType.assistant, ["fragen"])) &&
+            excludes(customerType.assistant, CUSTOMER_TYPE_MENU_LOOP_SNIPPET),
           `${customerType.normalized_intent}: ${customerType.assistant}`
         ),
         assertCondition(
@@ -648,6 +691,141 @@ const SCENARIOS = {
             (includesAll(customerType.assistant, ["firmennamen"]) ||
               includesAll(customerType.assistant, ["kundennummer"])),
           `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_live_customer_type_loop: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Eigenunternehmen.",
+      "Eigene Unternehmen."
+    ],
+    assert(results) {
+      const second = results[1];
+      const third = results[2];
+      const menuLoop = "sagen sie bitte kurz: eigenes unternehmen, kundenprojekt";
+      return [
+        assertCondition(
+          "Eigenunternehmen maps to new prospect",
+          second.normalized_intent === "sales_customer_type_new_prospect",
+          `${second.normalized_intent}: ${second.assistant}`
+        ),
+        assertCondition(
+          "no repeated customer-type menu after Eigenunternehmen",
+          excludes(second.assistant, menuLoop),
+          second.assistant
+        ),
+        assertCondition(
+          "no repeated customer-type menu on second own-company variant",
+          excludes(third.assistant, menuLoop),
+          third.assistant
+        ),
+        assertCondition(
+          "turn 2 and 3 responses differ",
+          normalizeText(second.assistant) !== normalizeText(third.assistant),
+          `turn2=${second.assistant} turn3=${third.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_fuer_meine_firma: {
+    turns: ["Ich interessiere mich fuer AI Assistant.", "fuer meine Firma"],
+    assert(results) {
+      const customerType = results[1];
+      return [
+        assertCondition(
+          "für meine Firma maps to new prospect",
+          customerType.normalized_intent === "sales_customer_type_new_prospect",
+          `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_repeated_unclear_no_loop: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "hm",
+      "aeh"
+    ],
+    assert(results) {
+      const second = results[1];
+      const third = results[2];
+      return [
+        assertCondition(
+          "unclear turn does not repeat exact same assistant text",
+          normalizeText(second.assistant) !== normalizeText(third.assistant) || third.assistant === "",
+          `turn2=${second.assistant} turn3=${third.assistant}`
+        ),
+        assertCondition(
+          "after unclear input avoids strict menu loop twice",
+          !(
+            includesAll(second.assistant, ["eigenes unternehmen", "kundenprojekt", "bereits kunde"]) &&
+            includesAll(third.assistant, ["eigenes unternehmen", "kundenprojekt", "bereits kunde"])
+          ),
+          `turn2=${second.assistant} turn3=${third.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_rag_fail_closed_explanation: {
+    turns: ["Ich interessiere mich fuer AI Assistant.", "Kurze Erklaerung bitte."],
+    assert(results) {
+      const explanation = results[1];
+      return [
+        assertCondition(
+          "explanation answered before contact capture",
+          explanation.normalized_intent === "sales_product_explanation" &&
+            (includesAll(explanation.assistant, ["rezeption"]) ||
+              includesAll(explanation.assistant, ["anrufe"])),
+          `${explanation.normalized_intent}: ${explanation.assistant}`
+        ),
+        assertCondition(
+          "no phone capture in explanation turn",
+          excludes(explanation.assistant, "telefonnummer"),
+          explanation.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_explanation_then_phone_handoff: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Kurze Erklaerung bitte.",
+      "Telefonisch bitte."
+    ],
+    assert(results) {
+      const explanation = results[1];
+      const phone = results[2];
+      return [
+        assertCondition(
+          "explanation before phone request",
+          explanation.normalized_intent === "sales_product_explanation" &&
+            hasProductExplanationContent(explanation.assistant),
+          `${explanation.normalized_intent}: ${explanation.assistant}`
+        ),
+        assertCondition(
+          "phone request moves to contact capture not customer-type loop",
+          (phone.normalized_intent === "contact_preference_phone" ||
+            phone.normalized_intent === "contact_preference_detected" ||
+            phone.normalized_intent === "caller_id_callback_permission" ||
+            includesAll(phone.assistant, ["telefonisch"]) ||
+            includesAll(phone.assistant, ["kontaktieren"])) &&
+            excludes(phone.assistant, CUSTOMER_TYPE_MENU_LOOP_SNIPPET),
+          `${phone.normalized_intent}: ${phone.assistant}`
+        ),
+        assertCondition(
+          "phone turn offers permission or callback path",
+          includesAll(phone.assistant, ["team"]) ||
+            includesAll(phone.assistant, ["kontaktieren"]) ||
+            includesAll(phone.assistant, ["telefonnummer"]) ||
+            includesAll(phone.assistant, ["nummer"]),
+          phone.assistant
         ),
         ...noBannedCallbackOutputChecks(results)
       ];
@@ -992,8 +1170,12 @@ Scenarios:
   voice_agent_ki_assistent, voice_agent_telefonassistent,
   rueckruf_input_maps_to_phone, no_rueckruf_output,
   incomplete_phone_reasks, invalid_phone_reasks_again, full_phone_creates_callback_ready,
-  sales_voice_agent_pitch_no_early_phone, sales_new_prospect_qualification,
+  sales_voice_agent_pitch_no_early_phone, sales_customer_type_stt_kundenprojekt,
+  sales_customer_type_first_option, sales_customer_type_own_company_plural,
+  sales_explanation_after_pitch, sales_new_prospect_qualification,
   sales_existing_customer_path,
+  v3_live_customer_type_loop, v3_fuer_meine_firma, v3_repeated_unclear_no_loop,
+  v3_rag_fail_closed_explanation, v3_explanation_then_phone_handoff,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional

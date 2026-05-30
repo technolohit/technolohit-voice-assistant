@@ -27,6 +27,14 @@ import {
   classifyCustomerType,
   validateSalesPlaybooks
 } from "./sales-policy.js";
+import { createAsrDiagnosticRecord, logAsrDiagnostic } from "./asr-diagnostics.js";
+import {
+  handleSalesCustomerTypeTurn,
+  handleSalesNeedDiscoveryTurn,
+  isExplicitPhoneHandoffRequest,
+  isV3SalesFlowEnabled,
+  shouldDeferToPhoneIntake
+} from "./sales-dialogue-manager.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -1427,7 +1435,7 @@ function compareProductsResponse(config) {
   );
 }
 
-function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis, catalog) {
+async function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis, catalog) {
   const productState = ensureProductState(turnState(ctx));
   const intent = analysis?.detectedIntent ?? "unknown";
 
@@ -1490,6 +1498,52 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
     const interestQuestion = policy?.mandatoryInterestQuestion || "Möchten Sie so etwas für Ihr Unternehmen prüfen lassen?";
 
     if (productState.productDialogueState === "sales_customer_type") {
+      if (
+        isExplicitPhoneHandoffRequest(callerText, intent) ||
+        shouldDeferToPhoneIntake(productState, callerText, intent)
+      ) {
+        markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
+        productState.productDialogueState = "handoff_choice_requested";
+        productState.handoffChoice = "phone";
+        console.log(
+          `[voice-assistant] product_intake_product=${productState.selectedProduct} product_intake_stage=handoff_choice_requested handoff_choice=phone turn_index=${turnIndex} reason=sales_phone_after_explanation`
+        );
+        return null;
+      }
+      if (isV3SalesFlowEnabled(config)) {
+        const v3Result = await handleSalesCustomerTypeTurn({
+          config,
+          productState,
+          callerText,
+          intent,
+          turnIndex,
+          normalizeResponse: (text) => normalizeAssistantResponse(text, config)
+        });
+        if (v3Result?.deferToIntake) {
+          markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
+          productState.productDialogueState = "handoff_choice_requested";
+          productState.handoffChoice = v3Result.handoffChoice || "phone";
+          console.log(
+            `[voice-assistant] product_intake_product=${productState.selectedProduct} product_intake_stage=handoff_choice_requested handoff_choice=phone turn_index=${turnIndex} reason=v3_defer_phone_intake`
+          );
+          return null;
+        }
+        if (config?.asrDiagnostics?.enabled && v3Result?.semantic) {
+          logAsrDiagnostic(
+            createAsrDiagnosticRecord({
+              turnIndex,
+              transcript: callerText,
+              expectedIntent: "customer_type",
+              actualIntent: v3Result.semantic.intent,
+              semanticConfidence: v3Result.semantic.confidence,
+              stage: "sales_customer_type",
+              asrProvider: config?.transcription?.model || "unknown",
+              asrModel: config?.transcription?.model || ""
+            })
+          );
+        }
+        return v3Result;
+      }
       if (isProductExplanationChoice(callerText) || intent === "product_more_detail_request") {
         const explanation = buildSalesProductExplanation(productState.selectedProduct);
         const suffix = buildCustomerTypeResponse("unknown", productState.selectedProduct);
@@ -1521,6 +1575,16 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
     }
 
     if (productState.productDialogueState === "sales_need_discovery") {
+      if (isV3SalesFlowEnabled(config)) {
+        markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
+        return handleSalesNeedDiscoveryTurn({
+          config,
+          productState,
+          callerText,
+          turnIndex,
+          normalizeResponse: (text) => normalizeAssistantResponse(text, config)
+        });
+      }
       productState.salesNeedCaptured = true;
       productState.salesContext.current_problem = String(callerText || "").replace(/\s+/g, " ").trim().slice(0, 180);
       markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
@@ -3646,7 +3710,7 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
   let businessFallbackGuidance = "none";
   let businessFallbackNextStep = "none";
 
-  const productResponse = maybeCreateProductResponse(config, ctx, turnIndex, callerText, effectiveAnalysis, productCatalog);
+  const productResponse = await maybeCreateProductResponse(config, ctx, turnIndex, callerText, effectiveAnalysis, productCatalog);
   if (productResponse?.text) {
     text = productResponse.text;
     timings.responseGenerationMs = 0;

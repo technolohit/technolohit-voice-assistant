@@ -64,6 +64,10 @@ jobs:
         run: npm test
         working-directory: voice-bridge
 
+      - name: ASR fixture eval (v1.2.1 live failure)
+        run: npm run eval:asr-fixture
+        working-directory: voice-bridge
+
       - name: Voice dialogue QA scenarios
         shell: bash
         working-directory: voice-bridge
@@ -77,6 +81,11 @@ jobs:
             sales_explanation_after_pitch
             sales_new_prospect_qualification
             sales_existing_customer_path
+            v3_live_customer_type_loop
+            v3_fuer_meine_firma
+            v3_repeated_unclear_no_loop
+            v3_rag_fail_closed_explanation
+            v3_explanation_then_phone_handoff
             voice_agent_ki_assistent
             voice_agent_telefonassistent
             rueckruf_input_maps_to_phone

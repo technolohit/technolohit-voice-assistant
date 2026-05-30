@@ -1,0 +1,52 @@
+{
+  "id": "v1_2_1_customer_type_loop",
+  "description": "Live PSTN failure: Eigenunternehmen / Eigene Unternehmen looped on customer-type menu (v1.2.1).",
+  "context": {
+    "previousOptionsOffered": ["new_prospect", "agency_partner", "existing_customer"],
+    "productId": "voice_agent",
+    "stage": "context_identification"
+  },
+  "turns": [
+    {
+      "caller": "AI Assistant, bitte.",
+      "note": "product interest — handled by dialogue harness, not semantic fixture"
+    },
+    {
+      "caller": "Eigenunternehmen.",
+      "expected_customer_type": "new_prospect",
+      "expected_min_confidence": 0.75,
+      "must_not_repeat_menu": true
+    },
+    {
+      "caller": "Eigene Unternehmen.",
+      "expected_customer_type": "new_prospect",
+      "expected_min_confidence": 0.75,
+      "must_not_repeat_menu": true
+    },
+    {
+      "caller": "für meine Firma",
+      "expected_customer_type": "new_prospect",
+      "expected_min_confidence": 0.7
+    },
+    {
+      "caller": "Kundenprojekt",
+      "expected_customer_type": "agency_partner",
+      "expected_min_confidence": 0.75
+    },
+    {
+      "caller": "konnen dann projekt.",
+      "expected_customer_type": "agency_partner",
+      "expected_min_confidence": 0.45
+    },
+    {
+      "caller": "Bereits Kunde",
+      "expected_customer_type": "existing_customer",
+      "expected_min_confidence": 0.75
+    },
+    {
+      "caller": "die erste",
+      "expected_customer_type": "new_prospect",
+      "expected_min_confidence": 0.75
+    }
+  ]
+}

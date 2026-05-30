@@ -54,6 +54,15 @@ export function loadConfig() {
   const ragQaTimeoutMs = Math.max(ragTimeoutMs, readInt("VOICE_RAG_QA_TIMEOUT_MS", 1200));
   const ragQaRetryDelta = Math.min(0.3, Math.max(0, readFloat("VOICE_RAG_QA_RETRY_DELTA", 0.08)));
   const ragQaAcceptFloor = Math.min(1, Math.max(0, readFloat("VOICE_RAG_QA_ACCEPT_FLOOR", 0.65)));
+  const ragSalesAnswererEnabled = readBool("VOICE_RAG_SALES_ANSWERER_ENABLED", false);
+  const semanticIntentEnabled = readBool("VOICE_SEMANTIC_INTENT_ENABLED", false);
+  const semanticIntentMode = String(process.env.VOICE_SEMANTIC_INTENT_MODE ?? "deterministic").trim();
+  const semanticIntentModel = String(process.env.VOICE_SEMANTIC_INTENT_MODEL ?? "").trim();
+  const semanticIntentMinAccept = Math.min(1, Math.max(0, readFloat("VOICE_SEMANTIC_INTENT_MIN_ACCEPT", 0.75)));
+  const semanticIntentMinSoft = Math.min(1, Math.max(0, readFloat("VOICE_SEMANTIC_INTENT_MIN_SOFT", 0.45)));
+  const conversationRepairEnabled = readBool("VOICE_CONVERSATION_REPAIR_ENABLED", false);
+  const asrDiagnosticsEnabled = readBool("VOICE_ASR_DIAGNOSTICS_ENABLED", false);
+  const leadPolicyStrictCallback = readBool("VOICE_LEAD_POLICY_STRICT_CALLBACK", true);
   const assistantEnabled = readBool("VOICE_ASSISTANT_ENABLED", false);
   const turnListenSeconds = readInt("VOICE_TURN_LISTEN_SECONDS", 5);
   const assistantMinListenMs = readInt("VOICE_ASSISTANT_MIN_LISTEN_MS", 2500);
@@ -128,7 +137,25 @@ export function loadConfig() {
       qaMode: ragQaMode,
       qaTimeoutMs: ragQaTimeoutMs,
       qaRetryDelta: ragQaRetryDelta,
-      qaAcceptFloor: ragQaAcceptFloor
+      qaAcceptFloor: ragQaAcceptFloor,
+      salesAnswererEnabled: ragSalesAnswererEnabled
+    },
+    semanticIntent: {
+      enabled: semanticIntentEnabled,
+      mode: semanticIntentMode,
+      model: semanticIntentModel,
+      minAccept: semanticIntentMinAccept,
+      minSoft: semanticIntentMinSoft
+    },
+    conversationRepair: {
+      enabled: conversationRepairEnabled
+    },
+    asrDiagnostics: {
+      enabled: asrDiagnosticsEnabled
+    },
+    leadPolicy: {
+      /** Always-on by default: blocks fake team_callback without valid phone. Set false only to restore legacy next_action. */
+      strictCallback: leadPolicyStrictCallback
     },
     postCallSummary: {
       enabled: postCallSummaryEnabled

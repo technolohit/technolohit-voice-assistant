@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node src/index.js",
     "qa:dialogue": "node scripts/qa-dialogue-text.js",
+    "eval:asr-fixture": "node scripts/eval-asr-fixture.js",
     "test": "node --test tests/*.test.js",
     "test:intelligence": "node --test tests/intelligence-upgrade.test.js",
     "tts:greeting": "node scripts/generate-greeting-openai.js",

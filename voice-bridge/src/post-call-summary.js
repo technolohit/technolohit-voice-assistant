@@ -1,4 +1,5 @@
 import * as db from "./db.js";
+import { deriveLeadNextAction, enrichSummaryMetadata } from "./lead-policy.js";
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -101,12 +102,27 @@ function deriveContact(assistantMeta, sessionRow) {
   };
 }
 
-function deriveNextAction(productInterest, contact) {
-  if (contact.preference === "phone" && contact.permission === "granted" && contact.phonePresent) return "team_callback";
+function deriveNextActionLegacy(productInterest, contact) {
+  if (contact.preference === "phone" && contact.permission === "granted" && contact.phonePresent) {
+    return "team_callback";
+  }
   if (contact.preference === "phone" && contact.permission === "granted") return "manual_review";
   if (contact.emailDirected) return "await_customer_email";
   if (productInterest !== "none") return "manual_followup";
   return "manual_review";
+}
+
+function deriveNextAction(productInterest, contact, sessionRow, assistantMeta, config) {
+  if (config?.leadPolicy?.strictCallback === false) {
+    return deriveNextActionLegacy(productInterest, contact);
+  }
+  const derived = deriveLeadNextAction({
+    productInterest,
+    contact,
+    sessionRow,
+    assistantMeta
+  });
+  return derived.next_action;
 }
 
 function deriveConfidence(qualityNote, lastIntent) {
@@ -144,7 +160,20 @@ export async function generatePostCallSummary(config, ctx, options = {}) {
   const lastIntent = findLastIntent(turnRows);
   const qualityNote = qualityNotes(turnRows);
   const contact = deriveContact(assistantMeta, sessionRow);
-  const nextAction = deriveNextAction(productInterest, contact);
+  const useStrictLeadPolicy = config?.leadPolicy?.strictCallback !== false;
+  const leadDerived = useStrictLeadPolicy
+    ? deriveLeadNextAction({
+        productInterest,
+        contact,
+        sessionRow,
+        assistantMeta
+      })
+    : {
+        next_action: deriveNextActionLegacy(productInterest, contact),
+        phone_present: contact.phonePresent,
+        permission: contact.permission
+      };
+  const nextAction = leadDerived.next_action;
   const confidence = deriveConfidence(qualityNote, lastIntent);
 
   const summaryFields = {
@@ -156,24 +185,35 @@ export async function generatePostCallSummary(config, ctx, options = {}) {
   };
 
   const summaryText = buildSummaryText(summaryFields);
-  const metadata = {
+  const metadataBase = {
     product_interest: productInterest,
     customer_type: metadataField(assistantMeta, "customer_type") || null,
+    customer_type_confidence: assistantMeta.customer_type_confidence ?? null,
+    customer_type_evidence: assistantMeta.customer_type_evidence ?? null,
     sales_stage: metadataField(assistantMeta, "sales_stage") || null,
     current_problem: metadataField(assistantMeta, "current_problem") || null,
     caller_need: callerNeed,
     contact_preference: contact.preference,
     contact_route: contact.route,
-    permission: contact.permission,
-    phone_present: contact.phonePresent,
+    permission: leadDerived.permission || contact.permission,
+    phone_present: useStrictLeadPolicy ? leadDerived.phone_present : contact.phonePresent,
     email_directed: contact.emailDirected,
     next_action: nextAction,
     confidence,
     transcript_quality_notes: qualityNote,
     last_detected_intent: lastIntent,
     has_full_call_transcript: Boolean(options.fullTranscript || fullCallRow?.text),
-    full_call_transcript_length: normalizeText(options.fullTranscript || fullCallRow?.text).length
+    full_call_transcript_length: normalizeText(options.fullTranscript || fullCallRow?.text).length,
+    lead_policy_strict_callback: useStrictLeadPolicy
   };
+
+  const metadata = useStrictLeadPolicy
+    ? enrichSummaryMetadata(metadataBase, {
+        customer_type: metadataField(assistantMeta, "customer_type") || null,
+        customer_type_confidence: assistantMeta.customer_type_confidence ?? null,
+        customer_type_evidence: assistantMeta.customer_type_evidence ?? null
+      })
+    : metadataBase;
 
   const summaryId = await db.upsertCallSummary(config, {
     callSessionId,

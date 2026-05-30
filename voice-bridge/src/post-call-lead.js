@@ -1,4 +1,5 @@
 import * as db from "./db.js";
+import { shouldCreateCallbackReadyLead } from "./lead-policy.js";
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -30,6 +31,9 @@ function shouldCreateLead(summaryMeta) {
   if (!explicitRoute) return false;
   if (contactPreference === "phone" && permission !== "granted") return false;
   if (contactPreference === "phone" && !phonePresent) return false;
+  if (config?.leadPolicy?.strictCallback !== false && !shouldCreateCallbackReadyLead(summaryMeta)) {
+    return false;
+  }
   if (contactPreference === "email" && !emailDirected && nextAction !== "await_customer_email") return false;
 
   const qualityOk = confidence === "high" || confidence === "medium" || productInterest !== "none";
