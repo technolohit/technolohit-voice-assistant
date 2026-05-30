@@ -10,7 +10,17 @@ function normalize(text) {
 export const PRODUCT_INTAKE_POLICY = {
   smart_website: {
     displayName: "Smart Website",
-    aliases: ["smart website", "intelligente website", "intelligente webseite", "website", "webseite", "homepage"],
+    aliases: [
+      "smart website",
+      "intelligente website",
+      "intelligente webseite",
+      "ki website",
+      "website mit ki",
+      "neue website",
+      "website",
+      "webseite",
+      "homepage"
+    ],
     pitchShort:
       "Eine Smart Website verbindet moderne Website, KI-Chat und Anfrage-Erfassung.",
     mandatoryInterestQuestion:
@@ -24,7 +34,15 @@ export const PRODUCT_INTAKE_POLICY = {
   },
   aiseoq: {
     displayName: "AISeoQ",
-    aliases: ["aiseoq", "seo", "suchmaschinenoptimierung", "google", "wettbewerberanalyse"],
+    aliases: [
+      "aiseoq",
+      "seo tool",
+      "seo",
+      "suchmaschinenoptimierung",
+      "google sichtbarkeit",
+      "google",
+      "wettbewerberanalyse"
+    ],
     pitchShort:
       "AISeoQ hilft dabei, Websites mit Wettbewerbern zu vergleichen und konkrete SEO-Ansätze zu finden.",
     mandatoryInterestQuestion:
@@ -38,7 +56,16 @@ export const PRODUCT_INTAKE_POLICY = {
   },
   botinteg: {
     displayName: "Botinteg",
-    aliases: ["botinteg", "bot integ", "chatbot", "ki chatbot", "automatisierung", "lead-erfassung"],
+    aliases: [
+      "botinteg",
+      "bot integ",
+      "chatbot",
+      "ki chatbot",
+      "automation",
+      "automatisierung",
+      "lead erfassung",
+      "lead-erfassung"
+    ],
     pitchShort:
       "Botinteg ist für KI-Chatbots und einfache Automatisierungen gedacht. Es kann häufige Fragen beantworten, Leads erfassen und Website-Anfragen strukturierter aufnehmen.",
     mandatoryInterestQuestion:
@@ -52,7 +79,15 @@ export const PRODUCT_INTAKE_POLICY = {
   },
   lokalki: {
     displayName: "LokalKI",
-    aliases: ["lokalki", "lokale ki", "private ki", "interne dokumente", "sensible daten", "datenschutz"],
+    aliases: [
+      "lokalki",
+      "lokale ki",
+      "private ki",
+      "interne dokumente",
+      "sensible daten",
+      "datenschutz ki",
+      "datenschutz"
+    ],
     pitchShort:
       "LokalKI ist für Unternehmen gedacht, die mit sensiblen internen Dokumenten arbeiten und KI kontrollierter nutzen möchten.",
     mandatoryInterestQuestion:
@@ -66,7 +101,21 @@ export const PRODUCT_INTAKE_POLICY = {
   },
   digital_assistant: {
     displayName: "Digitaler Assistent",
-    aliases: ["digitaler assistent", "voice assistant", "telefonassistent", "digitale rezeption", "anrufannahme", "telefon ki"],
+    aliases: [
+      "ai assistant",
+      "ai voice assistant",
+      "voice assistant",
+      "ki assistent",
+      "ki telefonassistent",
+      "telefonassistent",
+      "anrufassistent",
+      "digitale rezeption",
+      "digitaler assistent",
+      "telefon ki",
+      "voice bot",
+      "call bot",
+      "anrufannahme"
+    ],
     pitchShort:
       "Unser digitaler Assistent kann Anrufe entgegennehmen, erste Fragen beantworten und Kontaktwünsche vorbereiten.",
     mandatoryInterestQuestion:

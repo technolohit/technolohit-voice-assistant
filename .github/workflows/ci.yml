@@ -60,6 +60,36 @@ jobs:
       - name: RAG API static contract tests
         run: python rag-api/tests/test_contract_static.py
 
+      - name: Voice bridge unit tests
+        run: npm test
+        working-directory: voice-bridge
+
+      - name: Voice dialogue QA scenarios
+        shell: bash
+        working-directory: voice-bridge
+        run: |
+          set -euo pipefail
+          scenarios=(
+            smart_website_email
+            smart_website_phone
+            caller_id_callback
+            caller_id_missing_callback
+            voice_agent_ai_assistant
+            voice_agent_ki_assistent
+            voice_agent_telefonassistent
+            unclear_input
+            unknown_intent
+            gate6_business_fallback
+            five_products_overview
+            clear_close
+            contact_form_question
+            email_contents_question
+          )
+          for scenario in "${scenarios[@]}"; do
+            echo "Running dialogue QA scenario: ${scenario}"
+            npm run qa:dialogue -- --scenario "${scenario}"
+          done
+
       - name: Secret and artifact guard
         shell: bash
         run: |

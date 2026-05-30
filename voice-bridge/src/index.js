@@ -70,7 +70,7 @@ server.listen(config.listenPort, config.listenHost, () => {
 
   if (config.assistant.enabled) {
     console.log(
-      `[voice-assistant] assistant enabled listen_seconds=${config.assistant.listenSeconds} min_listen_ms=${config.assistant.minListenMs} max_listen_ms=${config.assistant.maxListenMs} end_silence_ms=${config.assistant.endSilenceMs} max_turns=${config.assistant.maxTurns} max_turns_with_intake=${config.assistant.maxTurnsWithIntake} end_on_silence=${config.assistant.endOnSilence} min_chars=${config.assistant.minTranscriptChars} model=${config.assistant.model} tts_model=${config.assistant.ttsModel} voice=${config.assistant.ttsVoice} log_preview=${config.assistant.logTranscriptPreview}`
+      `[voice-assistant] assistant enabled listen_seconds=${config.assistant.listenSeconds} min_listen_ms=${config.assistant.minListenMs} max_listen_ms=${config.assistant.maxListenMs} end_silence_ms=${config.assistant.endSilenceMs} max_turns=${config.assistant.maxTurns} max_turns_with_intake=${config.assistant.maxTurnsWithIntake} end_on_silence=${config.assistant.endOnSilence} min_chars=${config.assistant.minTranscriptChars} model=${config.assistant.model} tts_model=${config.assistant.ttsModel} tts_voice=${config.assistant.ttsVoice} tts_speed=${config.assistant.ttsSpeed} max_response_chars=${config.assistant.maxResponseChars} log_preview=${config.assistant.logTranscriptPreview} rag_enabled=${config.rag.enabled}`
     );
   } else {
     console.log("[voice-assistant] assistant disabled");

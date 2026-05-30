@@ -166,12 +166,15 @@ const SCENARIOS = {
     }
   },
   smart_website_phone: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
     turns: [
       "Ich interessiere mich für Smart Website.",
       "Ja.",
       "Telefon.",
       "0170 1234567.",
-      "Ja.",
       "Nein danke."
     ],
     assert(results) {
@@ -179,8 +182,7 @@ const SCENARIOS = {
       const yes = results[1];
       const phoneChoice = results[2];
       const phoneCapture = results[3];
-      const permission = results[4];
-      const close = results[5];
+      const close = results[4];
       return [
         assertCondition(
           "pitch + interest question same response",
@@ -194,32 +196,175 @@ const SCENARIOS = {
           yes.assistant
         ),
         assertCondition(
-          "Telefon -> phone or permission request",
+          "Telefon -> phone request",
           includesAll(phoneChoice.assistant, ["telefonnummer"]) ||
-            includesAll(phoneCapture.assistant, ["telefonnummer"]) ||
-            includesAll(phoneChoice.assistant, ["kontaktieren"]) ||
-            includesAll(phoneCapture.assistant, ["kontaktieren"]),
-          `phone/permission request missing: ${phoneChoice.assistant} / ${phoneCapture.assistant}`
+            includesAll(phoneChoice.assistant, ["zuruckrufen"]) ||
+            includesAll(phoneChoice.assistant, ["zurückrufen"]),
+          phoneChoice.assistant
         ),
         assertCondition(
-          "phone -> permission question",
-          includesAll(permission.assistant, ["kontaktieren"]) || includesAll(permission.assistant, ["darf"]),
-          permission.assistant
+          "phone capture -> confirmation without second permission",
+          includesAll(phoneCapture.assistant, ["notiert"]) || includesAll(phoneCapture.assistant, ["team"]),
+          phoneCapture.assistant
         ),
         assertCondition(
-          "permission Ja -> final question",
-          includesAll(permission.assistant, ["kurze frage"]) || includesAll(permission.assistant, ["verabschieden"]),
-          permission.assistant
+          "no duplicate permission after phone capture",
+          excludes(phoneCapture.assistant, "darf unser team sie dazu kontaktieren"),
+          phoneCapture.assistant
         ),
         assertCondition(
           "Nein danke -> warm goodbye",
           includesAll(close.assistant, ["wiederh"]) || includesAll(close.assistant, ["danke"]),
           close.assistant
+        )
+      ];
+    }
+  },
+  caller_id_callback: {
+    context: {
+      callerPhoneNormalized: "+491701234567",
+      callerPhoneRaw: "+49 170 1234567"
+    },
+    turns: ["Ich interessiere mich für Smart Website.", "Ja.", "Telefon.", "Ja."],
+    assert(results) {
+      const phoneChoice = results[2];
+      const permission = results[3];
+      return [
+        assertCondition(
+          "caller ID -> callback permission under current number",
+          includesAll(phoneChoice.assistant, ["von der sie gerade anrufen"]) ||
+            includesAll(phoneChoice.assistant, ["unter der nummer"]),
+          phoneChoice.assistant
         ),
         assertCondition(
-          "Nein danke not clarification",
-          excludes(close.assistant, "akustisch nicht gut verstanden"),
-          close.assistant
+          "no spoken phone number request with caller ID",
+          excludes(phoneChoice.assistant, "unter welcher telefonnummer"),
+          phoneChoice.assistant
+        ),
+        assertCondition(
+          "permission yes -> short confirmation",
+          includesAll(permission.assistant, ["notiert"]),
+          permission.assistant
+        ),
+        assertCondition(
+          "no full phone in assistant text",
+          !/\+49\s*170\s*1234567/.test(permission.assistant),
+          permission.assistant
+        )
+      ];
+    }
+  },
+  caller_id_missing_callback: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: ["Ich interessiere mich für Smart Website.", "Ja.", "Telefon."],
+    assert(results) {
+      const phoneChoice = results[2];
+      return [
+        assertCondition(
+          "missing caller ID -> spoken phone request once",
+          includesAll(phoneChoice.assistant, ["unter welcher telefonnummer"]) &&
+            (includesAll(phoneChoice.assistant, ["zuruckrufen"]) ||
+              includesAll(phoneChoice.assistant, ["zurückrufen"])),
+          phoneChoice.assistant
+        ),
+        assertCondition(
+          "not caller ID permission prompt",
+          excludes(phoneChoice.assistant, "von der sie gerade anrufen"),
+          phoneChoice.assistant
+        )
+      ];
+    }
+  },
+  voice_agent_ai_assistant: {
+    turns: ["Ich interessiere mich für AI Assistant."],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "compact voice agent ack",
+          includesAll(turn.assistant, ["ki-telefonassistent"]) ||
+            includesAll(turn.assistant, ["digitale rezeption"]),
+          turn.assistant
+        ),
+        assertCondition(
+          "offers explanation or callback",
+          includesAll(turn.assistant, ["erklaerung", "erklärung", "kurze erklarung", "kurze erklärung"]) ||
+            includesAll(turn.assistant, ["ruckruf", "rückruf"]),
+          turn.assistant
+        ),
+        assertCondition(
+          "no full product menu",
+          excludes(turn.assistant, "welches thema interessiert sie am meisten"),
+          turn.assistant
+        )
+      ];
+    }
+  },
+  voice_agent_ki_assistent: {
+    turns: ["Ich brauche einen KI Assistenten am Telefon."],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "KI Assistent routes to voice agent offer",
+          includesAll(turn.assistant, ["ki-telefonassistent"]) ||
+            includesAll(turn.assistant, ["digitale rezeption"]),
+          turn.assistant
+        )
+      ];
+    }
+  },
+  voice_agent_telefonassistent: {
+    turns: ["Kann ich so einen Telefonassistenten für meine Firma bekommen?"],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "Telefonassistent routes to voice agent offer",
+          includesAll(turn.assistant, ["ki-telefonassistent"]) ||
+            includesAll(turn.assistant, ["digitale rezeption"]),
+          turn.assistant
+        )
+      ];
+    }
+  },
+  unclear_input: {
+    turns: ["mhm äh"],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "short acoustic clarification",
+          includesAll(turn.assistant, ["akustisch nicht gut verstanden"]) &&
+            includesAll(turn.assistant, ["wiederholen"]),
+          turn.assistant
+        ),
+        assertCondition(
+          "no full product menu",
+          excludes(turn.assistant, "technolohit bietet intelligente websites"),
+          turn.assistant
+        )
+      ];
+    }
+  },
+  unknown_intent: {
+    turns: ["Ich suche etwas für mein Lager und Inventur."],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "short unknown intent clarification",
+          includesAll(turn.assistant, ["nicht ganz sicher"]) ||
+            includesAll(turn.assistant, ["worum geht es"]),
+          turn.assistant
+        ),
+        assertCondition(
+          "no full greeting repeat",
+          excludes(turn.assistant, "guten tag"),
+          turn.assistant
         )
       ];
     }
@@ -319,12 +464,15 @@ const SCENARIOS = {
     }
   },
   clear_close: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
     turns: [
       "Ich interessiere mich für Smart Website.",
       "Ja.",
       "Telefon.",
       "0170 1234567.",
-      "Ja.",
       "Nein danke."
     ],
     assert(results) {
@@ -486,8 +634,12 @@ function usage() {
   node voice-bridge/scripts/qa-dialogue-text.js --scenario <name> [--json] [--rag true|false]
   node voice-bridge/scripts/qa-dialogue-text.js --turns '<json array>' [--json]
 
+Windows PowerShell: run from voice-bridge/ with the node command above (npm run qa:dialogue -- --scenario … may not forward args correctly).
+
 Scenarios:
-  smart_website_email, smart_website_phone, gate6_business_fallback,
+  smart_website_email, smart_website_phone, caller_id_callback, caller_id_missing_callback,
+  voice_agent_ai_assistant, voice_agent_ki_assistent, voice_agent_telefonassistent,
+  unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional
 
@@ -530,7 +682,8 @@ async function main() {
   }
 
   const config = buildQaConfig({ ragEnabled: args.rag || requiresRag });
-  const ctx = createQaDialogueContext();
+  const scenario = scenarioName ? SCENARIOS[scenarioName] : null;
+  const ctx = createQaDialogueContext(scenario?.context || {});
   const results = await runTurns(turns, config, ctx);
 
   if (args.json) {

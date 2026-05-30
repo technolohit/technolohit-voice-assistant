@@ -10,6 +10,7 @@ Realtime AudioSocket orchestrator for the Voice Assistant. It persists call life
 | `VOICE_BRIDGE_PORT` | `9092` | AudioSocket TCP port |
 | `VOICE_GREETING_MODE` | `file` | Use `file`, `default`, `tone`, `none`, or `skip` |
 | `VOICE_GREETING_FILE` | `/app/audio/greeting.slin` | Path to raw PCM s16le 8 kHz mono audio |
+| `VOICE_GREETING_PRIVACY_MODE` | `auto` | Privacy intro variant for greeting audio: `auto` (recording enabled → recording wording), `recording`, or `processing` |
 | `VOICE_SAMPLE_RATE` | `8000` | Outbound/inbound PCM rate |
 | `VOICE_FRAME_MS` | `20` | Outbound chunk timing, 320 bytes per frame at 8 kHz |
 | `VOICE_TONE_DURATION_MS` | `800` | Built-in fallback tone length |
@@ -47,7 +48,8 @@ Realtime AudioSocket orchestrator for the Voice Assistant. It persists call life
 | `VOICE_ASSISTANT_MODEL` | `gpt-4o-mini` | Text model for grounded German response |
 | `VOICE_ASSISTANT_TTS_MODEL` | `gpt-4o-mini-tts` | TTS model for assistant response |
 | `VOICE_ASSISTANT_TTS_VOICE` | `marin` | TTS voice for assistant response |
-| `VOICE_ASSISTANT_MAX_RESPONSE_CHARS` | `180` | Maximum assistant response length for phone playback |
+| `VOICE_ASSISTANT_TTS_SPEED` | `1.0` | OpenAI TTS speed (0.75–1.15). Tune after live PSTN QA; candidate production value `1.08` |
+| `VOICE_ASSISTANT_MAX_RESPONSE_CHARS` | `160` | Maximum assistant response length for phone playback |
 | `VOICE_ASSISTANT_MAX_RESPONSE_SENTENCES` | `2` | Maximum assistant response sentence count |
 | `VOICE_ASSISTANT_MAX_TURNS` | `3` | Maximum caller/assistant turns per call |
 | `VOICE_ASSISTANT_MAX_TURNS_WITH_INTAKE` | `5` | Intake-only turn cap used while waiting for contact detail/permission |
@@ -75,6 +77,17 @@ cp .env.example .env
 npm install
 npm start
 ```
+
+Dialogue QA (no OpenAI calls in default QA text mode):
+
+```bash
+cd voice-bridge
+npm test
+node scripts/qa-dialogue-text.js --scenario caller_id_callback
+node scripts/qa-dialogue-text.js --scenario voice_agent_ai_assistant
+```
+
+On **Windows PowerShell**, prefer the direct `node` form above. `npm run qa:dialogue -- --scenario …` can fail because PowerShell may not pass `--scenario` through to the script correctly.
 
 On start you should see:
 
@@ -111,13 +124,18 @@ cd voice-bridge
 npm run audio:build
 ```
 
-The current production greeting text is:
+The greeting script (`npm run tts:greeting`) uses a short KI/privacy intro. With `VOICE_GREETING_PRIVACY_MODE=auto` and `VOICE_RECORDING_ENABLED=true` (default), the text mentions recording, processing, and summary. With processing-only mode:
 
 ```text
-Hallo, hier ist der digitale Assistent von TechnoloHit. Wobei kann ich Ihnen helfen?
+Guten Tag, Sie sprechen mit dem KI-Assistenten von TechnoloHit. Zur Bearbeitung Ihres Anliegens kann dieses Gespräch verarbeitet und zusammengefasst werden. Wie kann ich Ihnen helfen?
 ```
 
-This writes:
+Regenerate after wording changes:
+
+```bash
+cd voice-bridge
+npm run audio:build
+```
 
 | File | Purpose |
 |------|---------|
@@ -374,8 +392,10 @@ The relevance guard runs before final playback:
 - FAQ retrieval copy is loaded from `voice-bridge/knowledge/faqs.technolohit.json` with a safe in-code fallback if missing
 - soft intake asks for contact preference only after interest, callback, handoff, pricing, free analysis, Smart Website, voice assistant, or email campaign signals
 - soft intake asks one question at a time; email callers are directed to `info@technolohit.com`
-- callback path now prefers caller ID when available: it asks `Darf unser Team Sie unter dieser Nummer zurückrufen?` and skips re-capturing the number by voice
-- if no caller ID is available, callback callers are asked for a phone number and then permission
+- callback path prefers caller ID when available: `Gerne. Darf unser Team Sie unter der Nummer zurückrufen, von der Sie gerade anrufen?`
+- if no caller ID is available, callback callers are asked once: `Gerne. Unter welcher Telefonnummer darf unser Team Sie zurückrufen?` — permission is implied; no second permission question after voice capture
+- voice-agent product synonyms (`AI Assistant`, `KI Assistent`, `Telefonassistent`, …) route to a compact offer instead of repeating the full product menu
+- unknown/unclear input uses short clarification; repeated unknown intent offers contact preference instead of replaying the full intro
 - after email-direct, callback permission granted, callback permission denied, or intake fallback, the assistant finishes the turn loop instead of asking another max-turn callback question
 - when soft intake is waiting for contact detail/permission, this waiting state is handled before generic max-turn close
 - soft intake detail retry is limited to one brief retry, then fallback to `info@technolohit.com`

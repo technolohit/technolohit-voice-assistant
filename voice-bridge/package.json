@@ -8,6 +8,8 @@
   "scripts": {
     "start": "node src/index.js",
     "qa:dialogue": "node scripts/qa-dialogue-text.js",
+    "test": "node --test tests/*.test.js",
+    "test:intelligence": "node --test tests/intelligence-upgrade.test.js",
     "tts:greeting": "node scripts/generate-greeting-openai.js",
     "audio:convert": "sh scripts/convert-greeting.sh",
     "audio:build": "npm run tts:greeting && npm run audio:convert"

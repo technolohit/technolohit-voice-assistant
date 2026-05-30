@@ -114,6 +114,8 @@ Checks:
 - root Node dependencies
 - voice-bridge Node dependencies
 - JavaScript syntax
+- voice-bridge unit tests (`npm test` in `voice-bridge/`)
+- voice dialogue QA scenarios (`npm run qa:dialogue -- --scenario …`; on Windows PowerShell use `node voice-bridge/scripts/qa-dialogue-text.js --scenario …` from `voice-bridge/`)
 - Python/RAG syntax
 - RAG static contract tests
 - secret and runtime artifact guard
@@ -163,11 +165,53 @@ git push origin v1.0.0
 7. Verify production:
 
 ```bash
-docker inspect technolohit-voice-bridge --format '{{.Config.Image}}'
-docker logs --tail=120 technolohit-voice-bridge
+docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}'
+docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_ASSISTANT|VOICE_RAG|VOICE_GREETING|VOICE_RECORDING|VOICE_TRANSCRIPTION|VOICE_LOG_TRANSCRIPT_PREVIEW|BUILD_VERSION|IMAGE_TAG)=" || true'
+docker logs --tail=160 technolohit-voice-bridge
+```
+
+Caller ID DB evidence:
+
+```bash
+docker exec central_postgres psql -U "$POSTGRES_USER" -d technolohit_growth -P pager=off -c "
+SELECT id, started_at, caller_phone_raw, caller_phone_normalized, metadata->>'caller_phone_source' AS source
+FROM voice.call_sessions ORDER BY started_at DESC LIMIT 20;"
+```
+
+RAG runtime verification:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Networks}}' | grep -E 'technolohit-rag-api|technolohit-voice-bridge|NAME'
+docker exec technolohit-voice-bridge sh -lc 'getent hosts technolohit-rag-api || true'
+docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://technolohit-rag-api:8080/healthz || true'
 ```
 
 8. Test a real call and verify `voice.call_sessions`, `voice.call_events`, and turn transcripts.
+
+## Rollback
+
+Disable RAG immediately:
+
+```env
+VOICE_RAG_ENABLED=false
+```
+
+Redeploy previous immutable image:
+
+```bash
+VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-previous-tag docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+```
+
+## Live call QA matrix (post-deploy)
+
+| Scenario | Expected |
+|----------|----------|
+| Caller ID + phone callback | Permission under current number; no spoken phone repeat |
+| No caller ID + phone callback | One phone question; no duplicate permission |
+| `AI Assistant` interest | Compact voice-agent offer; no full menu |
+| Unclear audio | Short repeat request |
+| Unknown intent | Short topic clarification; no greeting loop |
+| RAG disabled | Call continues with FAQ/templates/fallback |
 
 ## Local Release Fallback
 

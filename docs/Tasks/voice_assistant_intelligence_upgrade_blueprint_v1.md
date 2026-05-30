@@ -20,7 +20,15 @@ Primary goals:
 - Tune speaking tempo after the conversational flow is shorter and safer.
 - Keep DSGVO/GDPR data minimisation and auditability intact.
 
-- [ ] Successful: Blueprint reviewed and accepted.
+## Owners (pre-merge)
+
+| Role | Status | Notes |
+|------|--------|-------|
+| Blueprint acceptance | Accepted 2026-05-30 | Local code/QA review complete; production rollout not started |
+| Implementation owner | Unassigned | Assign a named owner before production deploy |
+| Production rollout owner | Unassigned | Assign sysadmin/release owner before deploy |
+
+- [x] Successful: Blueprint reviewed and accepted.
 - [ ] Successful: Implementation owner assigned.
 - [ ] Successful: Production rollout owner assigned.
 
@@ -52,7 +60,7 @@ VOICE_RAG_API_URL=
 VOICE_RAG_TIMEOUT_MS=700
 VOICE_RAG_MIN_SCORE=0.72
 VOICE_RAG_QA_MODE=false
-VOICE_ASSISTANT_MAX_RESPONSE_CHARS=180
+VOICE_ASSISTANT_MAX_RESPONSE_CHARS=160
 VOICE_ASSISTANT_MAX_RESPONSE_SENTENCES=2
 VOICE_ASSISTANT_TTS_MODEL=gpt-4o-mini-tts
 VOICE_ASSISTANT_TTS_VOICE=marin
@@ -65,10 +73,10 @@ Existing Caller ID work:
 - The current flow should already be able to use `ctx.callerPhoneNormalized` or `ctx.callerPhoneRaw`.
 - Production still needs evidence that Asterisk actually passes caller ID metadata into `voice-bridge` for all expected inbound call paths.
 
-- [ ] Successful: Current `turn-assistant.js` callback path inspected.
-- [ ] Successful: Current product alias map inspected.
-- [ ] Successful: Current RAG fallback path inspected.
-- [ ] Successful: Current CI/CD workflows inspected.
+- [x] Successful: Current `turn-assistant.js` callback path inspected.
+- [x] Successful: Current product alias map inspected.
+- [x] Successful: Current RAG fallback path inspected.
+- [x] Successful: Current CI/CD workflows inspected.
 - [ ] Successful: Production caller ID evidence collected.
 
 ## Design Decision Summary
@@ -94,9 +102,9 @@ Core principle:
 Rules for safety and privacy. RAG/LLM for understanding and helpful answers.
 ```
 
-- [ ] Successful: Architecture decision accepted.
-- [ ] Successful: RAG remains optional and timeout-protected.
-- [ ] Successful: Deterministic privacy/control paths remain protected.
+- [x] Successful: Architecture decision accepted.
+- [x] Successful: RAG remains optional and timeout-protected.
+- [x] Successful: Deterministic privacy/control paths remain protected.
 
 ## Tempo Decision
 
@@ -127,7 +135,7 @@ Implementation note:
 - Start with a conservative value such as `1.05` or `1.08`.
 - Do not exceed `1.15` without live-call QA, because phone audio at 8 kHz can become less clear.
 
-- [ ] Successful: Tempo included as controlled phase.
+- [x] Successful: Tempo included as controlled phase.
 - [ ] Successful: First rollout target speed selected.
 
 ## Privacy And DSGVO/GDPR Guardrails
@@ -170,10 +178,10 @@ References already used in earlier privacy planning:
 - European Commission: lawful processing and consent
 - EDPB: secure personal data
 
-- [ ] Successful: Runtime recording/transcription behavior confirmed.
-- [ ] Successful: Intro privacy text selected.
+- [x] Successful: Runtime recording/transcription behavior confirmed.
+- [x] Successful: Intro privacy text selected.
 - [ ] Successful: Legal/privacy responsible person reviewed intro text.
-- [ ] Successful: Logs verified to exclude full phone and transcript previews.
+- [x] Successful: Logs verified to exclude full phone and transcript previews.
 
 ## Desired Callback Flow
 
@@ -234,11 +242,11 @@ Gerne. Schreiben Sie uns bitte kurz per E-Mail an ...
 
 Do not force phone capture when email is preferred.
 
-- [ ] Successful: Caller ID path asks permission under current number.
-- [ ] Successful: Missing Caller ID path asks for callback number once.
-- [ ] Successful: Duplicate permission prompt removed.
-- [ ] Successful: Email path remains unchanged and safe.
-- [ ] Successful: Post-call lead summary correctly records phone source.
+- [x] Successful: Caller ID path asks permission under current number.
+- [x] Successful: Missing Caller ID path asks for callback number once.
+- [x] Successful: Duplicate permission prompt removed.
+- [x] Successful: Email path remains unchanged and safe.
+- [x] Successful: Post-call lead summary correctly records phone source.
 
 ## RAG And Intelligence Design
 
@@ -284,9 +292,9 @@ RAG must not control:
 - retry limits
 - raw transcript storage
 
-- [ ] Successful: RAG use cases accepted.
-- [ ] Successful: RAG exclusion list accepted.
-- [ ] Successful: Runtime keeps fail-closed behavior on RAG timeout/error.
+- [x] Successful: RAG use cases accepted.
+- [x] Successful: RAG exclusion list accepted.
+- [x] Successful: Runtime keeps fail-closed behavior on RAG timeout/error.
 
 ## Product Synonym Map
 
@@ -350,11 +358,11 @@ Verstanden, es geht um unseren KI-Telefonassistenten beziehungsweise die digital
 Moechten Sie dazu eine kurze Erklaerung, oder soll unser Team Sie zurueckrufen?
 ```
 
-- [ ] Successful: Alias map expanded.
-- [ ] Successful: `AI Assistant` maps to `voice_agent`.
-- [ ] Successful: `KI Assistent` maps to `voice_agent`.
-- [ ] Successful: `Telefonassistent` maps to `voice_agent`.
-- [ ] Successful: Product resolver tests added.
+- [x] Successful: Alias map expanded.
+- [x] Successful: `AI Assistant` maps to `voice_agent`.
+- [x] Successful: `KI Assistent` maps to `voice_agent`.
+- [x] Successful: `Telefonassistent` maps to `voice_agent`.
+- [x] Successful: Product resolver tests added.
 
 ## Clarification And Fallback Behavior
 
@@ -393,10 +401,10 @@ Rules:
 - Ask one short clarification question.
 - If RAG finds a safe answer, answer briefly and then offer callback/email.
 
-- [ ] Successful: Full intro repeat removed from fallback.
-- [ ] Successful: Short clarification used for unclear audio.
-- [ ] Successful: Product synonym clarification works.
-- [ ] Successful: QA proves no long loop on unknown input.
+- [x] Successful: Full intro repeat removed from fallback.
+- [x] Successful: Short clarification used for unclear audio.
+- [x] Successful: Product synonym clarification works.
+- [x] Successful: QA proves no long loop on unknown input.
 
 ## Implementation Phases
 
@@ -464,11 +472,11 @@ Tasks:
 - Remove second permission question after spoken callback number capture.
 - Persist `contact_detail_source=caller_id|voice`.
 
-- [ ] Successful: Caller ID path implemented or confirmed already working.
-- [ ] Successful: Missing caller ID fallback implemented.
-- [ ] Successful: Duplicate permission removed.
-- [ ] Successful: Lead metadata records phone source.
-- [ ] Successful: Full phone remains out of notifications/logs.
+- [x] Successful: Caller ID path implemented or confirmed already working.
+- [x] Successful: Missing caller ID fallback implemented.
+- [x] Successful: Duplicate permission removed.
+- [x] Successful: Lead metadata records phone source.
+- [x] Successful: Full phone remains out of notifications/logs.
 
 ### Phase 2: Privacy Intro
 
@@ -535,9 +543,9 @@ Kann ich so einen Telefonassistenten fuer meine Firma bekommen?
 Was ist eure digitale Rezeption?
 ```
 
-- [ ] Successful: Alias map updated.
-- [ ] Successful: QA scenarios added.
-- [ ] Successful: All required phrases route to `voice_agent`.
+- [x] Successful: Alias map updated.
+- [x] Successful: QA scenarios added.
+- [x] Successful: All required phrases route to `voice_agent`.
 
 ### Phase 4: RAG-First Answers For Safe Questions
 
@@ -584,10 +592,10 @@ Promotion rule:
 - Production enablement needs explicit approval.
 - Rollback is one env change: `VOICE_RAG_ENABLED=false`.
 
-- [ ] Successful: RAG answer path designed.
-- [ ] Successful: RAG exclusion list protected.
-- [ ] Successful: RAG timeout path tested.
-- [ ] Successful: RAG unavailable path tested.
+- [x] Successful: RAG answer path designed.
+- [x] Successful: RAG exclusion list protected.
+- [x] Successful: RAG timeout path tested (local `retrieveRagContext` hang test in `npm test`).
+- [x] Successful: RAG unavailable path tested (local unreachable-port test in `npm test`).
 - [ ] Successful: QA mode evidence collected.
 
 ### Phase 5: Natural Clarification And Loop Prevention
@@ -619,9 +627,9 @@ Caller: Was macht TechnoloHit?
 Expected: short RAG/knowledge answer, then useful follow-up.
 ```
 
-- [ ] Successful: Intro repeat loop removed.
-- [ ] Successful: Short clarification implemented.
-- [ ] Successful: Loop prevention tested.
+- [x] Successful: Intro repeat loop removed.
+- [x] Successful: Short clarification implemented.
+- [x] Successful: Loop prevention tested.
 
 ### Phase 6: TTS Tempo And Response Length
 
@@ -656,8 +664,8 @@ QA:
 - Verify German phone audio remains clear over real PSTN.
 - Verify callback permission is still easy to understand.
 
-- [ ] Successful: TTS speed config added.
-- [ ] Successful: Speed default remains safe.
+- [x] Successful: TTS speed config added.
+- [x] Successful: Speed default remains safe.
 - [ ] Successful: Real-call QA selects production value.
 
 ### Phase 7: CI/CD And Test Automation
@@ -698,11 +706,11 @@ Reason:
 - A bad deploy immediately affects real callers.
 - Safe automation means automatic tests and image creation, not uncontrolled production rollout.
 
-- [ ] Successful: CI runs dialogue QA.
-- [ ] Successful: CI includes synonym tests.
-- [ ] Successful: CI includes callback flow tests.
-- [ ] Successful: Docker publish remains tag-based or protected.
-- [ ] Successful: Production deploy remains pinned to immutable image tag.
+- [x] Successful: CI runs dialogue QA.
+- [x] Successful: CI includes synonym tests.
+- [x] Successful: CI includes callback flow tests.
+- [x] Successful: Docker publish remains tag-based or protected.
+- [x] Successful: Production deploy remains pinned to immutable image tag.
 
 ### Phase 8: Production Rollout
 
@@ -831,9 +839,27 @@ CI/CD:
 - Production deploy is protected/manual or otherwise explicitly approved.
 - Rollback path is documented and tested.
 
-- [ ] Successful: Functional acceptance passed.
-- [ ] Successful: Privacy/security acceptance passed.
-- [ ] Successful: CI/CD acceptance passed.
+Local acceptance (code + automated QA only; production evidence still pending):
+
+- [x] Successful: Local functional acceptance passed.
+- [x] Successful: Local privacy/security guardrail acceptance passed.
+- [x] Successful: Local CI/CD acceptance passed.
+
+Production acceptance (pending):
+
+- [ ] Successful: Production functional acceptance passed.
+- [ ] Successful: Production privacy/security acceptance passed.
+- [ ] Successful: Production CI/CD and deploy acceptance passed.
+
+## Production rollout blockers (pending)
+
+- Legal/privacy greeting approval (`VOICE_GREETING_PRIVACY_MODE` wording).
+- Greeting audio regeneration and inclusion in Docker image.
+- Immutable Docker image publish (semver tag).
+- Manual production deploy (pinned tag).
+- Live PSTN QA (including TTS speed candidate).
+- Caller ID DB evidence on production inbound calls.
+- RAG production QA with `VOICE_RAG_ENABLED=false` initially; enable only after controlled evidence.
 
 ## Open Questions
 

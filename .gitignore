@@ -8,5 +8,7 @@ voice-bridge/node_modules/
 rag-api/.venv/
 rag-api/**/__pycache__/
 rag-api/**/*.pyc
+lead-dashboard/**/__pycache__/
+lead-dashboard/**/*.pyc
 *.log
 *.tgz

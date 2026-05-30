@@ -74,8 +74,9 @@ export function loadConfig() {
   );
   const assistantEndOnSilence = readBool("VOICE_ASSISTANT_END_ON_SILENCE", true);
   const assistantMinTranscriptChars = readInt("VOICE_ASSISTANT_MIN_TRANSCRIPT_CHARS", 5);
-  const assistantMaxResponseChars = readInt("VOICE_ASSISTANT_MAX_RESPONSE_CHARS", 180);
+  const assistantMaxResponseChars = readInt("VOICE_ASSISTANT_MAX_RESPONSE_CHARS", 160);
   const assistantMaxResponseSentences = readInt("VOICE_ASSISTANT_MAX_RESPONSE_SENTENCES", 2);
+  const assistantTtsSpeed = Math.min(1.15, Math.max(0.75, readFloat("VOICE_ASSISTANT_TTS_SPEED", 1.0)));
   const assistantLogTranscriptPreview = readBool("VOICE_LOG_TRANSCRIPT_PREVIEW", false);
   const assistantQaLogTranscriptPreview = readBool("VOICE_QA_LOG_TRANSCRIPT_PREVIEW", false);
   const assistantContactEmail = String(process.env.VOICE_CONTACT_EMAIL ?? "").trim();
@@ -149,6 +150,7 @@ export function loadConfig() {
       model: assistantModel,
       ttsModel: assistantTtsModel,
       ttsVoice: assistantTtsVoice,
+      ttsSpeed: assistantTtsSpeed,
       maxTurns: assistantMaxTurns,
       maxTurnsWithIntake: assistantMaxTurnsWithIntake,
       endOnSilence: assistantEndOnSilence,

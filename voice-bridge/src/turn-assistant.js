@@ -18,6 +18,7 @@ import {
   BUSINESS_FALLBACK_CLOSE_QUESTION,
   validateBusinessFallbackPolicy
 } from "./business-fallback-policy.js";
+import { hasUsableCallerId, callerIdForCallback } from "./caller-id.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,9 +26,15 @@ const knowledgePath = path.join(packageRoot, "knowledge", "technolohit.md");
 const productCatalogPath = path.join(packageRoot, "knowledge", "products.technolohit.json");
 const faqCatalogPath = path.join(packageRoot, "knowledge", "faqs.technolohit.json");
 const CLARIFICATION_TEXT =
-  "Entschuldigung, ich habe Sie akustisch nicht gut verstanden. Geht es bei Ihnen um Website, Sichtbarkeit oder eine Rückfrage an unser Team?";
+  "Entschuldigung, ich habe Sie akustisch nicht gut verstanden. Können Sie Ihr Anliegen bitte kurz wiederholen?";
 const PARTIAL_TRANSCRIPT_TEXT =
   "Ich glaube, ich habe nur einen Teil verstanden. Können Sie das bitte kurz wiederholen?";
+const UNKNOWN_INTENT_TEXT =
+  "Ich bin nicht ganz sicher, ob es um Website, KI-Assistent, SEO oder Automatisierung geht. Worum geht es bei Ihnen?";
+const VOICE_AGENT_SYNONYM_CLARIFICATION_TEXT =
+  "Meinen Sie unseren KI-Telefonassistenten beziehungsweise die digitale Rezeption?";
+const UNKNOWN_LOOP_HANDOFF_TEXT =
+  "Damit unser Team Ihnen gezielt helfen kann: Möchten Sie lieber per E-Mail schreiben oder telefonisch kontaktiert werden?";
 const MAX_TURNS_CALLBACK_TEXT =
   "Ich gebe Ihre Anfrage gerne an unser Team weiter. Danke für Ihren Anruf. Auf Wiederhören.";
 const MAX_TURNS_WRAPUP_TEXT =
@@ -51,9 +58,10 @@ const DEFAULT_HANDOFF_CHOICE_QUESTION =
 const EMAIL_DETAIL_REQUEST_TEXT =
   "Welche E-Mail-Adresse dürfen wir für die Rückmeldung verwenden?";
 const PHONE_DETAIL_REQUEST_TEXT =
-  "Gerne. Unter welcher Telefonnummer kann unser Team Sie erreichen?";
-const CALLBACK_NUMBER_CONFIRM_PERMISSION_TEXT =
-  "Danke. Darf unser Team Sie dazu telefonisch kontaktieren?";
+  "Gerne. Unter welcher Telefonnummer darf unser Team Sie zurückrufen?";
+const CALLER_ID_CALLBACK_PERMISSION_TEXT =
+  "Gerne. Darf unser Team Sie unter der Nummer zurückrufen, von der Sie gerade anrufen?";
+const CALLBACK_NUMBER_CONFIRM_PERMISSION_TEXT = CALLER_ID_CALLBACK_PERMISSION_TEXT;
 const CONTACT_PERMISSION_TEXT = "Danke. Darf unser Team Sie dazu kontaktieren?";
 const CONTACT_PERMISSION_REASK_TEXT = "Darf unser Team Sie dazu kontaktieren?";
 const CONTACT_PERMISSION_GRANTED_TEXT =
@@ -100,6 +108,7 @@ const MAX_TURNS_INTAKE_PERMISSION_MISSING_TEXT =
 const DETAIL_RETRY_LIMIT = 1;
 const CONTACT_PREFERENCE_RETRY_LIMIT = 3;
 const PERMISSION_RETRY_LIMIT = 1;
+const UNKNOWN_INTENT_LOOP_LIMIT = 2;
 const KNOWLEDGE_SOURCE = "voice-bridge/knowledge/technolohit.md";
 const PRODUCT_CATALOG_SOURCE = "voice-bridge/knowledge/products.technolohit.json";
 const FAQ_CATALOG_SOURCE = "voice-bridge/knowledge/faqs.technolohit.json";
@@ -753,8 +762,15 @@ function detectIntent(text) {
   if (/\b(preis|preise|kostet|kosten|teuer|budget|angebot)\b/i.test(lower) || /\bwas kostet\b/i.test(lower)) {
     return "pricing_question";
   }
+  const earlyPolicyMatch = matchProductPolicyFromText(text);
+  if (earlyPolicyMatch?.key && isCompactProductInterestPhrase(lower)) {
+    const mappedId = earlyPolicyMatch.key === "digital_assistant" ? "voice_agent" : earlyPolicyMatch.key;
+    return productSelectionIntent(mappedId);
+  }
   if (
-    /\b(echte person|echter mensch|real person|ein mensch|einen mensch|eine person|bist du.*mensch|sind sie.*mensch|sind sie.*person|sehen sie.*mensch|sehn se.*mensch|spreche ich.*(ki|bot|assistent)|sind sie.*(echt|ki|bot|assistent)|ki|ai|bot|roboter|digitaler assistent)\b/i.test(lower) ||
+    /\b(echte person|echter mensch|real person|ein mensch|einen mensch|eine person|bist du.*mensch|sind sie.*mensch|sind sie.*person|sehen sie.*mensch|sehn se.*mensch|spreche ich.*(ki|bot|assistent)|sind sie.*(echt|ki|bot|assistent)|roboter)\b/i.test(lower) ||
+    (/\b(ki|ai|bot|digitaler assistent)\b/i.test(lower) &&
+      !/\b(ai assistant|ai voice assistant|voice assistant|voice bot|call bot|ki assistent|ki telefonassistent)\b/i.test(lower)) ||
     /\b(sizinze|sizine|sinse|siense|sindse)\b.*\b(echte|person|mensch)\b/i.test(lower)
   ) {
     return "human_or_ai_question";
@@ -879,7 +895,52 @@ function templateResponseForIntent(intent, config, callerText = "") {
 }
 
 function unknownResponse(config) {
-  return normalizeAssistantResponse(UNKNOWN_FALLBACK_TEXT, config);
+  return normalizeAssistantResponse(UNKNOWN_INTENT_TEXT, config);
+}
+
+function isCompactProductInterestPhrase(text) {
+  const lower = normalizeForIntent(text);
+  return /\b(interessiere mich|interessiert mich|brauche|mochte|möchte|will|wurde gern|konnte ich|bekommen|fur meine firma|für meine firma)\b/i.test(
+    lower
+  );
+}
+
+function buildCompactProductInterestResponse(config, productId) {
+  if (productId === "voice_agent") {
+    return normalizeAssistantResponse(
+      "Verstanden, es geht um den KI-Telefonassistenten und die digitale Rezeption. Kurze Erklärung oder Rückruf durch unser Team?",
+      config
+    );
+  }
+  const policy = productPolicyById(productId);
+  if (!policy) return unknownResponse(config);
+  return normalizeAssistantResponse(
+    `Verstanden, es geht um ${policy.displayName}. Möchten Sie dazu eine kurze Erklärung, oder soll unser Team Sie zurückrufen?`,
+    config
+  );
+}
+
+function isProductExplanationChoice(text) {
+  const lower = normalizeForIntent(text);
+  return /\b(erklar|erklär|erklaer|erklaeren|erklären|mehr dazu|kurz mehr|wie funktioniert|was ist|details)\b/i.test(
+    lower
+  );
+}
+
+function isProductCallbackChoice(text) {
+  const lower = normalizeForIntent(text);
+  return (
+    callbackPhraseIndicatesPhone(text) ||
+    /\b(telefon|ruckruf|rueckruf|rückruf|zuruckrufen|zurueckrufen|team.*melden|zuruck melden)\b/i.test(lower)
+  );
+}
+
+function appendRagFollowUpQuestion(text, config) {
+  const base = normalizeAssistantResponse(text, config);
+  if (!base) return base;
+  if (/\?\s*$/.test(base)) return base;
+  const followUp = "Haben Sie dazu noch eine kurze Frage, oder soll unser Team Sie zurückrufen?";
+  return normalizeAssistantResponse(`${base} ${followUp}`, config);
 }
 
 function asksForCallback(text) {
@@ -1120,10 +1181,14 @@ function detectNamedProductMatch(text, options = {}) {
   if (/\b(lokalki|lokal ki|lokale ki|private ki|privater chatgpt|chatgpt private|offline ki|interne ki|sensiblen daten|sensible daten|eigener server)\b/i.test(lower)) {
     return { id: "lokalki", reason: "explicit_name" };
   }
-  if (/\b(digitale rezeption|digital reception|voice agent|voice assistant|ai voice agent|sprachassistent)\b/i.test(lower)) {
+  if (/\b(digitale rezeption|digital reception|voice agent|voice assistant|ai voice agent|ai assistant|ai voice assistant|voice bot|call bot|sprachassistent)\b/i.test(lower)) {
     return { id: "voice_agent", reason: "explicit_name" };
   }
-  if (/\b(telefonassistent|telefon assistent|ki telefon|anrufe beantworten)\b/i.test(lower) && explanation) {
+  if (
+    /\b(ki assistent|ki telefonassistent|telefonassistent|telefon assistent|ki telefon|anrufe beantworten|digitaler assistent|telefon ki)\b/i.test(
+      lower
+    )
+  ) {
     return { id: "voice_agent", reason: "alias" };
   }
   if (/\b(smart website|smart webseite|smarte website|smarte webseite|intelligente website|intelligente webseite)\b/i.test(lower) && explanation) {
@@ -1331,9 +1396,24 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
 
   const productId = PRODUCT_INTENT_TO_ID[intent];
   if (productId) {
+    const useCompactPitch =
+      productId === "voice_agent" &&
+      (isCompactProductInterestPhrase(callerText) || Boolean(matchProductPolicyFromText(callerText)));
     setSelectedProduct(productState, catalog, productId, intent, turnIndex);
-    productState.productDialogueState = "product_pitch_interest_question";
     productState.handoffChoice = "none";
+    if (useCompactPitch) {
+      productState.productDialogueState = "product_compact_offer";
+      console.log(
+        `[voice-assistant] product_intake_product=${productId} product_intake_stage=product_compact_offer handoff_choice=none turn_index=${turnIndex}`
+      );
+      return {
+        text: buildCompactProductInterestResponse(config, productId),
+        detectedIntent: intent,
+        finalResponseTemplate: "product_intake",
+        product: productState
+      };
+    }
+    productState.productDialogueState = "product_pitch_interest_question";
     const pitchResponse = buildPitchWithMandatoryQuestion(config, productId, turnIndex);
     console.log(
       `[voice-assistant] product_intake_product=${productId} product_intake_stage=product_pitch_interest_question handoff_choice=none turn_index=${turnIndex}`
@@ -1360,6 +1440,38 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
   if (productState.awaitingInterestConfirmation && productState.selectedProduct) {
     const policy = productPolicyById(productState.selectedProduct);
     const interestQuestion = policy?.mandatoryInterestQuestion || "Möchten Sie so etwas für Ihr Unternehmen prüfen lassen?";
+
+    if (productState.productDialogueState === "product_compact_offer") {
+      if (
+        isProductCallbackChoice(callerText) ||
+        isPositiveShortAnswer(callerText) ||
+        intent === "contact_preference_phone" ||
+        intent === "callback_request"
+      ) {
+        productState.productDialogueState = "handoff_choice_requested";
+        productState.handoffChoice = "phone";
+        console.log(
+          `[voice-assistant] product_intake_product=${productState.selectedProduct} product_intake_stage=handoff_choice_requested handoff_choice=phone turn_index=${turnIndex}`
+        );
+        return null;
+      }
+      if (isProductExplanationChoice(callerText) || intent === "product_more_detail_request") {
+        productState.productDialogueState = "product_pitch_interest_question";
+        const detailResponse = productDetailResponse(config, catalog, productState.selectedProduct);
+        return {
+          text: detailResponse,
+          detectedIntent: "product_more_detail_request",
+          finalResponseTemplate: "product_intake",
+          product: productState
+        };
+      }
+      return {
+        text: buildCompactProductInterestResponse(config, productState.selectedProduct),
+        detectedIntent: "product_compact_offer_reask",
+        finalResponseTemplate: "product_intake",
+        product: productState
+      };
+    }
 
     const adviceSignal =
       /\b(beratung|beraten|nicht sicher|unsicher|weiss nicht|weiß nicht|keine ahnung|was passt)\b/i.test(
@@ -2272,7 +2384,7 @@ async function requestPhoneDetailIntake(config, ctx, turnIndex, detectedIntent, 
   console.log(
     `[voice-assistant] product_intake_product=${product.selectedProduct || "none"} product_intake_stage=phone_request handoff_choice=phone turn_index=${turnIndex}`
   );
-  const callerPhone = String(ctx?.callerPhoneNormalized || ctx?.callerPhoneRaw || "").trim();
+  const callerPhone = callerIdForCallback(ctx);
   intake.contactPreference = "phone";
   intake.contactRoute = "callback";
   intake.contactDetailType = "phone";
@@ -2280,7 +2392,7 @@ async function requestPhoneDetailIntake(config, ctx, turnIndex, detectedIntent, 
 
   await emitIntakeEvent(config, ctx, "contact_preference_detected", turnIndex, detectedIntent, intake);
 
-  if (callerPhone) {
+  if (hasUsableCallerId(ctx)) {
     intake.contactDetailRequested = false;
     intake.contactDetailAttempted = true;
     intake.contactDetailSource = "caller_id";
@@ -2517,7 +2629,15 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
             : "Caller requested callback and granted permission; phone captured best-effort from voice transcript."
       });
       intake.leadCreated = Boolean(leadId);
-      const permissionGrantedResponse = buildPermissionGrantedWithFinalQuestion(config, turnIndex);
+      const permissionGrantedResponse =
+        phoneCaptureSource === "caller_id"
+          ? {
+              text: normalizeAssistantResponse(PERMISSION_GRANTED_CONFIRMATION_BODY, config),
+              containsFinalQuestion: false,
+              finalPermissionResponseMissingQuestion: false,
+              responseLimiterRemovedPermissionTail: false
+            }
+          : buildPermissionGrantedWithFinalQuestion(config, turnIndex);
       if (permissionGrantedResponse.containsFinalQuestion) {
         intake.closingPending = true;
         intake.finalQuestionAsked = true;
@@ -2585,16 +2705,31 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
       intake.contactDetailSource = "voice";
       intake.contactDetailNormalized =
         intake.contactDetailType === "phone" ? normalizeSpokenPhone(callerText) : "";
-      intake.contactPermissionRequested = true;
-      intake.waitingFor = "permission";
-      productState.productDialogueState = "permission_requested";
-      intake.permissionRetryCount = 0;
-      intake.permissionDetected = null;
-      intake.permissionDetectionSource = null;
-      await emitIntakeEvent(config, ctx, "contact_permission_requested", turnIndex, intent, intake);
+      intake.contactPermissionGranted = true;
+      intake.contactPermissionRequested = false;
+      intake.completed = true;
+      productState.productDialogueState = "closing_pending";
+      await emitIntakeEvent(config, ctx, "contact_permission_granted", turnIndex, intent, intake);
+      const leadId = await persist.onSoftIntakeLeadReady(config, ctx, {
+        turnIndex,
+        detectedIntent: "contact_permission_granted",
+        contactRoute: intake.contactRoute || "callback",
+        contactPreference: intake.contactPreference || "phone",
+        contactPermissionGranted: true,
+        normalizedPhone: intake.contactDetailNormalized || "",
+        contactDetailSource: "voice",
+        noVoiceEmailCapture: true,
+        notes:
+          "Caller requested callback; phone captured from voice. Permission implied by callback number question."
+      });
+      intake.leadCreated = Boolean(leadId);
+      const confirmationText = normalizeAssistantResponse(PERMISSION_GRANTED_CONFIRMATION_BODY, config);
+      intake.closingPending = true;
+      intake.finalQuestionAsked = true;
+      intake.waitingFor = "closing_answer";
       return {
-        text: normalizeAssistantResponse(CONTACT_PERMISSION_TEXT, config),
-        detectedIntent: intent,
+        text: confirmationText,
+        detectedIntent: "contact_permission_granted",
         intake
       };
     }
@@ -2832,8 +2967,17 @@ function looksSemanticKnowledgeQuestion(text) {
   if (RAG_NEVER_ROUTE_PATTERN.test(normalized)) return false;
   return (
     /\?$/.test(String(text || "").trim()) ||
-    /\b(was ist|was sind|wie funktioniert|erklar|erklär|erzaehl|erzähl|unterschied|details)\b/i.test(normalized)
+    /\b(was ist|was sind|was macht|wie funktioniert|erklar|erklär|erzaehl|erzähl|unterschied|details)\b/i.test(normalized)
   );
+}
+
+function isRagFlowBlocked(state, callerText) {
+  const intake = ensureIntakeState(state);
+  if (isIntakeActive(intake)) return true;
+  const product = ensureProductState(state);
+  if (product.awaitingSelection) return true;
+  if (product.awaitingInterestConfirmation && !looksSemanticKnowledgeQuestion(callerText)) return true;
+  return false;
 }
 
 function ragChunkToPhoneAnswer(chunk, config) {
@@ -2882,8 +3026,7 @@ async function maybeRetrieveRagFallback(config, callerText, turnIndex, effective
   if (!config?.rag?.apiUrl) return { used: false, reason: "rag_api_url_missing" };
   if ((effectiveAnalysis?.transcriptQuality ?? "clear") !== "clear") return { used: false, reason: "transcript_not_clear" };
   if (!looksSemanticKnowledgeQuestion(callerText)) return { used: false, reason: "not_semantic_question" };
-  if (isIntakeActive(ensureIntakeState(state))) return { used: false, reason: "intake_active" };
-  if (isProductFlowActive(ensureProductState(state))) return { used: false, reason: "product_flow_active" };
+  if (isRagFlowBlocked(state, callerText)) return { used: false, reason: "flow_blocked" };
 
   const baseMinScore = Number(config?.rag?.minScore ?? 0.72);
   const baseTimeoutMs = Number(config?.rag?.timeoutMs || 700);
@@ -3118,6 +3261,7 @@ function turnState(ctx) {
       bytes: 0,
       history: [],
       clarificationAsked: false,
+      unknownIntentCount: 0,
       intake: createIntakeState(),
       product: createProductState()
     };
@@ -3336,6 +3480,10 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
       ? effectiveAnalysis.detectedIntent
       : "";
 
+  if (intent && intent !== "unknown" && (effectiveAnalysis?.transcriptQuality ?? "clear") === "clear") {
+    state.unknownIntentCount = 0;
+  }
+
   const instructions = [
     "Du bist der digitale Assistent von TechnoloHit am Telefon.",
     "Antworte immer auf Deutsch, natürlich, kurz, warm, ruhig und professionell.",
@@ -3415,9 +3563,35 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
         businessFallbackNextStep = businessFallbackResponse.businessFallbackNextStep || "none";
       } else if (KNOWN_INTENTS.has(intent)) {
         text = templateResponseForIntent(intent, config, callerText);
+        if ((intent === "what" || intent === "product_overview_request") && history.length > 0) {
+          text = unknownResponse(config);
+          responseDetectedIntent = "unknown_intent_clarification";
+          finalResponseTemplate = "clarification";
+        }
         timings.responseGenerationMs = 0;
         usedTemplateResponse = true;
-        finalResponseTemplate = "product_intake";
+        finalResponseTemplate =
+          finalResponseTemplate === "clarification" ? finalResponseTemplate : "product_intake";
+      } else {
+      state.unknownIntentCount = Number(state.unknownIntentCount || 0) + 1;
+      const unknownCount = state.unknownIntentCount;
+      const voiceAgentSynonym = matchProductPolicyFromText(callerText)?.key === "digital_assistant";
+
+      if (unknownCount > UNKNOWN_INTENT_LOOP_LIMIT) {
+        text = normalizeAssistantResponse(UNKNOWN_LOOP_HANDOFF_TEXT, config);
+        timings.responseGenerationMs = 0;
+        usedTemplateResponse = true;
+        responseDetectedIntent = "unknown_intent_loop_handoff";
+        finalResponseTemplate = "soft_intake";
+        const intakeState = ensureIntakeState(state);
+        intakeState.contactPreferenceAsked = true;
+        intakeState.waitingFor = "contact_preference";
+      } else if (voiceAgentSynonym && unknownCount === 1) {
+        text = normalizeAssistantResponse(VOICE_AGENT_SYNONYM_CLARIFICATION_TEXT, config);
+        timings.responseGenerationMs = 0;
+        usedTemplateResponse = true;
+        responseDetectedIntent = "voice_agent_synonym_clarification";
+        finalResponseTemplate = "clarification";
       } else {
       const intakeActive = isIntakeActive(ensureIntakeState(state));
       const productActive = isProductFlowActive(ensureProductState(state));
@@ -3440,7 +3614,7 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
         }
         const ragResult = await maybeRetrieveRagFallback(config, callerText, turnIndex, effectiveAnalysis, state);
         if (ragResult.used) {
-          text = ragResult.text;
+          text = appendRagFollowUpQuestion(ragResult.text, config);
           timings.responseGenerationMs = Number(ragResult.latencyMs || 0);
           usedTemplateResponse = true;
           responseDetectedIntent = "rag_fallback_answer";
@@ -3493,6 +3667,7 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
           }
           }
         }
+      }
       }
     }
     }
@@ -3594,6 +3769,7 @@ async function synthesizeAssistantResponse(config, ctx, turnIndex, text, timings
     model: config.assistant.ttsModel || "gpt-4o-mini-tts",
     voice: config.assistant.ttsVoice || "marin",
     input: text,
+    speed: Math.min(1.15, Math.max(0.75, Number(config.assistant.ttsSpeed || 1.0))),
     instructions:
       "Speak German with a warm, calm, professional business receptionist tone. Natural pacing, clear pronunciation, friendly and concise.",
     response_format: "wav"
@@ -4012,14 +4188,18 @@ async function runAssistantConversation(config, ctx, socket, playback) {
 }
 
 export function createQaDialogueContext(overrides = {}) {
+  const callerPhoneNormalized =
+    overrides.callerPhoneNormalized !== undefined ? overrides.callerPhoneNormalized : "+491701234567";
+  const callerPhoneRaw =
+    overrides.callerPhoneRaw !== undefined ? overrides.callerPhoneRaw : "+49 170 1234567";
   return {
     qaMode: true,
-    callerPhoneNormalized: overrides.callerPhoneNormalized || "+491701234567",
-    callerPhoneRaw: overrides.callerPhoneRaw || "+49 170 1234567",
     bridgeCallId: overrides.bridgeCallId || "qa-text-harness",
     externalCallId: overrides.externalCallId || "qa:text-harness",
     assistantTurn: null,
-    ...overrides
+    ...overrides,
+    callerPhoneNormalized,
+    callerPhoneRaw
   };
 }
 
@@ -4029,6 +4209,7 @@ function cloneDialogueSnapshot(ctx) {
     intake: structuredClone(state.intake),
     product: structuredClone(state.product),
     clarificationAsked: Boolean(state.clarificationAsked),
+    unknownIntentCount: Number(state.unknownIntentCount || 0),
     history: structuredClone(state.history)
   };
 }
@@ -4248,6 +4429,7 @@ export function startOneTurnAssistant(config, ctx, socket, playback) {
   state.completed = false;
   state.history = [];
   state.clarificationAsked = false;
+  state.unknownIntentCount = 0;
   state.intake = createIntakeState();
   state.product = createProductState();
 

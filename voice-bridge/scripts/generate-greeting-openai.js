@@ -3,12 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadVoiceBridgeEnv } from "../src/load-env.js";
+import { loadConfig } from "../src/config.js";
+import { buildPrivacyGreetingText, resolveGreetingPrivacyMode } from "../src/greeting-text.js";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputPath = path.join(packageRoot, "audio", "greeting.wav");
-
-const GREETING_TEXT =
-  "Hallo, hier ist der digitale Assistent von TechnoloHit. Wobei kann ich Ihnen helfen?";
 
 const TTS_INSTRUCTIONS =
   "Speak German with a warm, calm, professional business receptionist tone. Natural pacing, clear pronunciation, friendly but not salesy. The speaker should sound like a reliable digital assistant for a German technology company.";
@@ -38,6 +37,9 @@ async function readOpenAiError(response) {
 
 async function main() {
   loadVoiceBridgeEnv();
+  const config = loadConfig();
+  const greetingText = buildPrivacyGreetingText(config);
+  const privacyMode = resolveGreetingPrivacyMode(config);
 
   const apiKey = String(process.env.OPENAI_API_KEY ?? "").trim();
   if (!apiKey) {
@@ -49,6 +51,7 @@ async function main() {
   const model = readSetting("VOICE_TTS_MODEL", "gpt-4o-mini-tts");
   const voice = readSetting("VOICE_TTS_VOICE", "marin");
   const format = readSetting("VOICE_TTS_FORMAT", "wav").toLowerCase();
+  const speed = Math.min(1.15, Math.max(0.75, Number.parseFloat(readSetting("VOICE_ASSISTANT_TTS_SPEED", "1.0")) || 1.0));
 
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
@@ -59,9 +62,10 @@ async function main() {
     body: JSON.stringify({
       model,
       voice,
-      input: GREETING_TEXT,
+      input: greetingText,
       instructions: TTS_INSTRUCTIONS,
-      response_format: format
+      response_format: format,
+      speed
     })
   });
 
@@ -92,7 +96,7 @@ async function main() {
   await fs.writeFile(outputPath, audio);
 
   console.log(
-    `[voice-tts] wrote ${outputPath} bytes=${audio.length} model=${model} voice=${voice} format=${format}`
+    `[voice-tts] wrote ${outputPath} bytes=${audio.length} model=${model} voice=${voice} format=${format} speed=${speed} privacy_mode=${privacyMode}`
   );
 }
 
