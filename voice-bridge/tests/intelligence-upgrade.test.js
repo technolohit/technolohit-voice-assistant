@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { hasUsableCallerId, isAnonymousCallerPhone, normalizeCallerPhone } from "../src/caller-id.js";
 import { matchProductPolicyFromText, validateProductIntakePolicy } from "../src/product-intake-policy.js";
 import { retrieveRagContext } from "../src/rag-client.js";
+import { validateSalesPlaybooks } from "../src/sales-policy.js";
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -20,6 +21,10 @@ function closeServer(server) {
 
 test("validateProductIntakePolicy passes", () => {
   assert.doesNotThrow(() => validateProductIntakePolicy());
+});
+
+test("validateSalesPlaybooks passes", () => {
+  assert.doesNotThrow(() => validateSalesPlaybooks());
 });
 
 test("voice agent synonyms map to digital_assistant policy", () => {

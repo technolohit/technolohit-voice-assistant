@@ -314,6 +314,11 @@ export async function onAssistantResponseCreated(config, ctx, info = {}) {
         product_awaiting_interest_confirmation: Boolean(info.productAwaitingInterestConfirmation),
         product_interest: info.productInterest ?? null,
         product_interest_name: info.productInterestName ?? null,
+        customer_type: info.customerType ?? null,
+        sales_stage: info.salesStage ?? null,
+        sales_need_captured: Boolean(info.salesNeedCaptured),
+        current_problem: info.currentProblem ?? "",
+        desired_outcome: info.desiredOutcome ?? "",
         product_last_intent: info.productLastIntent ?? null,
         transcript_scope: "turn",
         turn_index: info.turnIndex ?? 1,
@@ -375,6 +380,11 @@ export async function onAssistantResponseCreated(config, ctx, info = {}) {
         product_awaiting_interest_confirmation: Boolean(info.productAwaitingInterestConfirmation),
         product_interest: info.productInterest ?? null,
         product_interest_name: info.productInterestName ?? null,
+        customer_type: info.customerType ?? null,
+        sales_stage: info.salesStage ?? null,
+        sales_need_captured: Boolean(info.salesNeedCaptured),
+        current_problem: info.currentProblem ?? "",
+        desired_outcome: info.desiredOutcome ?? "",
         product_last_intent: info.productLastIntent ?? null,
         assistant_response_preview: safePreview(config, info.text),
         knowledge_source: info.knowledgeSource ?? info.knowledgeFile ?? "",
@@ -477,6 +487,12 @@ export async function onSoftIntakeLeadReady(config, ctx, info = {}) {
   if (ctx.softIntakeLeadId) return ctx.softIntakeLeadId;
 
   try {
+    const product = ctx?.assistantTurn?.product && typeof ctx.assistantTurn.product === "object"
+      ? ctx.assistantTurn.product
+      : {};
+    const salesContext = product.salesContext && typeof product.salesContext === "object"
+      ? product.salesContext
+      : {};
     const leadId = await db.insertVoiceLead(config, {
       callSessionId: ctx.callSessionId,
       normalizedPhone: info.normalizedPhone ?? "",
@@ -496,6 +512,13 @@ export async function onSoftIntakeLeadReady(config, ctx, info = {}) {
         detected_intent: info.detectedIntent ?? "unknown",
         turn_index: info.turnIndex ?? null,
         lead_capture_scope: "soft_intake_milestone",
+        product_interest: product.selectedProduct ?? null,
+        product_interest_name: product.selectedProductName ?? null,
+        customer_type: product.customerType ?? null,
+        sales_stage: product.productDialogueState ?? null,
+        sales_need_captured: Boolean(product.salesNeedCaptured),
+        current_problem: salesContext.current_problem ?? "",
+        desired_outcome: salesContext.desired_outcome ?? "",
         no_voice_email_capture: Boolean(info.noVoiceEmailCapture),
         caller_id_assumed: false,
         caller_phone_raw: ctx.callerPhoneRaw || "",

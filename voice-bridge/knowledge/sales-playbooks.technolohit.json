@@ -1,0 +1,102 @@
+{
+  "version": "sales-playbooks-2026-05-30-v2",
+  "description": "Consultative sales playbooks for the TechnoloHit voice assistant. Keep answers short, factual, phone-friendly, and free of guaranteed outcomes.",
+  "products": [
+    {
+      "id": "smart_website",
+      "name": "Smart Website",
+      "positioning": "Eine Smart Website ist eine moderne Unternehmenswebsite, die Sichtbarkeit, KI-gestuetzte Kundenfragen und Anfrage-Erfassung verbindet.",
+      "best_for": ["lokale Unternehmen", "Dienstleister", "KMU mit Website-Anfragen"],
+      "pain_points": ["Website bringt zu wenige Anfragen", "Kunden finden wichtige Infos nicht", "Anfragen werden unstrukturiert aufgenommen"],
+      "value_props": ["klarere Darstellung des Angebots", "bessere Vorbereitung von Leads", "Unterstuetzung bei lokalen Suchanfragen"],
+      "qualifying_questions": [
+        "Haben Sie bereits eine Website, oder soll etwas Neues entstehen?",
+        "Was ist wichtiger: mehr Sichtbarkeit, bessere Anfragen oder ein modernerer Auftritt?"
+      ],
+      "objection_answers": {
+        "price": "Das haengt vom Umfang ab. Sinnvoll ist eine kurze Einschaetzung, was Ihre Website konkret leisten soll.",
+        "seo_guarantee": "Serioese Ranking-Garantien geben wir nicht. Es geht um bessere Struktur, Inhalte und laufende Verbesserung."
+      },
+      "safe_claims": ["kann lokale Sichtbarkeit unterstuetzen", "kann Anfragen strukturierter vorbereiten"],
+      "forbidden_claims": ["garantierte Rankings", "garantierte Leads", "garantierter Umsatz"],
+      "handoff_summary_template": "Interessiert an Smart Website; Kontext: {current_problem}; Ziel: {desired_outcome}"
+    },
+    {
+      "id": "aiseoq",
+      "name": "AISeoQ",
+      "positioning": "AISeoQ hilft bei SEO-Analysen, Wettbewerbsvergleichen und der Ableitung konkreter Verbesserungen.",
+      "best_for": ["Agenturen", "IT-Dienstleister", "Webteams"],
+      "pain_points": ["SEO-Analyse kostet viel Zeit", "Wettbewerbervergleich ist unklar", "Kundenreports brauchen Struktur"],
+      "value_props": ["schnellere Analyse", "klarere Vergleichsdaten", "bessere Vorbereitung von Massnahmen"],
+      "qualifying_questions": [
+        "Pruefen Sie eigene Websites oder Kundenprojekte?",
+        "Geht es eher um Analyse, Wettbewerbsvergleich oder Kundenreports?"
+      ],
+      "objection_answers": {
+        "price": "Das haengt vom Einsatz ab. Unser Team klaert am besten kurz, ob es zu Ihren Projekten passt.",
+        "seo_guarantee": "AISeoQ unterstuetzt Analyse und Ableitung, verspricht aber keine festen Rankings."
+      },
+      "safe_claims": ["unterstuetzt SEO-Analyse", "hilft beim Wettbewerbsvergleich"],
+      "forbidden_claims": ["Platz-1-Garantie", "automatische SEO-Erfolge"],
+      "handoff_summary_template": "Interessiert an AISeoQ; Kontext: {current_problem}; Ziel: {desired_outcome}"
+    },
+    {
+      "id": "botinteg",
+      "name": "Botinteg",
+      "positioning": "Botinteg verbindet KI-Chatbots und einfache Automatisierung fuer wiederkehrende Fragen, Leads und Website-Ablaeufe.",
+      "best_for": ["Unternehmen mit wiederkehrenden Fragen", "Teams mit vielen Website-Anfragen", "kleine Automatisierungsprojekte"],
+      "pain_points": ["wiederkehrende Fragen kosten Zeit", "Leads werden unvollstaendig erfasst", "Abläufe sind manuell"],
+      "value_props": ["schnellere Antworten", "strukturiertere Lead-Erfassung", "Entlastung bei einfachen Abläufen"],
+      "qualifying_questions": [
+        "Geht es eher um Chatbot, Lead-Erfassung oder Automatisierung?",
+        "Wo kommen Ihre Anfragen heute meistens rein: Website, Social Media oder Telefon?"
+      ],
+      "objection_answers": {
+        "price": "Der Aufwand haengt von den Kanaelen und Integrationen ab. Eine kurze Einschaetzung ist sinnvoll.",
+        "integration": "Integrationen muessen wir pro Setup pruefen; wir versprechen keine pauschale Vollautomatisierung."
+      },
+      "safe_claims": ["kann wiederkehrende Fragen beantworten", "kann Leads strukturierter erfassen"],
+      "forbidden_claims": ["jede Integration ohne Pruefung", "vollstaendige Automatisierung ohne Setup"],
+      "handoff_summary_template": "Interessiert an Botinteg; Kontext: {current_problem}; Ziel: {desired_outcome}"
+    },
+    {
+      "id": "lokalki",
+      "name": "LokalKI",
+      "positioning": "LokalKI ist fuer Unternehmen gedacht, die KI mit sensiblen internen Daten kontrollierter nutzen moechten.",
+      "best_for": ["Unternehmen mit internen Dokumenten", "Teams mit Datenschutzanforderungen", "Wissensmanagement"],
+      "pain_points": ["interne Informationen sind schwer auffindbar", "Cloud-KI ist nicht immer passend", "Datenschutz muss geprueft werden"],
+      "value_props": ["kontrolliertere KI-Nutzung", "bessere Arbeit mit internen Dokumenten", "technische Datenschutzorientierung"],
+      "qualifying_questions": [
+        "Geht es um interne Dokumente, Supportwissen oder sensible Kundendaten?",
+        "Soll die Loesung lokal oder nur kontrollierter betrieben werden?"
+      ],
+      "objection_answers": {
+        "privacy": "Wir koennen technische Moeglichkeiten datenschutzorientiert planen, aber keine Rechtsberatung oder DSGVO-Garantie geben.",
+        "price": "Das haengt stark von Datenmenge, Betrieb und Sicherheitsanforderungen ab."
+      },
+      "safe_claims": ["kann kontrolliertere KI-Nutzung unterstuetzen", "kann interne Dokumente besser nutzbar machen"],
+      "forbidden_claims": ["absolute Sicherheit", "DSGVO-Garantie", "Rechtsberatung"],
+      "handoff_summary_template": "Interessiert an LokalKI; Kontext: {current_problem}; Ziel: {desired_outcome}"
+    },
+    {
+      "id": "voice_agent",
+      "name": "Digitale Rezeption",
+      "positioning": "Die digitale Rezeption nimmt Anrufe an, beantwortet erste Fragen und bereitet wichtige Informationen fuer das Team vor.",
+      "best_for": ["Unternehmen mit vielen Anrufen", "Teams, die nicht jeden Anruf sofort annehmen koennen", "Service- und Lead-Anfragen"],
+      "pain_points": ["verpasste Anrufe", "wiederkehrende Telefonfragen", "unvollstaendige Kontaktinformationen"],
+      "value_props": ["weniger verpasste Erstkontakte", "bessere Vorbereitung fuer das Team", "telefonische Entlastung ausserhalb direkter Erreichbarkeit"],
+      "qualifying_questions": [
+        "Geht es bei Ihnen eher um weniger verpasste Anrufe, bessere Lead-Erfassung oder schnellere Antworten auf typische Fragen?",
+        "Soll der Assistent fuer Ihr eigenes Unternehmen arbeiten oder fuer Kundenprojekte?"
+      ],
+      "objection_answers": {
+        "human_replacement": "Er soll Ihr Team unterstuetzen und Anfragen vorbereiten, nicht individuelle Beratung vollstaendig ersetzen.",
+        "privacy": "Telefonnummern und Kontaktwunsch werden nur fuer den gewuenschten Kontakt genutzt; Details klaert das Team.",
+        "price": "Das haengt vom Umfang, den Fragen und moeglichen Integrationen ab."
+      },
+      "safe_claims": ["kann Anrufe annehmen", "kann erste Fragen beantworten", "kann Leads vorbereiten"],
+      "forbidden_claims": ["vollstaendiger Ersatz fuer Mitarbeitende", "perfekte Erkennung aller Gespraeche", "automatische Terminbuchung ohne Integration"],
+      "handoff_summary_template": "Interessiert an Digitale Rezeption; Kontext: {current_problem}; Ziel: {desired_outcome}"
+    }
+  ]
+}

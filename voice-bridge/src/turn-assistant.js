@@ -19,6 +19,13 @@ import {
   validateBusinessFallbackPolicy
 } from "./business-fallback-policy.js";
 import { hasUsableCallerId, callerIdForCallback } from "./caller-id.js";
+import {
+  buildCustomerTypeResponse,
+  buildHandoffOffer,
+  buildSalesProductPitch,
+  classifyCustomerType,
+  validateSalesPlaybooks
+} from "./sales-policy.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -287,6 +294,7 @@ let cachedFaqCatalog = null;
 
 validateProductIntakePolicy();
 validateBusinessFallbackPolicy();
+validateSalesPlaybooks();
 
 function nowMs() {
   return Date.now();
@@ -929,6 +937,8 @@ function isCompactProductInterestPhrase(text) {
 }
 
 function buildCompactProductInterestResponse(config, productId) {
+  const salesPitch = buildSalesProductPitch(config, productId);
+  if (salesPitch) return normalizeAssistantResponse(salesPitch, config);
   if (productId === "voice_agent") {
     return normalizeAssistantResponse(
       "Verstanden, es geht um den KI-Telefonassistenten und die digitale Rezeption. Kurze Erklärung oder telefonischer Kontakt durch unser Team?",
@@ -991,6 +1001,9 @@ function createProductState() {
     handoffChoice: "none",
     botintegFollowupResolved: false,
     botintegFollowupRetryCount: 0,
+    customerType: null,
+    salesNeedCaptured: false,
+    salesContext: {},
     lastProductIntent: null,
     lastProductTurnIndex: null
   };
@@ -1018,6 +1031,9 @@ function normalizedProductIntakeStage(product) {
   if (stage === "product_pitch_interest_question") return "product_pitch_interest_question";
   if (stage === "product_interest_confirmed") return "product_interest_confirmed";
   if (stage === "product_interest_declined") return "product_interest_declined";
+  if (stage === "sales_customer_type") return "sales_customer_type";
+  if (stage === "sales_need_discovery") return "sales_need_discovery";
+  if (stage === "sales_handoff_offer") return "sales_handoff_offer";
   if (stage === "handoff_choice_requested") return "handoff_choice_requested";
   if (stage === "email_instruction_given") return "email_instruction";
   if (stage === "phone_requested") return "phone_requested";
@@ -1041,6 +1057,11 @@ function productMetadata(product) {
     productIntakeStage: normalizedProductIntakeStage(product),
     botintegFollowupResolved: Boolean(product?.botintegFollowupResolved),
     botintegFollowupRetryCount: Number(product?.botintegFollowupRetryCount ?? 0),
+    customerType: product?.customerType ?? null,
+    salesNeedCaptured: Boolean(product?.salesNeedCaptured),
+    salesStage: product?.productDialogueState?.startsWith("sales_") ? product.productDialogueState : null,
+    currentProblem: product?.salesContext?.current_problem ?? "",
+    desiredOutcome: product?.salesContext?.desired_outcome ?? "",
     productLastIntent: product?.lastProductIntent ?? null
   };
 }
@@ -1083,6 +1104,8 @@ function productSelectionResponse(config, catalog, productId) {
 function productDetailResponse(config, catalog, productId) {
   const policy = productPolicyById(productId);
   if (!policy) return normalizeAssistantResponse(UNKNOWN_FALLBACK_TEXT, config);
+  const salesPitch = buildSalesProductPitch(config, productId);
+  if (salesPitch) return normalizeAssistantResponse(salesPitch, config);
   if (productId === "voice_agent") {
     return normalizeAssistantResponse(
       "Die Digitale Rezeption beantwortet Anrufe, fragt das Anliegen ab und notiert wichtige Infos. Möchten Sie per E-Mail starten oder telefonisch?",
@@ -1384,9 +1407,12 @@ function setSelectedProduct(productState, catalog, productId, intent, turnIndex)
   productState.awaitingInterestConfirmation = true;
   productState.selectedProduct = productId;
   productState.selectedProductName = product?.name || productId;
-  productState.productDialogueState = "product_pitch_interest_question";
+  productState.productDialogueState = "sales_customer_type";
   productState.botintegFollowupResolved = productId !== "botinteg";
   productState.botintegFollowupRetryCount = 0;
+  productState.customerType = null;
+  productState.salesNeedCaptured = false;
+  productState.salesContext = {};
   productState.lastProductIntent = intent;
   productState.lastProductTurnIndex = turnIndex;
 }
@@ -1432,30 +1458,13 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
 
   const productId = PRODUCT_INTENT_TO_ID[intent];
   if (productId) {
-    const useCompactPitch =
-      productId === "voice_agent" &&
-      (isCompactProductInterestPhrase(callerText) || Boolean(matchProductPolicyFromText(callerText)));
     setSelectedProduct(productState, catalog, productId, intent, turnIndex);
     productState.handoffChoice = "none";
-    if (useCompactPitch) {
-      productState.productDialogueState = "product_compact_offer";
-      console.log(
-        `[voice-assistant] product_intake_product=${productId} product_intake_stage=product_compact_offer handoff_choice=none turn_index=${turnIndex}`
-      );
-      return {
-        text: buildCompactProductInterestResponse(config, productId),
-        detectedIntent: intent,
-        finalResponseTemplate: "product_intake",
-        product: productState
-      };
-    }
-    productState.productDialogueState = "product_pitch_interest_question";
-    const pitchResponse = buildPitchWithMandatoryQuestion(config, productId, turnIndex);
     console.log(
-      `[voice-assistant] product_intake_product=${productId} product_intake_stage=product_pitch_interest_question handoff_choice=none turn_index=${turnIndex}`
+      `[voice-assistant] product_intake_product=${productId} product_intake_stage=sales_customer_type handoff_choice=none turn_index=${turnIndex}`
     );
     return {
-      text: pitchResponse.text,
+      text: buildCompactProductInterestResponse(config, productId),
       detectedIntent: intent,
       finalResponseTemplate: "product_intake",
       product: productState
@@ -1476,6 +1485,40 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
   if (productState.awaitingInterestConfirmation && productState.selectedProduct) {
     const policy = productPolicyById(productState.selectedProduct);
     const interestQuestion = policy?.mandatoryInterestQuestion || "Möchten Sie so etwas für Ihr Unternehmen prüfen lassen?";
+
+    if (productState.productDialogueState === "sales_customer_type") {
+      const customerType = classifyCustomerType(callerText);
+      if (customerType === "unknown") {
+        return {
+          text: normalizeAssistantResponse(buildCustomerTypeResponse("unknown", productState.selectedProduct), config),
+          detectedIntent: "sales_customer_type_reask",
+          finalResponseTemplate: "sales_policy",
+          product: productState
+        };
+      }
+      productState.customerType = customerType;
+      productState.productDialogueState = "sales_need_discovery";
+      productState.salesContext.customer_type = customerType;
+      return {
+        text: normalizeAssistantResponse(buildCustomerTypeResponse(customerType, productState.selectedProduct), config),
+        detectedIntent: `sales_customer_type_${customerType}`,
+        finalResponseTemplate: "sales_policy",
+        product: productState
+      };
+    }
+
+    if (productState.productDialogueState === "sales_need_discovery") {
+      productState.salesNeedCaptured = true;
+      productState.salesContext.current_problem = String(callerText || "").replace(/\s+/g, " ").trim().slice(0, 180);
+      markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
+      productState.productDialogueState = "sales_handoff_offer";
+      return {
+        text: normalizeAssistantResponse(buildHandoffOffer(productState.selectedProduct), config),
+        detectedIntent: "sales_handoff_offer",
+        finalResponseTemplate: "sales_policy",
+        product: productState
+      };
+    }
 
     if (productState.productDialogueState === "product_compact_offer") {
       if (

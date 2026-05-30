@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { loadConfig } from "../src/config.js";
 import { createQaDialogueContext, processTextTurn } from "../src/turn-assistant.js";
 import { validateBusinessFallbackPolicy } from "../src/business-fallback-policy.js";
+import { validateSalesPlaybooks } from "../src/sales-policy.js";
 import { validateProductIntakePolicy } from "../src/product-intake-policy.js";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -512,6 +513,76 @@ const SCENARIOS = {
       ];
     }
   },
+  sales_voice_agent_pitch_no_early_phone: {
+    turns: ["Ich interessiere mich fuer AI Assistant."],
+    assert(results) {
+      const turn = results[0];
+      return [
+        assertCondition(
+          "sales pitch explains value",
+          includesAll(turn.assistant, ["digitale rezeption"]) &&
+            (includesAll(turn.assistant, ["anrufe"]) || includesAll(turn.assistant, ["leads"])),
+          turn.assistant
+        ),
+        assertCondition(
+          "asks customer type, not phone",
+          includesAll(turn.assistant, ["eigenes unternehmen"]) &&
+            includesAll(turn.assistant, ["kundenprojekt"]) &&
+            excludes(turn.assistant, "telefonnummer"),
+          turn.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  sales_new_prospect_qualification: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Fuer mein eigenes Unternehmen.",
+      "Wir verpassen zu viele Anrufe."
+    ],
+    assert(results) {
+      const customerType = results[1];
+      const handoff = results[2];
+      return [
+        assertCondition(
+          "new prospect gets qualification question",
+          customerType.normalized_intent === "sales_customer_type_new_prospect" &&
+            (includesAll(customerType.assistant, ["verpasste anrufe"]) ||
+              includesAll(customerType.assistant, ["lead-erfassung"]) ||
+              includesAll(customerType.assistant, ["fragen"])),
+          `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        assertCondition(
+          "need discovery leads to handoff offer",
+          handoff.normalized_intent === "sales_handoff_offer" &&
+            includesAll(handoff.assistant, ["telefonisch"]) &&
+            includesAll(handoff.assistant, ["e-mail"]),
+          `${handoff.normalized_intent}: ${handoff.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  sales_existing_customer_path: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Ich bin schon Kunde."
+    ],
+    assert(results) {
+      const customerType = results[1];
+      return [
+        assertCondition(
+          "existing customer asks company or customer number",
+          customerType.normalized_intent === "sales_customer_type_existing_customer" &&
+            (includesAll(customerType.assistant, ["firmennamen"]) ||
+              includesAll(customerType.assistant, ["kundennummer"])),
+          `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   voice_agent_ki_assistent: {
     turns: ["Ich brauche einen KI Assistenten am Telefon."],
     assert(results) {
@@ -851,6 +922,8 @@ Scenarios:
   voice_agent_ki_assistent, voice_agent_telefonassistent,
   rueckruf_input_maps_to_phone, no_rueckruf_output,
   incomplete_phone_reasks, invalid_phone_reasks_again, full_phone_creates_callback_ready,
+  sales_voice_agent_pitch_no_early_phone, sales_new_prospect_qualification,
+  sales_existing_customer_path,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional
@@ -869,6 +942,7 @@ async function main() {
 
   validateProductIntakePolicy();
   validateBusinessFallbackPolicy();
+  validateSalesPlaybooks();
 
   let scenarioName = resolveScenarioName(args.scenario);
   let turns = null;
