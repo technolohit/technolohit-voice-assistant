@@ -4,6 +4,11 @@ function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function metadataField(metadata, key) {
+  if (!metadata || typeof metadata !== "object") return "";
+  return normalizeText(metadata[key]);
+}
+
 function parseMetadata(row) {
   const metadata = row?.metadata;
   if (!metadata) return {};
@@ -153,9 +158,9 @@ export async function generatePostCallSummary(config, ctx, options = {}) {
   const summaryText = buildSummaryText(summaryFields);
   const metadata = {
     product_interest: productInterest,
-    customer_type: summaryField(assistantMeta, "customer_type") || null,
-    sales_stage: summaryField(assistantMeta, "sales_stage") || null,
-    current_problem: summaryField(assistantMeta, "current_problem") || null,
+    customer_type: metadataField(assistantMeta, "customer_type") || null,
+    sales_stage: metadataField(assistantMeta, "sales_stage") || null,
+    current_problem: metadataField(assistantMeta, "current_problem") || null,
     caller_need: callerNeed,
     contact_preference: contact.preference,
     contact_route: contact.route,

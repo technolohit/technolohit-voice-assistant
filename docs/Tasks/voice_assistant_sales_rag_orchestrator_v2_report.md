@@ -10,6 +10,20 @@ The assistant now starts product conversations as a consultative sales reception
 
 RAG production enablement is still pending sysadmin runtime evidence and controlled QA. The existing RAG fail-closed behavior remains covered by tests.
 
+## v1.2.1 Live QA Patch
+
+Fixed two issues found during the first v1.2.0 live PSTN QA:
+
+- `post-call-summary.js` used a helper from the lead module and crashed with `summaryField is not defined`.
+- The `sales_customer_type` stage was too strict and repeated the same question when STT produced natural/rough answers such as `konnen dann projekt`, `die erste`, or `Ich habe meine eigenen Unternehmen`.
+- A short explanation request after the first product pitch stays inside the sales flow instead of falling back into a loop.
+
+The assistant now accepts those variants and keeps moving through the sales flow instead of looping. The re-ask copy is shorter:
+
+```text
+Sagen Sie bitte kurz: eigenes Unternehmen, Kundenprojekt oder bereits Kunde.
+```
+
 ## Files Changed
 
 - `voice-bridge/knowledge/sales-playbooks.technolohit.json`
@@ -80,6 +94,10 @@ Passed selected CI dialogue scenarios:
 
 ```text
 sales_voice_agent_pitch_no_early_phone
+sales_customer_type_stt_kundenprojekt
+sales_customer_type_first_option
+sales_customer_type_own_company_plural
+sales_explanation_after_pitch
 sales_new_prospect_qualification
 sales_existing_customer_path
 voice_agent_ki_assistent

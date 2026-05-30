@@ -535,6 +535,76 @@ const SCENARIOS = {
       ];
     }
   },
+  sales_customer_type_stt_kundenprojekt: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "konnen dann projekt."
+    ],
+    assert(results) {
+      const customerType = results[1];
+      return [
+        assertCondition(
+          "STT-damaged Kundenprojekt is understood as customer project",
+          customerType.normalized_intent === "sales_customer_type_agency_partner",
+          `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  sales_customer_type_first_option: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Die erste."
+    ],
+    assert(results) {
+      const customerType = results[1];
+      return [
+        assertCondition(
+          "first option maps to own company",
+          customerType.normalized_intent === "sales_customer_type_new_prospect",
+          `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  sales_customer_type_own_company_plural: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Ich habe meine eigenen Unternehmen."
+    ],
+    assert(results) {
+      const customerType = results[1];
+      return [
+        assertCondition(
+          "natural own-company wording maps to new prospect",
+          customerType.normalized_intent === "sales_customer_type_new_prospect",
+          `${customerType.normalized_intent}: ${customerType.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  sales_explanation_after_pitch: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Kurze Erklaerung bitte."
+    ],
+    assert(results) {
+      const explanation = results[1];
+      return [
+        assertCondition(
+          "short explanation is answered inside sales flow",
+          explanation.normalized_intent === "sales_product_explanation" &&
+            includesAll(explanation.assistant, ["digitale rezeption"]) &&
+            includesAll(explanation.assistant, ["eigenes unternehmen"]),
+          `${explanation.normalized_intent}: ${explanation.assistant}`
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   sales_new_prospect_qualification: {
     turns: [
       "Ich interessiere mich fuer AI Assistant.",

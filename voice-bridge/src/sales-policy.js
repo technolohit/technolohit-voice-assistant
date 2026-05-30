@@ -49,15 +49,43 @@ export function buildSalesProductPitch(config, productId) {
   return `${shortPitches[productId] || playbook.positioning} Geht es um Ihr eigenes Unternehmen oder um ein Kundenprojekt?`;
 }
 
+export function buildSalesProductExplanation(productId) {
+  const explanations = {
+    smart_website:
+      "Eine Smart Website zeigt Ihr Angebot klar, beantwortet wichtige Fragen und bereitet bessere Anfragen vor.",
+    aiseoq:
+      "AISeoQ vergleicht Website, Inhalte und Sichtbarkeit mit Wettbewerbern und zeigt konkrete SEO-Schritte.",
+    botinteg:
+      "Botinteg beantwortet wiederkehrende Fragen auf Website oder Kanälen und sammelt strukturierte Anfragen.",
+    lokalki:
+      "LokalKI macht interne Dokumente kontrolliert mit KI nutzbar, ohne sensible Daten unnötig nach außen zu geben.",
+    voice_agent:
+      "Die digitale Rezeption nimmt Anrufe an, beantwortet erste Fragen und bereitet Leads für Ihr Team vor."
+  };
+  return explanations[productId] || "";
+}
+
 export function classifyCustomerType(text) {
   const normalized = normalize(text);
+  const compact = normalized.replace(/[^a-z0-9]/g, "");
+  if (/^(die\s*)?(erste|erster|eins|1)\b/i.test(normalized)) return "new_prospect";
+  if (/^(die\s*)?(zweite|zweiter|zwei|2)\b/i.test(normalized)) return "agency_partner";
+  if (/^(die\s*)?(dritte|dritter|drei|3)\b/i.test(normalized)) return "existing_customer";
   if (/\b(schon kunde|bereits kunde|bestandskunde|kunde bei ihnen|kundennummer|kunden nummer)\b/i.test(normalized)) {
     return "existing_customer";
   }
-  if (/\b(kundenprojekt|fur kunden|fuer kunden|agentur|agency|it dienstleister|webagentur|kunde von mir)\b/i.test(normalized)) {
+  if (
+    /\b(kundenprojekt|kunden projekt|fur kunden|fuer kunden|agentur|agency|it dienstleister|webagentur|kunde von mir)\b/i.test(normalized) ||
+    compact.includes("kundenprojekt") ||
+    compact.includes("kundenpro") ||
+    compact.includes("kundprojekt") ||
+    compact.includes("konnendannprojekt")
+  ) {
     return "agency_partner";
   }
-  if (/\b(eigenes unternehmen|meine firma|mein unternehmen|unser unternehmen|neues projekt|neu|startup|selbst)\b/i.test(normalized)) {
+  if (
+    /\b(eigenes unternehmen|eigenes business|eigene firma|meine firma|mein unternehmen|meine eigenen? unternehmen|mein eigenes unternehmen|unser unternehmen|unser eigenes unternehmen|fur mein unternehmen|fuer mein unternehmen|neues projekt|neu|startup|selbst)\b/i.test(normalized)
+  ) {
     return "new_prospect";
   }
   return "unknown";
@@ -78,7 +106,7 @@ export function buildCustomerTypeResponse(customerType, productId) {
   if (customerType === "new_prospect") {
     return firstQuestion;
   }
-  return "Geht es um Ihr eigenes Unternehmen, ein Kundenprojekt oder sind Sie bereits Kunde bei TechnoloHit?";
+  return "Sagen Sie bitte kurz: eigenes Unternehmen, Kundenprojekt oder bereits Kunde.";
 }
 
 export function buildNeedDiscoveryResponse(productId, customerType, callerText) {

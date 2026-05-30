@@ -22,6 +22,7 @@ import { hasUsableCallerId, callerIdForCallback } from "./caller-id.js";
 import {
   buildCustomerTypeResponse,
   buildHandoffOffer,
+  buildSalesProductExplanation,
   buildSalesProductPitch,
   classifyCustomerType,
   validateSalesPlaybooks
@@ -960,6 +961,8 @@ function isProductExplanationChoice(text) {
     /\b(erklar|erklär|erklaer|erklaeren|erklären|mehr dazu|mehr informationen|kurz mehr|kurze info|wie funktioniert|was ist|was ist das genau|details)\b/i.test(
       lower
     ) ||
+    compact.includes("erklaerung") ||
+    compact.includes("erklärung") ||
     compact.includes("kurzerklarung") ||
     compact.includes("kurzeerklarung") ||
     compact.includes("erklarmirdas") ||
@@ -1487,6 +1490,16 @@ function maybeCreateProductResponse(config, ctx, turnIndex, callerText, analysis
     const interestQuestion = policy?.mandatoryInterestQuestion || "Möchten Sie so etwas für Ihr Unternehmen prüfen lassen?";
 
     if (productState.productDialogueState === "sales_customer_type") {
+      if (isProductExplanationChoice(callerText) || intent === "product_more_detail_request") {
+        const explanation = buildSalesProductExplanation(productState.selectedProduct);
+        const suffix = buildCustomerTypeResponse("unknown", productState.selectedProduct);
+        return {
+          text: normalizeAssistantResponse(`${explanation} ${suffix}`, config),
+          detectedIntent: "sales_product_explanation",
+          finalResponseTemplate: "sales_policy",
+          product: productState
+        };
+      }
       const customerType = classifyCustomerType(callerText);
       if (customerType === "unknown") {
         return {

@@ -71,6 +71,10 @@ jobs:
           set -euo pipefail
           scenarios=(
             sales_voice_agent_pitch_no_early_phone
+            sales_customer_type_stt_kundenprojekt
+            sales_customer_type_first_option
+            sales_customer_type_own_company_plural
+            sales_explanation_after_pitch
             sales_new_prospect_qualification
             sales_existing_customer_path
             voice_agent_ki_assistent

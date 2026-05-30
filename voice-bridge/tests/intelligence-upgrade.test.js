@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { createServer } from "node:http";
 import { hasUsableCallerId, isAnonymousCallerPhone, normalizeCallerPhone } from "../src/caller-id.js";
 import { matchProductPolicyFromText, validateProductIntakePolicy } from "../src/product-intake-policy.js";
@@ -25,6 +26,11 @@ test("validateProductIntakePolicy passes", () => {
 
 test("validateSalesPlaybooks passes", () => {
   assert.doesNotThrow(() => validateSalesPlaybooks());
+});
+
+test("post-call summary has no unresolved lead-only helper references", () => {
+  const source = fs.readFileSync(new URL("../src/post-call-summary.js", import.meta.url), "utf8");
+  assert.equal(source.includes("summaryField("), false);
 });
 
 test("voice agent synonyms map to digital_assistant policy", () => {
