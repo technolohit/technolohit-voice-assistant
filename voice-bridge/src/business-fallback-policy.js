@@ -208,7 +208,8 @@ export function buildBusinessFallbackResponse(intentId, options = {}) {
   let guidance = "";
   let guidanceType = "none";
 
-  if (policy.guidanceMode === "website_contact") {
+  const contactCaptured = Boolean(options.contactCaptured);
+  if (policy.guidanceMode === "website_contact" && !contactCaptured) {
     const built = buildWebsiteContactGuidance({
       websiteUrl,
       contactEmail,
@@ -216,6 +217,9 @@ export function buildBusinessFallbackResponse(intentId, options = {}) {
     });
     guidance = built.guidance;
     guidanceType = built.guidanceType;
+  } else if (policy.id === "pricing_question" && contactCaptured) {
+    guidance = "";
+    guidanceType = "none";
   } else if (policy.id === "email_contents_question" && hasEmail) {
     guidanceType = "email";
   } else if (policy.id === "contact_form_question" || policy.id === "consultation_process_question") {

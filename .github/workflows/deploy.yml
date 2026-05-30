@@ -17,6 +17,22 @@ on:
       rag_api_tag:
         description: "Docker tag for rag-api, required only when deploy_rag_api=true"
         required: false
+      verify_v3_qa_env:
+        description: "After deploy, verify v3 semantic/repair env flags inside voice-bridge"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      enable_rag_sales_answerer:
+        description: "Documentation hint only - RAG sales answerer must stay false in ../voice-bridge/.env unless explicitly approved"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
@@ -91,6 +107,55 @@ jobs:
           docker logs --tail=80 technolohit-voice-bridge
           REMOTE
 
+      - name: Verify voice-bridge image and v3 env
+        if: ${{ inputs.verify_v3_qa_env == 'true' }}
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.VOICE_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.VOICE_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
+          EXPECTED_IMAGE: thnhit/technhvoice:${{ steps.validate_inputs.outputs.voice_bridge_tag }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "EXPECTED_IMAGE='${EXPECTED_IMAGE}' DEPLOY_PATH='${DEPLOY_PATH}' bash -se" <<'REMOTE'
+          set -euo pipefail
+          running="$(docker inspect technolohit-voice-bridge --format '{{.Config.Image}}')"
+          echo "running_image=${running}"
+          if [[ "${running}" != "${EXPECTED_IMAGE}" ]]; then
+            echo "ERROR: running image ${running} != expected ${EXPECTED_IMAGE}"
+            echo "Pin the image through the deploy input/VOICE_BRIDGE_IMAGE or the compose interpolation env, then redeploy voice-bridge."
+            echo "Runtime v3 flags belong in: ${DEPLOY_PATH}/../voice-bridge/.env"
+            exit 1
+          fi
+          missing=0
+          check_var() {
+            local name="$1"
+            local expected="$2"
+            local actual
+            actual="$(docker exec technolohit-voice-bridge sh -lc "printenv ${name}" 2>/dev/null || true)"
+            echo "${name}=${actual:-<unset>}"
+            if [[ "${actual}" != "${expected}" ]]; then
+              echo "ERROR: ${name} expected '${expected}' but got '${actual:-<unset>}'"
+              missing=1
+            fi
+          }
+          check_var VOICE_SEMANTIC_INTENT_ENABLED true
+          check_var VOICE_CONVERSATION_REPAIR_ENABLED true
+          check_var VOICE_SEMANTIC_INTENT_MODE deterministic
+          check_var VOICE_RAG_ENABLED false
+          check_var VOICE_RAG_SALES_ANSWERER_ENABLED false
+          check_var VOICE_RAG_QA_MODE false
+          check_var VOICE_LEAD_POLICY_STRICT_CALLBACK true
+          check_var VOICE_LOG_TRANSCRIPT_PREVIEW false
+          if [[ "${missing}" -ne 0 ]]; then
+            echo ""
+            echo "Set flags in: ${DEPLOY_PATH}/../voice-bridge/.env (see docs/voice-bridge-runtime-env.md)"
+            exit 1
+          fi
+          echo "v3 QA env verification passed."
+          REMOTE
+
       - name: Deploy rag-api
         if: ${{ inputs.deploy_rag_api == 'true' }}
         shell: bash
@@ -125,4 +190,7 @@ jobs:
             if [[ "${{ inputs.deploy_rag_api }}" == "true" ]]; then
               echo "- rag-api: \`${DOCKER_IMAGE}:${{ steps.validate_inputs.outputs.rag_api_tag }}\`"
             fi
+            echo "- verify v3 QA env: \`${{ inputs.verify_v3_qa_env }}\`"
+            echo "- RAG sales answerer (must stay off unless approved): \`${{ inputs.enable_rag_sales_answerer }}\`"
+            echo "- voice-bridge env source of truth: \`../voice-bridge/.env\` on server (see docs/voice-bridge-runtime-env.md)"
           } >> "$GITHUB_STEP_SUMMARY"

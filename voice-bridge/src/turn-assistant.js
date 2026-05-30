@@ -28,6 +28,12 @@ import {
   validateSalesPlaybooks
 } from "./sales-policy.js";
 import { createAsrDiagnosticRecord, logAsrDiagnostic } from "./asr-diagnostics.js";
+import { routePostCompletionTurn } from "./post-completion-router.js";
+import {
+  buildProductRelationAnswer,
+  detectProductRelationQuestion,
+  shouldClassifyAsHumanOrAiQuestion
+} from "./product-intent-routing.js";
 import {
   handleSalesCustomerTypeTurn,
   handleSalesNeedDiscoveryTurn,
@@ -807,12 +813,10 @@ function detectIntent(text) {
     const mappedId = earlyPolicyMatch.key === "digital_assistant" ? "voice_agent" : earlyPolicyMatch.key;
     return productSelectionIntent(mappedId);
   }
-  if (
-    /\b(echte person|echter mensch|real person|ein mensch|einen mensch|eine person|bist du.*mensch|sind sie.*mensch|sind sie.*person|sehen sie.*mensch|sehn se.*mensch|spreche ich.*(ki|bot|assistent)|sind sie.*(echt|ki|bot|assistent)|roboter)\b/i.test(lower) ||
-    (/\b(ki|ai|bot|digitaler assistent)\b/i.test(lower) &&
-      !/\b(ai assistant|ai voice assistant|voice assistant|voice bot|call bot|ki assistent|ki telefonassistent)\b/i.test(lower)) ||
-    /\b(sizinze|sizine|sinse|siense|sindse)\b.*\b(echte|person|mensch)\b/i.test(lower)
-  ) {
+  if (detectProductRelationQuestion(lower)) {
+    return "product_relation_question";
+  }
+  if (shouldClassifyAsHumanOrAiQuestion(lower)) {
     return "human_or_ai_question";
   }
   if (
@@ -895,6 +899,7 @@ function templateResponseForIntent(intent, config, callerText = "") {
     pricing_question:
       "Das hängt vom Umfang ab. Wenn Sie möchten, prüft unser Team Ihre Situation kurz und gibt Ihnen eine erste Einschätzung.",
     human_or_ai_question: "Ich bin der digitale Assistent von TechnoloHit.",
+    product_relation_question: buildProductRelationAnswer(),
     what:
       "TechnoloHit bietet intelligente Websites, AISeoQ für SEO-Analysen, Botinteg für Chatbots und Automatisierung, LokalKI für sensible interne Daten und digitale Assistenten für Telefon und Empfang. Welches Thema interessiert Sie am meisten?",
     smart_website_interest:
@@ -1468,7 +1473,10 @@ async function maybeCreateProductResponse(config, ctx, turnIndex, callerText, an
   }
 
   const productId = PRODUCT_INTENT_TO_ID[intent];
-  if (productId) {
+  const activeSalesDialogue = ["sales_customer_type", "sales_need_discovery", "sales_handoff_offer", "handoff_choice_requested"].includes(
+    productState.productDialogueState
+  );
+  if (productId && !activeSalesDialogue) {
     setSelectedProduct(productState, catalog, productId, intent, turnIndex);
     productState.handoffChoice = "none";
     console.log(
@@ -1576,14 +1584,18 @@ async function maybeCreateProductResponse(config, ctx, turnIndex, callerText, an
 
     if (productState.productDialogueState === "sales_need_discovery") {
       if (isV3SalesFlowEnabled(config)) {
-        markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
-        return handleSalesNeedDiscoveryTurn({
+        const needResult = handleSalesNeedDiscoveryTurn({
           config,
           productState,
           callerText,
+          intent,
           turnIndex,
           normalizeResponse: (text) => normalizeAssistantResponse(text, config)
         });
+        if (needResult.detectedIntent === "sales_handoff_offer") {
+          markHandoffChoiceRequested(ctx, productState, productState.selectedProduct, turnIndex);
+        }
+        return needResult;
       }
       productState.salesNeedCaptured = true;
       productState.salesContext.current_problem = String(callerText || "").replace(/\s+/g, " ").trim().slice(0, 180);
@@ -2150,10 +2162,13 @@ function maybeCreateBusinessFallbackResponse(config, ctx, turnIndex, callerText,
     return null;
   }
 
+  const contactCaptured =
+    intake.contactPermissionGranted === true || Boolean(intake.completed);
   const built = buildBusinessFallbackResponse(match.intent, {
     contactEmail: configuredContactEmail(config),
     websiteUrl: configuredWebsiteUrl(config),
-    fallbackQuestionCount: Number(intake.businessFallbackQuestionCount || 0)
+    fallbackQuestionCount: Number(intake.businessFallbackQuestionCount || 0),
+    contactCaptured
   });
   let prefix = built.body;
   if (built.guidance) {
@@ -2375,7 +2390,7 @@ function normalizeSpokenPhone(text) {
     ["vier", "4"],
     ["funf", "5"],
     ["fuenf", "5"],
-    ["fÃ¼nf", "5"],
+    ["f\u00fcnf", "5"],
     ["sechs", "6"],
     ["sieben", "7"],
     ["acht", "8"],
@@ -2600,7 +2615,33 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
   const productState = ensureProductState(state);
   const intent = analysis?.detectedIntent ?? "unknown";
 
+  if (
+    intake.completed &&
+    (intake.closingPending ||
+      intake.waitingFor === "post_completion_question" ||
+      intake.waitingFor === "post_completion_actual_question" ||
+      intake.waitingFor === "closing_answer")
+  ) {
+    const postRoutedEarly = await routePostCompletionTurn({
+      config,
+      callerText,
+      intake,
+      productState,
+      normalizeResponse: (text) => normalizeAssistantResponse(text, config)
+    });
+    if (postRoutedEarly?.text) return postRoutedEarly;
+  }
+
   if (intake.waitingFor === "post_completion_actual_question" && intake.postCompletionFollowupUsed) {
+    const postRouted = await routePostCompletionTurn({
+      config,
+      callerText,
+      intake,
+      productState,
+      normalizeResponse: (text) => normalizeAssistantResponse(text, config)
+    });
+    if (postRouted?.text) return postRouted;
+
     if (isClearCloseSignal(callerText) || isGoodbye(callerText)) {
       intake.closingPending = false;
       intake.finalGoodbyeSent = true;
@@ -2657,6 +2698,15 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
     console.log(
       `[voice-assistant] soft intake closing turn_index=${turnIndex} post_completion_followup=${followupLabel} closing_policy=ask_final_question soft_intake_state=${intakeStage(intake)}`
     );
+
+    const postRouted = await routePostCompletionTurn({
+      config,
+      callerText,
+      intake,
+      productState,
+      normalizeResponse: (text) => normalizeAssistantResponse(text, config)
+    });
+    if (postRouted?.text) return postRouted;
 
     if (isClearCloseSignal(callerText) || isGoodbye(callerText)) {
       intake.closingPending = false;

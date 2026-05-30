@@ -162,13 +162,15 @@ git push origin v1.0.0
 
 5. Wait for Docker Publish to push images to `thnhit/technhvoice`.
 6. Run Deploy Voice Stack manually with the pinned image tag.
-7. Verify production:
+7. Verify production (see also [voice-bridge-runtime-env.md](./voice-bridge-runtime-env.md)):
 
 ```bash
 docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}'
-docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_ASSISTANT|VOICE_RAG|VOICE_GREETING|VOICE_RECORDING|VOICE_TRANSCRIPTION|VOICE_LOG_TRANSCRIPT_PREVIEW|BUILD_VERSION|IMAGE_TAG)=" || true'
+docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_SEMANTIC_INTENT_ENABLED|VOICE_CONVERSATION_REPAIR_ENABLED|VOICE_SEMANTIC_INTENT_MODE|VOICE_RAG_ENABLED|VOICE_RAG_SALES_ANSWERER_ENABLED|VOICE_LEAD_POLICY_STRICT_CALLBACK|VOICE_LOG_TRANSCRIPT_PREVIEW|BUILD_VERSION|IMAGE_TAG)=" || true'
 docker logs --tail=160 technolohit-voice-bridge
 ```
+
+Voice-bridge runtime flags are **not** read from `asterisk/.env` alone. The authoritative file on the server is `../voice-bridge/.env` relative to the compose directory (typically `/opt/technolohit-voice/voice-bridge/.env`).
 
 Caller ID DB evidence:
 

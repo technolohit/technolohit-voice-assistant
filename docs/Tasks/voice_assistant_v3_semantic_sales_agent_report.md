@@ -17,7 +17,25 @@ The v1.2.1 live failure (Eigenunternehmen / Eigene Unternehmen customer-type loo
 - Fixed phone handoff after product explanation (`Telefonisch bitte` no longer loops in customer-type repair).
 - Added scenario `v3_explanation_then_phone_handoff`.
 - Documented always-on lead policy; added `VOICE_LEAD_POLICY_STRICT_CALLBACK` (default `true`, legacy path when `false`).
-- Re-ran full CI dialogue list (21 scenarios) — all pass via `node scripts/qa-dialogue-text.js --scenario …`.
+
+## v3 stabilization pass (2026-05-30, live-call logs)
+
+Based on v1.3.0 live-call evidence (`docs/Tasks/logs.txt`):
+
+| Issue | Fix |
+|-------|-----|
+| Shallow sales — handoff after one need answer | `sales-dialogue-manager.js`: reflection + channel follow-up (`sales_need_discovery_followup`) before handoff; `wantsExplicitContactHandoff()` ignores channel answers like “Website und Telefon” |
+| Product relation misclassified as `human_or_ai_question` | `product-intent-routing.js`: product/relation signals outrank identity; `turn-assistant.js` routes before human/AI template |
+| Post-completion “Welche Frage?” loop | `post-completion-router.js` + early routing in `maybeCreateSoftIntakeResponse` when intake completed |
+| Pricing after contact → generic website line | `buildPostCapturePricingAnswer()` + `business-fallback-policy.js` skips website redirect when `contactCaptured` |
+| Channel answer reset to Smart Website pitch | `turn-assistant.js`: skip `setSelectedProduct` when `productDialogueState` is active sales stage |
+| Wrong env file on server | `docs/voice-bridge-runtime-env.md`; deploy workflow optional `verify_v3_qa_env` |
+
+New modules: `product-intent-routing.js`, `post-completion-router.js`.
+
+New QA scenarios: `v3_sales_depth_before_handoff`, `v3_post_completion_product_question`, `v3_pricing_after_contact_capture`.
+
+Re-ran full CI dialogue list (**24 scenarios**) — all pass.
 
 ## Architecture delivered
 
@@ -41,6 +59,8 @@ ASR diagnostics (optional)
 | `voice-bridge/src/rag-sales-answerer.js` | RAG + playbook fail-closed product answers |
 | `voice-bridge/src/lead-policy.js` | Stable customer_type metadata; strict callback-ready rules |
 | `voice-bridge/src/asr-diagnostics.js` | QA diagnostic records + offline fixture eval |
+| `voice-bridge/src/product-intent-routing.js` | Product/relation vs human/AI priority; post-capture pricing wording |
+| `voice-bridge/src/post-completion-router.js` | Post-lead QA: prompt-only vs direct product/pricing answers |
 
 ## Environment flags (default: off)
 
@@ -78,7 +98,7 @@ Summary metadata includes `lead_policy_strict_callback: true|false` for auditabi
 | 4 RAG sales answerer | Done | Behind `VOICE_RAG_SALES_ANSWERER_ENABLED` + RAG flags |
 | 5 ASR diagnostics | Done | Logging hook + `npm run eval:asr-fixture` |
 | 6 Lead policy | Done | `post-call-summary` / `post-call-lead` use stricter guards |
-| 7 CI QA matrix | Done | 21 dialogue scenarios green locally + eval in CI |
+| 7 CI QA matrix | Done | 24 dialogue scenarios green locally + eval in CI |
 | 8 Controlled rollout | Pending | Requires sysadmin verification on target host |
 
 ## Live failure fixture
@@ -97,10 +117,13 @@ node scripts/qa-dialogue-text.js --scenario v3_live_customer_type_loop
 
 | Check | Result |
 |-------|--------|
-| `npm test` | Pass (37 tests) |
+| `npm test` | Pass (46 tests) |
 | `node --check` on changed JS | Pass |
 | `npm run eval:asr-fixture` | Pass (7 semantic turns) |
-| CI dialogue matrix (21 scenarios) | Pass (`scripts/run-ci-dialogue-scenarios.ps1`) |
+| CI dialogue matrix (24 scenarios) | Pass (`scripts/run-ci-dialogue-scenarios.ps1`) |
+| `v3_sales_depth_before_handoff` | Pass |
+| `v3_post_completion_product_question` | Pass |
+| `v3_pricing_after_contact_capture` | Pass |
 | `v3_explanation_then_phone_handoff` | Pass |
 | Eigenunternehmen → new_prospect | Pass (semantic + dialogue) |
 | No repeated customer-type menu | Pass |
@@ -119,6 +142,14 @@ node scripts/qa-dialogue-text.js --scenario v3_live_customer_type_loop
    - `VOICE_RAG_QA_MODE=true`
    - `VOICE_RAG_SALES_ANSWERER_ENABLED=true`
 
+## Runtime env source of truth
+
+See [docs/voice-bridge-runtime-env.md](../voice-bridge-runtime-env.md).
+
+- Authoritative file for `technolohit-voice-bridge`: `<deploy>/voice-bridge/.env` (Compose `env_file`), **not** `asterisk/.env` alone.
+- RAG remains **disabled** for rollout (`VOICE_RAG_ENABLED=false`, `VOICE_RAG_SALES_ANSWERER_ENABLED=false`).
+- Deploy workflow: set `verify_v3_qa_env=true` to fail loudly if the running container image or v3 flags do not match expectations.
+
 ## Sysadmin verification still required
 
 Before production-like QA with RAG/semantic:
@@ -128,7 +159,7 @@ docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}
 docker logs --tail=120 technolohit-voice-bridge
 docker exec technolohit-voice-bridge sh -lc 'getent hosts technolohit-rag-api || true'
 docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://technolohit-rag-api:8080/healthz || true'
-docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_SEMANTIC|VOICE_RAG|VOICE_CONVERSATION|VOICE_ASSISTANT|IMAGE_TAG|BUILD_VERSION)=" || true'
+docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_SEMANTIC|VOICE_RAG|VOICE_CONVERSATION|VOICE_LEAD_POLICY|IMAGE_TAG|BUILD_VERSION)=" || true'
 ```
 
 Alternate ASR provider integration was **not** implemented (per blueprint: diagnostics/evaluation hooks only).
@@ -145,8 +176,9 @@ Alternate ASR provider integration was **not** implemented (per blueprint: diagn
 - LLM semantic mode (`VOICE_SEMANTIC_INTENT_MODEL`) is reserved; only deterministic classification ships in this change.
 - With v3 **disabled**, legacy `classifyCustomerType()` in `sales-policy.js` still runs (including the v1.2.1 loop risk).
 - Turn 3 of `v3_live_customer_type_loop` advances to handoff because turn 2 already captured need-discovery stage (expected v3 behavior, not a menu loop).
+- RAG sales answerer is implemented but off by default; post-completion product answers use deterministic playbooks until RAG is explicitly enabled in QA.
 
 ## Files touched (high level)
 
-- New: 6 `src` modules, 6 test files, 1 fixture, `scripts/eval-asr-fixture.js`
-- Updated: `turn-assistant.js`, `config.js`, `post-call-summary.js`, `post-call-lead.js`, `qa-dialogue-text.js`, CI, `.env.example` files
+- New: 8 `src` modules, 8+ test files, 1 fixture, `scripts/eval-asr-fixture.js`, `docs/voice-bridge-runtime-env.md`
+- Updated: `turn-assistant.js`, `sales-dialogue-manager.js`, `business-fallback-policy.js`, `config.js`, post-call modules, `qa-dialogue-text.js`, CI/deploy workflows, `.env.example` files

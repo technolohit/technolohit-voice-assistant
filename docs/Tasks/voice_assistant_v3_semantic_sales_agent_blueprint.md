@@ -589,6 +589,9 @@ AI Assistant bitte -> explanation request -> product answer -> next question
 AI Assistant bitte -> repeated unclear -> no loop
 AI Assistant bitte -> phone before context -> defer or handle safely
 AI Assistant bitte -> explanation -> Telefonisch bitte -> phone handoff (v3_explanation_then_phone_handoff)
+AI Assistant bitte -> concrete use case -> sales reflection + follow-up before handoff (v3_sales_depth_before_handoff)
+After contact capture -> product relation question (Website vs KI-Assistent) answered, not human_or_ai (v3_post_completion_product_question)
+After contact capture -> pricing concise, no website redirect (v3_pricing_after_contact_capture)
 Existing customer -> asks company/customer number
 RAG timeout -> deterministic fallback
 ```
@@ -597,6 +600,9 @@ RAG timeout -> deterministic fallback
 - [x] Successful: CI covers explanation-then-phone handoff.
 - [x] Successful: CI covers no-loop repair.
 - [x] Successful: CI covers RAG fail-closed.
+- [x] Successful: CI covers sales depth before handoff.
+- [x] Successful: CI covers post-completion product relation QA.
+- [x] Successful: CI covers post-capture pricing wording.
 
 ### Phase 8: Controlled Rollout
 
@@ -612,11 +618,15 @@ Rollout order:
 
 Required verification:
 
+See [docs/voice-bridge-runtime-env.md](../voice-bridge-runtime-env.md) — authoritative env is `voice-bridge/.env` on the host (Compose `env_file` for `technolohit-voice-bridge`), not `asterisk/.env` alone.
+
 ```bash
 docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}'
 docker logs --tail=120 technolohit-voice-bridge
-docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_SEMANTIC|VOICE_RAG|VOICE_ASSISTANT|IMAGE_TAG|BUILD_VERSION)=" || true'
+docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^(VOICE_SEMANTIC|VOICE_RAG|VOICE_CONVERSATION|VOICE_LEAD_POLICY|IMAGE_TAG|BUILD_VERSION)=" || true'
 ```
+
+GitHub Actions **Deploy Voice Stack** optional input `verify_v3_qa_env=true` checks image tag and non-secret v3 flags in the running container.
 
 - [ ] Successful: Deploy with v3 disabled works.
 - [ ] Successful: QA mode works.
@@ -651,6 +661,10 @@ Local acceptance:
 - `Eigene Unternehmen` maps to own-company/new prospect.
 - STT-damaged customer project variants map to agency/customer project when likely.
 - `Kurze Erklärung bitte` receives a product explanation and next question.
+- Concrete use-case answers get one sales follow-up before phone/email handoff.
+- Product/relation questions (Website, KI-Assistent, Zusammenhang) are not classified as `human_or_ai_question`.
+- After contact capture, bare “Ich habe noch eine Frage” prompts for the question; actual questions are answered directly.
+- Post-capture pricing is concise and does not redirect to the website when contact is already captured.
 - The assistant never repeats the same clarification twice.
 - Product questions are answered before contact capture.
 - Phone capture still requires deterministic validation.

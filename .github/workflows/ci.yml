@@ -86,6 +86,9 @@ jobs:
             v3_repeated_unclear_no_loop
             v3_rag_fail_closed_explanation
             v3_explanation_then_phone_handoff
+            v3_sales_depth_before_handoff
+            v3_post_completion_product_question
+            v3_pricing_after_contact_capture
             voice_agent_ki_assistent
             voice_agent_telefonassistent
             rueckruf_input_maps_to_phone

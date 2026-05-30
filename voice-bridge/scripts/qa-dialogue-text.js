@@ -793,6 +793,118 @@ const SCENARIOS = {
       ];
     }
   },
+  v3_sales_depth_before_handoff: {
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Eigene Unternehmen.",
+      "Ich moechte, dass meine Kunden erstmal mit diesem Assistenten reden, Leads sammeln und so weiter."
+    ],
+    assert(results) {
+      const depth = results[2];
+      return [
+        assertCondition(
+          "does not jump to phone/email handoff immediately",
+          depth.normalized_intent !== "sales_handoff_offer" &&
+            excludes(depth.assistant, "soll unser team das telefonisch") &&
+            excludes(depth.assistant, "per e-mail starten"),
+          `${depth.normalized_intent}: ${depth.assistant}`
+        ),
+        assertCondition(
+          "reflects use case and asks one follow-up",
+          (includesAll(depth.assistant, ["leads"]) ||
+            includesAll(depth.assistant, ["gesprach"]) ||
+            includesAll(depth.assistant, ["gespraeche"]) ||
+            includesAll(depth.assistant, ["kunden"])) &&
+            (includesAll(depth.assistant, ["website"]) ||
+              includesAll(depth.assistant, ["telefon"]) ||
+              includesAll(depth.assistant, ["verbessern"])),
+          depth.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_post_completion_product_question: {
+    context: {
+      callerPhoneNormalized: "+491701234567",
+      callerPhoneRaw: "+49 170 1234567"
+    },
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Eigene Unternehmen.",
+      "Ich moechte, dass meine Kunden mit dem Assistenten reden und Leads sammeln.",
+      "Auf der Website und auch am Telefon.",
+      "Telefonisch.",
+      "Ja.",
+      "Kannst du ein bisschen ueber intelligente Website erklaeren? Hat sie zu tun mit KI-Assistent?"
+    ],
+    assert(results) {
+      const productQ = results[6];
+      const depth = results[2];
+      return [
+        assertCondition(
+          "sales depth before contact",
+          depth.normalized_intent === "sales_need_discovery_followup",
+          `${depth.normalized_intent}: ${depth.assistant}`
+        ),
+        assertCondition(
+          "product relation question is answered",
+          productQ &&
+            productQ.normalized_intent !== "human_or_ai_question" &&
+            (productQ.normalized_intent === "post_completion_product_answer" ||
+              productQ.normalized_intent === "product_relation_question" ||
+              includesAll(productQ.assistant, ["website"])) &&
+            (includesAll(productQ.assistant, ["ki-assistent"]) ||
+              includesAll(productQ.assistant, ["assistent"])),
+          productQ
+            ? `${productQ.normalized_intent}: ${productQ.assistant}`
+            : "missing product question turn"
+        ),
+        assertCondition(
+          "no repeated Welche Frage loop on product answer turn",
+          productQ ? excludes(productQ.assistant, "welche frage haben sie") : false,
+          productQ?.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  v3_pricing_after_contact_capture: {
+    context: {
+      callerPhoneNormalized: "+491701234567",
+      callerPhoneRaw: "+49 170 1234567"
+    },
+    turns: [
+      "Ich interessiere mich fuer AI Assistant.",
+      "Eigene Unternehmen.",
+      "Leads sammeln mit dem Assistenten fuer meine Kunden.",
+      "Auf der Website und auch am Telefon.",
+      "Telefonisch.",
+      "Ja.",
+      "Wie steht kostet das?"
+    ],
+    assert(results) {
+      const pricing = findTurn(results, "kostet");
+      return [
+        assertCondition(
+          "pricing answered after contact capture",
+          pricing &&
+            (pricing.normalized_intent === "post_completion_pricing_answer" ||
+              pricing.normalized_intent === "pricing_question") &&
+            (includesAll(pricing.assistant, ["umfang"]) || includesAll(pricing.assistant, ["kosten"])),
+          pricing ? `${pricing.normalized_intent}: ${pricing.assistant}` : "missing pricing turn"
+        ),
+        assertCondition(
+          "no generic website redirect after contact captured",
+          pricing
+            ? excludes(pricing.assistant, "mehr informationen finden sie auf unserer website")
+            : false,
+          pricing?.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   v3_explanation_then_phone_handoff: {
     turns: [
       "Ich interessiere mich fuer AI Assistant.",
@@ -1176,6 +1288,8 @@ Scenarios:
   sales_existing_customer_path,
   v3_live_customer_type_loop, v3_fuer_meine_firma, v3_repeated_unclear_no_loop,
   v3_rag_fail_closed_explanation, v3_explanation_then_phone_handoff,
+  v3_sales_depth_before_handoff, v3_post_completion_product_question,
+  v3_pricing_after_contact_capture,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional

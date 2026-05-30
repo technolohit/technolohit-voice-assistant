@@ -230,15 +230,100 @@ export async function handleSalesCustomerTypeTurn({
   };
 }
 
-export function handleSalesNeedDiscoveryTurn({ config, productState, callerText, turnIndex, normalizeResponse }) {
-  productState.salesNeedCaptured = true;
+function normalizeNeedText(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isConcreteSalesUseCase(text) {
+  const lower = normalizeNeedText(text);
+  if (lower.length < 20) return false;
+  return /\b(kunden|leads|anruf|assistent|sammeln|gesprach|gespraeche|website|telefon|erste fragen)\b/i.test(
+    lower
+  );
+}
+
+export function buildUseCaseReflection(callerText, productId) {
+  const lower = normalizeNeedText(callerText);
+  if (/\b(kunden|leads)\b/i.test(lower) && /\b(assistent|reden|anruf|sammeln)\b/i.test(lower)) {
+    return "Verstanden, also soll der Assistent erste Gespräche führen und Leads vorbereiten.";
+  }
+  if (/\b(anruf|telefon|verpasst)\b/i.test(lower)) {
+    return "Verstanden, es geht um bessere Erreichbarkeit und strukturierte Anrufannahme.";
+  }
+  return "Verstanden, das klingt nach einem klaren Einsatzziel für Ihr Unternehmen.";
+}
+
+export function buildChannelFollowUpQuestion(productId) {
+  if (productId === "voice_agent") {
+    return "Soll er eher auf Ihrer Website starten oder auch Telefonanfragen übernehmen?";
+  }
+  return "Was soll die Lösung bei Ihnen zuerst verbessern?";
+}
+
+export function wantsExplicitContactHandoff(callerText, intent) {
+  if (intent === "contact_preference_phone" || intent === "contact_preference_email" || intent === "callback_request") {
+    return true;
+  }
+  const lower = normalizeNeedText(callerText);
+  if (/\b(website und telefon|webseite und telefon|sowohl website|beides|auf der website|auch telefon)\b/i.test(lower)) {
+    return false;
+  }
+  return /\b(telefonisch bitte|telefonisch\.|per telefon|nur telefon|lieber telefon|per e-mail|e-mail bitte|kontaktieren lassen|ruckruf|rueckruf)\b/i.test(
+    lower
+  );
+}
+
+export function handleSalesNeedDiscoveryTurn({
+  config,
+  productState,
+  callerText,
+  intent,
+  turnIndex,
+  normalizeResponse
+}) {
+  const productId = productState.selectedProduct;
+  const useCaseText = String(callerText || "").replace(/\s+/g, " ").trim().slice(0, 180);
   mergeSalesContext(productState, {
-    current_problem: String(callerText || "").replace(/\s+/g, " ").trim().slice(0, 180),
-    sales_stage: SALES_STAGES.HANDOFF_OFFER
+    current_problem: useCaseText,
+    sales_stage: SALES_STAGES.NEED_DISCOVERY
   });
+
+  if (wantsExplicitContactHandoff(callerText, intent)) {
+    productState.salesNeedCaptured = true;
+    productState.productDialogueState = "sales_handoff_offer";
+    mergeSalesContext(productState, { sales_stage: SALES_STAGES.HANDOFF_OFFER });
+    return {
+      text: normalizeResponse(buildHandoffOffer(productId)),
+      detectedIntent: "sales_handoff_offer",
+      finalResponseTemplate: "sales_policy",
+      product: productState
+    };
+  }
+
+  const followUps = Number(productState.salesContext?.need_discovery_followups || 0);
+  if (followUps < 1 && isConcreteSalesUseCase(callerText)) {
+    productState.salesContext.need_discovery_followups = followUps + 1;
+    productState.productDialogueState = "sales_need_discovery";
+    const reflection = buildUseCaseReflection(callerText, productId);
+    const followUp = buildChannelFollowUpQuestion(productId);
+    return {
+      text: normalizeResponse(`${reflection} ${followUp}`),
+      detectedIntent: "sales_need_discovery_followup",
+      finalResponseTemplate: "sales_policy",
+      product: productState
+    };
+  }
+
+  productState.salesNeedCaptured = true;
   productState.productDialogueState = "sales_handoff_offer";
+  mergeSalesContext(productState, { sales_stage: SALES_STAGES.HANDOFF_OFFER });
   return {
-    text: normalizeResponse(buildHandoffOffer(productState.selectedProduct)),
+    text: normalizeResponse(buildHandoffOffer(productId)),
     detectedIntent: "sales_handoff_offer",
     finalResponseTemplate: "sales_policy",
     product: productState

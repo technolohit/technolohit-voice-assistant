@@ -4,6 +4,7 @@ import {
   isExplicitPhoneHandoffRequest,
   isV3SalesFlowEnabled,
   handleSalesCustomerTypeTurn,
+  handleSalesNeedDiscoveryTurn,
   shouldDeferToPhoneIntake,
   SALES_STAGES
 } from "../src/sales-dialogue-manager.js";
@@ -47,6 +48,26 @@ test("shouldDeferToPhoneIntake after product explanation", () => {
   productState.salesContext = { sales_stage: SALES_STAGES.VALUE_ANSWER };
   assert.equal(isExplicitPhoneHandoffRequest("Telefonisch bitte.", "contact_preference_phone"), true);
   assert.equal(shouldDeferToPhoneIntake(productState, "Telefonisch bitte.", "contact_preference_phone"), true);
+});
+
+test("handleSalesNeedDiscoveryTurn reflects use case before handoff", () => {
+  const productState = createProductState();
+  productState.selectedProduct = "voice_agent";
+  productState.productDialogueState = "sales_need_discovery";
+
+  const result = handleSalesNeedDiscoveryTurn({
+    config: { semanticIntent: { enabled: true }, conversationRepair: { enabled: true } },
+    productState,
+    callerText:
+      "Ich moechte, dass meine Kunden erstmal mit diesem Assistenten reden, Leads sammeln und so weiter.",
+    intent: "unknown",
+    turnIndex: 3,
+    normalizeResponse: (t) => t
+  });
+
+  assert.equal(result.detectedIntent, "sales_need_discovery_followup");
+  assert.match(result.text, /Leads|Gespräche|Gespraeche/i);
+  assert.equal(/telefonisch mit Ihnen prüfen/i.test(result.text), false);
 });
 
 test("handleSalesCustomerTypeTurn answers Kurze Erklärung with product explanation", async () => {
