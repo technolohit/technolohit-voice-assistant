@@ -404,6 +404,68 @@ const SCENARIOS = {
       return noBannedCallbackOutputChecks(results);
     }
   },
+  incomplete_phone_reasks: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: [
+      "Ich interessiere mich fÃ¼r AI Assistant.",
+      "Telefonisch bitte.",
+      "Null eins sieben sechs."
+    ],
+    assert(results) {
+      const phoneCapture = results[2];
+      return [
+        assertCondition(
+          "incomplete spoken phone asks once more",
+          phoneCapture.normalized_intent === "phone_detail_incomplete_reask" &&
+            includesAll(phoneCapture.assistant, ["telefonnummer"]) &&
+            (includesAll(phoneCapture.assistant, ["vollstaendig"]) ||
+              includesAll(phoneCapture.assistant, ["vollstandig"]) ||
+              includesAll(phoneCapture.assistant, ["vollstÃ¤ndig"])),
+          `${phoneCapture.normalized_intent}: ${phoneCapture.assistant}`
+        ),
+        assertCondition(
+          "incomplete spoken phone is not callback-ready",
+          phoneCapture.metadata?.contactDetailValid !== true &&
+            phoneCapture.metadata?.softIntakeCompleted !== true &&
+            phoneCapture.metadata?.softIntakeLeadCreated !== true,
+          JSON.stringify(phoneCapture.metadata)
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
+  full_phone_creates_callback_ready: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: [
+      "Ich interessiere mich fÃ¼r AI Assistant.",
+      "Telefonisch bitte.",
+      "0176 444 444."
+    ],
+    assert(results) {
+      const phoneCapture = results[2];
+      return [
+        assertCondition(
+          "full phone creates callback-ready intake",
+          phoneCapture.normalized_intent === "contact_permission_granted" &&
+            phoneCapture.metadata?.contactDetailValid === true &&
+            phoneCapture.metadata?.softIntakeCompleted === true,
+          `${phoneCapture.normalized_intent}: ${JSON.stringify(phoneCapture.metadata)}`
+        ),
+        assertCondition(
+          "full phone path does not ask duplicate permission",
+          excludes(phoneCapture.assistant, "darf unser team sie dazu kontaktieren"),
+          phoneCapture.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   voice_agent_ki_assistent: {
     turns: ["Ich brauche einen KI Assistenten am Telefon."],
     assert(results) {
@@ -742,6 +804,7 @@ Scenarios:
   voice_agent_ai_assistant, voice_agent_short_explanation,
   voice_agent_ki_assistent, voice_agent_telefonassistent,
   rueckruf_input_maps_to_phone, no_rueckruf_output,
+  incomplete_phone_reasks, full_phone_creates_callback_ready,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional

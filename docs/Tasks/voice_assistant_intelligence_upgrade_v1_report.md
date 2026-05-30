@@ -72,6 +72,24 @@ Caller ID production finding:
 - The assistant must therefore keep asking for the phone number when caller ID is absent.
 - Sysadmin must wire caller ID into the AudioSocket UUID payload if caller-ID-based callback permission is required.
 
+## Live-call hotfix v1.1.2 (2026-05-30)
+
+Live testing of `voice-bridge-v1.1.1` confirmed the explanation loop and Rueckruf wording fixes, but found an incomplete spoken-phone bug:
+
+- Caller said only `Null eins sieben sechs`.
+- The assistant treated the turn as callback-ready even though no usable normalized phone existed.
+- Post-call summary could mark `phone_present=true` from a mere contact-detail attempt.
+
+Implemented fix:
+
+- Voice-captured callback phone numbers must normalize to at least seven digits before lead-ready intake.
+- Incomplete spoken phone now asks once more: `Ich habe die Telefonnummer noch nicht vollständig verstanden. Können Sie sie bitte noch einmal vollständig nennen?`
+- No soft-intake lead is created for incomplete voice phone capture.
+- Assistant metadata now includes a non-sensitive `contact_detail_valid` flag for post-call summary logic.
+- Post-call summary sets `phone_present=true` only from caller ID or a valid captured phone, not from an attempted capture.
+- Post-call lead extraction refuses phone leads when `permission=granted` but `phone_present` is false.
+- Added dialogue QA scenarios: `incomplete_phone_reasks` and `full_phone_creates_callback_ready`.
+
 ## Runtime Behavior Verified (local code inspection)
 
 | Setting | Default in repo | Greeting mode |

@@ -80,6 +80,8 @@ jobs:
             voice_agent_telefonassistent
             rueckruf_input_maps_to_phone
             no_rueckruf_output
+            incomplete_phone_reasks
+            full_phone_creates_callback_ready
             unclear_input
             unknown_intent
             gate6_business_fallback

@@ -216,10 +216,11 @@ When caller chooses phone callback and caller ID is missing, anonymous, or unusa
 
 ```text
 Assistant:
-Gerne. Unter welcher Telefonnummer darf unser Team Sie zurueckrufen?
+Gerne. Unter welcher Telefonnummer darf unser Team Sie telefonisch kontaktieren?
 ```
 
 This question already includes permission. After a valid phone number is captured, do not ask another generic permission question.
+If the spoken phone is incomplete or cannot be normalized, ask once more for the full number and do not create a callback-ready lead until a usable phone exists.
 
 Expected data:
 
@@ -245,6 +246,7 @@ Do not force phone capture when email is preferred.
 - [x] Successful: Caller ID path asks permission under current number.
 - [x] Successful: Missing Caller ID path asks for callback number once.
 - [x] Successful: Duplicate permission prompt removed.
+- [x] Successful: Incomplete spoken phone does not create callback-ready lead.
 - [x] Successful: Email path remains unchanged and safe.
 - [x] Successful: Post-call lead summary correctly records phone source.
 
@@ -818,6 +820,7 @@ Functional:
 
 - Caller ID callback path does not ask the caller to read their phone number.
 - Missing caller ID path asks for callback phone only once.
+- Incomplete spoken callback phone asks once more and does not mark the lead callback-ready.
 - Duplicate permission question is gone.
 - `AI Assistant`, `KI Assistent`, and `Telefonassistent` map to the voice assistant product.
 - Unknown/unclear input triggers short clarification, not full intro repeat.

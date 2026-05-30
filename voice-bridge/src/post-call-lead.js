@@ -25,9 +25,11 @@ function shouldCreateLead(summaryMeta) {
   const confidence = summaryField(summaryMeta, "confidence");
   const productInterest = summaryField(summaryMeta, "product_interest");
   const explicitRoute = contactPreference === "phone" || contactPreference === "email";
+  const phonePresent = summaryMeta?.phone_present === true || String(summaryMeta?.phone_present ?? "") === "true";
 
   if (!explicitRoute) return false;
   if (contactPreference === "phone" && permission !== "granted") return false;
+  if (contactPreference === "phone" && !phonePresent) return false;
   if (contactPreference === "email" && !emailDirected && nextAction !== "await_customer_email") return false;
 
   const qualityOk = confidence === "high" || confidence === "medium" || productInterest !== "none";

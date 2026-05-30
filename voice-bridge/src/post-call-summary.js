@@ -83,7 +83,7 @@ function deriveContact(assistantMeta, sessionRow) {
         : "denied"
       : "unknown";
   const callerPhone = normalizeText(sessionRow?.caller_phone_normalized || sessionRow?.caller_phone_raw);
-  const phonePresent = Boolean(callerPhone || assistantMeta.contact_detail_attempted);
+  const phonePresent = Boolean(callerPhone || assistantMeta.contact_detail_valid);
   const emailDirected =
     Boolean(assistantMeta.email_direct_offered) || route === "email_direct" || preference === "email";
 
@@ -97,7 +97,8 @@ function deriveContact(assistantMeta, sessionRow) {
 }
 
 function deriveNextAction(productInterest, contact) {
-  if (contact.preference === "phone" && contact.permission === "granted") return "team_callback";
+  if (contact.preference === "phone" && contact.permission === "granted" && contact.phonePresent) return "team_callback";
+  if (contact.preference === "phone" && contact.permission === "granted") return "manual_review";
   if (contact.emailDirected) return "await_customer_email";
   if (productInterest !== "none") return "manual_followup";
   return "manual_review";

@@ -99,6 +99,8 @@ const EMAIL_DETAIL_REASK_TEXT =
   "Entschuldigung, ich habe die E-Mail-Adresse nicht sicher verstanden. Die passende E-Mail-Adresse finden Sie in unserer Nachricht oder auf unserer Website.";
 const PHONE_DETAIL_REASK_TEXT =
   "Entschuldigung, ich habe die Telefonnummer nicht sicher verstanden. Die E-Mail-Adresse finden Sie in unserer Nachricht oder auf unserer Website.";
+const PHONE_DETAIL_INCOMPLETE_REASK_TEXT =
+  "Ich habe die Telefonnummer noch nicht vollständig verstanden. Können Sie sie bitte noch einmal vollständig nennen?";
 const MAX_TURNS_INTAKE_EMAIL_MISSING_TEXT =
   "Sie können uns Ihre Kontaktdaten auch direkt per E-Mail senden. Die E-Mail-Adresse finden Sie in unserer Nachricht oder auf unserer Website. Danke für Ihren Anruf. Auf Wiederhören.";
 const MAX_TURNS_INTAKE_PHONE_MISSING_TEXT =
@@ -1733,6 +1735,10 @@ function intakeStage(intake) {
 }
 
 function intakeMetadata(intake) {
+  const normalizedPhone =
+    intake?.contactDetailType === "phone" && intake?.contactDetailNormalized
+      ? String(intake.contactDetailNormalized)
+      : "";
   return {
     handoffRequested: Boolean(intake?.handoffRequested),
     callbackRequested: Boolean(intake?.callbackRequested),
@@ -1749,6 +1755,9 @@ function intakeMetadata(intake) {
     contactDetailRetryCount: Number(intake?.contactDetailRetryCount ?? 0),
     contactDetailType: intake?.contactDetailType ?? null,
     contactDetailSource: intake?.contactDetailSource ?? null,
+    contactDetailValid: Boolean(
+      intake?.contactDetailType === "phone" ? isUsableCallbackPhone(normalizedPhone) : intake?.contactDetailAttempted
+    ),
     emailDirectOffered: Boolean(intake?.emailDirectOffered),
     softIntakeLeadCreated: Boolean(intake?.leadCreated),
     softIntakeWaitingFor: intake?.waitingFor ?? null,
@@ -2268,6 +2277,14 @@ function normalizeSpokenPhone(text) {
   return `${hasPlus ? "+" : ""}${digits.join("")}`;
 }
 
+function phoneDigitCount(value) {
+  return String(value ?? "").replace(/\D/g, "").length;
+}
+
+function isUsableCallbackPhone(value) {
+  return phoneDigitCount(value) >= 7;
+}
+
 function isLikelyContactDetail(callerText, intent, intake) {
   const detailType = intake?.contactDetailType || intake?.contactPreference || "unknown";
   if (detailType === "email") return isLikelyEmailDetail(callerText, intent);
@@ -2735,10 +2752,42 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
     }
 
     if (isLikelyContactDetail(callerText, intent, intake)) {
-      intake.contactDetailAttempted = true;
       intake.contactDetailSource = "voice";
-      intake.contactDetailNormalized =
-        intake.contactDetailType === "phone" ? normalizeSpokenPhone(callerText) : "";
+      const normalizedPhone = intake.contactDetailType === "phone" ? normalizeSpokenPhone(callerText) : "";
+
+      if (intake.contactDetailType === "phone" && !isUsableCallbackPhone(normalizedPhone)) {
+        intake.contactDetailNormalized = "";
+        intake.contactDetailAttempted = false;
+        intake.contactPermissionGranted = null;
+        intake.contactPermissionRequested = false;
+        intake.completed = false;
+        intake.waitingFor = "contact_detail";
+        productState.productDialogueState = "phone_requested";
+
+        if (intake.contactDetailRetryCount < DETAIL_RETRY_LIMIT) {
+          intake.contactDetailRetryCount += 1;
+          await emitIntakeEvent(config, ctx, "contact_detail_incomplete", turnIndex, intent, intake);
+          return {
+            text: normalizeAssistantResponse(PHONE_DETAIL_INCOMPLETE_REASK_TEXT, config),
+            detectedIntent: "phone_detail_incomplete_reask",
+            finalResponseTemplate: "phone_request",
+            intake
+          };
+        }
+
+        intake.failed = true;
+        intake.failedReason = "phone_detail_incomplete_after_retry";
+        intake.waitingFor = null;
+        await emitIntakeEvent(config, ctx, "soft_intake_declined", turnIndex, intent, intake);
+        return {
+          text: normalizeAssistantResponse(MAX_TURNS_INTAKE_PHONE_MISSING_TEXT, config),
+          detectedIntent: "phone_detail_incomplete_failed",
+          intake
+        };
+      }
+
+      intake.contactDetailAttempted = true;
+      intake.contactDetailNormalized = normalizedPhone;
       intake.contactPermissionGranted = true;
       intake.contactPermissionRequested = false;
       intake.completed = true;
@@ -3746,6 +3795,10 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
     product_intake_stage: currentProduct.productIntakeStage ?? "idle",
     handoff_choice: currentProduct.handoffChoice ?? "none",
     soft_intake_state: currentIntake.softIntakeState ?? "not_started",
+    softIntakeCompleted: Boolean(currentIntake.softIntakeCompleted),
+    softIntakeLeadCreated: Boolean(currentIntake.softIntakeLeadCreated),
+    contactDetailAttempted: Boolean(currentIntake.contactDetailAttempted),
+    contactDetailValid: Boolean(currentIntake.contactDetailValid),
     product_flow_state: currentProduct.productFlowState ?? "not_started",
     business_fallback_intent: businessFallbackIntent,
     business_fallback_source: businessFallbackSource,
