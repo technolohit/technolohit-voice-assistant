@@ -31,17 +31,31 @@ jobs:
 
     steps:
       - name: Validate inputs
+        id: validate_inputs
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "${{ inputs.voice_bridge_tag }}" =~ ^voice-bridge-[A-Za-z0-9._-]+$ ]]; then
-            echo "voice_bridge_tag must start with voice-bridge-"
+          voice_bridge_tag="${{ inputs.voice_bridge_tag }}"
+          rag_api_tag="${{ inputs.rag_api_tag }}"
+
+          if [[ "${voice_bridge_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            voice_bridge_tag="voice-bridge-${voice_bridge_tag}"
+          fi
+          if [[ "${rag_api_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            rag_api_tag="rag-api-${rag_api_tag}"
+          fi
+
+          if [[ ! "${voice_bridge_tag}" =~ ^voice-bridge-[A-Za-z0-9._-]+$ ]]; then
+            echo "voice_bridge_tag must be like voice-bridge-v1.2.1 or v1.2.1"
             exit 1
           fi
-          if [[ "${{ inputs.deploy_rag_api }}" == "true" && ! "${{ inputs.rag_api_tag }}" =~ ^rag-api-[A-Za-z0-9._-]+$ ]]; then
-            echo "rag_api_tag must start with rag-api- when deploy_rag_api=true"
+          if [[ "${{ inputs.deploy_rag_api }}" == "true" && ! "${rag_api_tag}" =~ ^rag-api-[A-Za-z0-9._-]+$ ]]; then
+            echo "rag_api_tag must be like rag-api-v1.2.1 or v1.2.1 when deploy_rag_api=true"
             exit 1
           fi
+
+          echo "voice_bridge_tag=${voice_bridge_tag}" >> "$GITHUB_OUTPUT"
+          echo "rag_api_tag=${rag_api_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Configure SSH
         shell: bash
@@ -63,7 +77,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          VOICE_BRIDGE_IMAGE: thnhit/technhvoice:${{ inputs.voice_bridge_tag }}
+          VOICE_BRIDGE_IMAGE: thnhit/technhvoice:${{ steps.validate_inputs.outputs.voice_bridge_tag }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
@@ -86,7 +100,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.VOICE_DEPLOY_PATH }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          RAG_API_IMAGE: thnhit/technhvoice:${{ inputs.rag_api_tag }}
+          RAG_API_IMAGE: thnhit/technhvoice:${{ steps.validate_inputs.outputs.rag_api_tag }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" \
@@ -106,9 +120,9 @@ jobs:
           {
             echo "## Deploy Request"
             echo
-            echo "- voice-bridge: \`${DOCKER_IMAGE}:${{ inputs.voice_bridge_tag }}\`"
+            echo "- voice-bridge: \`${DOCKER_IMAGE}:${{ steps.validate_inputs.outputs.voice_bridge_tag }}\`"
             echo "- deploy rag-api: \`${{ inputs.deploy_rag_api }}\`"
             if [[ "${{ inputs.deploy_rag_api }}" == "true" ]]; then
-              echo "- rag-api: \`${DOCKER_IMAGE}:${{ inputs.rag_api_tag }}\`"
+              echo "- rag-api: \`${DOCKER_IMAGE}:${{ steps.validate_inputs.outputs.rag_api_tag }}\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
