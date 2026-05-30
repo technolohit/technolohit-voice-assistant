@@ -437,6 +437,52 @@ const SCENARIOS = {
       ];
     }
   },
+  invalid_phone_reasks_again: {
+    context: {
+      callerPhoneNormalized: "",
+      callerPhoneRaw: ""
+    },
+    turns: [
+      "Ich interessiere mich fÃƒÂ¼r AI Assistant.",
+      "Telefonisch bitte.",
+      "076.",
+      "0 1 2 6 4 4 4."
+    ],
+    assert(results) {
+      const firstInvalid = results[2];
+      const secondInvalid = results[3];
+      return [
+        assertCondition(
+          "076 reasks full phone number",
+          firstInvalid.normalized_intent === "phone_detail_incomplete_reask" &&
+            includesAll(firstInvalid.assistant, ["telefonnummer"]) &&
+            (includesAll(firstInvalid.assistant, ["vollstaendig"]) ||
+              includesAll(firstInvalid.assistant, ["vollstandig"]) ||
+              includesAll(firstInvalid.assistant, ["vollstÃƒÂ¤ndig"])),
+          `${firstInvalid.normalized_intent}: ${firstInvalid.assistant}`
+        ),
+        assertCondition(
+          "seven digit phone still reasks full phone number",
+          secondInvalid.normalized_intent === "phone_detail_incomplete_reask" &&
+            includesAll(secondInvalid.assistant, ["telefonnummer"]) &&
+            (includesAll(secondInvalid.assistant, ["vollstaendig"]) ||
+              includesAll(secondInvalid.assistant, ["vollstandig"]) ||
+              includesAll(secondInvalid.assistant, ["vollstÃƒÂ¤ndig"])),
+          `${secondInvalid.normalized_intent}: ${secondInvalid.assistant}`
+        ),
+        assertCondition(
+          "invalid phones are not callback-ready",
+          firstInvalid.metadata?.contactDetailValid !== true &&
+            firstInvalid.metadata?.softIntakeCompleted !== true &&
+            secondInvalid.metadata?.contactDetailValid !== true &&
+            secondInvalid.metadata?.softIntakeCompleted !== true &&
+            secondInvalid.metadata?.softIntakeLeadCreated !== true,
+          JSON.stringify({ first: firstInvalid.metadata, second: secondInvalid.metadata })
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   full_phone_creates_callback_ready: {
     context: {
       callerPhoneNormalized: "",
@@ -445,7 +491,7 @@ const SCENARIOS = {
     turns: [
       "Ich interessiere mich fÃ¼r AI Assistant.",
       "Telefonisch bitte.",
-      "0176 444 444."
+      "0176 444 444 44."
     ],
     assert(results) {
       const phoneCapture = results[2];
@@ -804,7 +850,7 @@ Scenarios:
   voice_agent_ai_assistant, voice_agent_short_explanation,
   voice_agent_ki_assistent, voice_agent_telefonassistent,
   rueckruf_input_maps_to_phone, no_rueckruf_output,
-  incomplete_phone_reasks, full_phone_creates_callback_ready,
+  incomplete_phone_reasks, invalid_phone_reasks_again, full_phone_creates_callback_ready,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional

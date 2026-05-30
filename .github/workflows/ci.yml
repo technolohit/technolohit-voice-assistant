@@ -81,6 +81,7 @@ jobs:
             rueckruf_input_maps_to_phone
             no_rueckruf_output
             incomplete_phone_reasks
+            invalid_phone_reasks_again
             full_phone_creates_callback_ready
             unclear_input
             unknown_intent

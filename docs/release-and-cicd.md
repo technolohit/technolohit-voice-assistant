@@ -212,7 +212,8 @@ VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-previous-tag docker compose -
 | Caller ID + phone callback | Permission under current number; no spoken phone repeat |
 | No caller ID + phone callback | One phone question; no duplicate permission |
 | No caller ID + incomplete spoken phone (`Null eins sieben sechs`) | Assistant asks once more for the full phone; no callback-ready lead |
-| No caller ID + full spoken phone (`0176 444 444`) | Callback-ready lead with normalized phone |
+| No caller ID + short numeric phone (`076` / `0 1 2 6 4 4 4`) | Assistant asks once more for the full phone; no email fallback; no callback-ready lead |
+| No caller ID + full spoken phone (`0176 444 444 44`) | Callback-ready lead with normalized phone |
 | `AI Assistant` interest | Compact voice-agent offer; no full menu |
 | `AI Assistant` + `Kurze Erklärung bitte` | Short Digitale Rezeption explanation; no compact-offer loop |
 | `Rückruf bitte` input | Routes to phone contact path, but assistant does not say `Rückruf` or `zurückrufen` |

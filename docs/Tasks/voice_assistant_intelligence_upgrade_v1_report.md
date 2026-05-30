@@ -90,6 +90,21 @@ Implemented fix:
 - Post-call lead extraction refuses phone leads when `permission=granted` but `phone_present` is false.
 - Added dialogue QA scenarios: `incomplete_phone_reasks` and `full_phone_creates_callback_ready`.
 
+## Live-call hotfix v1.1.3 (2026-05-30)
+
+Live testing of `voice-bridge-v1.1.2` showed that phone validation was still too loose:
+
+- `076` caused the phone flow to fall back to the generic email/website message.
+- `0 1 2 6 4 4 4` normalized to `0126444` and was treated as callback-ready.
+
+Implemented fix:
+
+- Callback phone validation now requires at least 10 digits before contact permission can be granted.
+- Invalid phone input in an explicit `Telefonisch` flow always re-asks for the full phone number instead of redirecting to email/website.
+- Repeated invalid phone attempts remain in `contact_detail` state and do not create/enrich callback-ready leads.
+- Added dialogue QA scenario: `invalid_phone_reasks_again`.
+- Updated the full-phone acceptance scenario to use `0176 444 444 44`.
+
 ## Runtime Behavior Verified (local code inspection)
 
 | Setting | Default in repo | Greeting mode |

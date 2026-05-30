@@ -2282,7 +2282,7 @@ function phoneDigitCount(value) {
 }
 
 function isUsableCallbackPhone(value) {
-  return phoneDigitCount(value) >= 7;
+  return phoneDigitCount(value) >= 10;
 }
 
 function isLikelyContactDetail(callerText, intent, intake) {
@@ -2763,25 +2763,12 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
         intake.completed = false;
         intake.waitingFor = "contact_detail";
         productState.productDialogueState = "phone_requested";
-
-        if (intake.contactDetailRetryCount < DETAIL_RETRY_LIMIT) {
-          intake.contactDetailRetryCount += 1;
-          await emitIntakeEvent(config, ctx, "contact_detail_incomplete", turnIndex, intent, intake);
-          return {
-            text: normalizeAssistantResponse(PHONE_DETAIL_INCOMPLETE_REASK_TEXT, config),
-            detectedIntent: "phone_detail_incomplete_reask",
-            finalResponseTemplate: "phone_request",
-            intake
-          };
-        }
-
-        intake.failed = true;
-        intake.failedReason = "phone_detail_incomplete_after_retry";
-        intake.waitingFor = null;
-        await emitIntakeEvent(config, ctx, "soft_intake_declined", turnIndex, intent, intake);
+        intake.contactDetailRetryCount += 1;
+        await emitIntakeEvent(config, ctx, "contact_detail_incomplete", turnIndex, intent, intake);
         return {
-          text: normalizeAssistantResponse(MAX_TURNS_INTAKE_PHONE_MISSING_TEXT, config),
-          detectedIntent: "phone_detail_incomplete_failed",
+          text: normalizeAssistantResponse(PHONE_DETAIL_INCOMPLETE_REASK_TEXT, config),
+          detectedIntent: "phone_detail_incomplete_reask",
+          finalResponseTemplate: "phone_request",
           intake
         };
       }
@@ -2817,13 +2804,20 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
       };
     }
 
+    if (intake.contactDetailType === "phone") {
+      intake.contactDetailRetryCount += 1;
+      return {
+        text: normalizeAssistantResponse(PHONE_DETAIL_INCOMPLETE_REASK_TEXT, config),
+        detectedIntent: "phone_detail_incomplete_reask",
+        finalResponseTemplate: "phone_request",
+        intake
+      };
+    }
+
     if (intake.contactDetailRetryCount < DETAIL_RETRY_LIMIT) {
       intake.contactDetailRetryCount += 1;
       return {
-        text: normalizeAssistantResponse(
-          intake.contactDetailType === "phone" ? PHONE_DETAIL_REASK_TEXT : EMAIL_DETAIL_REASK_TEXT,
-          config
-        ),
+        text: normalizeAssistantResponse(EMAIL_DETAIL_REASK_TEXT, config),
         detectedIntent: intent,
         intake
       };

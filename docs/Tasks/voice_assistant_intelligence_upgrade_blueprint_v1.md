@@ -220,7 +220,7 @@ Gerne. Unter welcher Telefonnummer darf unser Team Sie telefonisch kontaktieren?
 ```
 
 This question already includes permission. After a valid phone number is captured, do not ask another generic permission question.
-If the spoken phone is incomplete or cannot be normalized, ask once more for the full number and do not create a callback-ready lead until a usable phone exists.
+If the spoken phone is incomplete, too short, or cannot be normalized, ask again for the full number and do not create a callback-ready lead until a usable phone exists.
 
 Expected data:
 
@@ -820,7 +820,7 @@ Functional:
 
 - Caller ID callback path does not ask the caller to read their phone number.
 - Missing caller ID path asks for callback phone only once.
-- Incomplete spoken callback phone asks once more and does not mark the lead callback-ready.
+- Incomplete or too-short spoken callback phone asks again and does not mark the lead callback-ready.
 - Duplicate permission question is gone.
 - `AI Assistant`, `KI Assistent`, and `Telefonassistent` map to the voice assistant product.
 - Unknown/unclear input triggers short clarification, not full intro repeat.
