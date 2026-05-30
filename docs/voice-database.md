@@ -26,6 +26,7 @@ Infra (Docker Compose, firewall, WireGuard) stays in **infra-ansible**; DDL stay
 | `db/voice/migrations/002_voice_grants.sql` | Least-privilege grants only (no `CREATE ROLE`, no passwords) |
 | `db/voice/migrations/003_voice_bridge_session_fields.sql` | `language`, `duration_seconds`, status `active` |
 | `db/voice/migrations/004_call_transcript_post_call_fields.sql` | Post-call transcript compatibility fields (`text`, `sequence_number`, `is_final`, `metadata`) |
+| `db/voice/migrations/005_lead_dashboard_tables.sql` | Internal Lead Dashboard audit and follow-up status tables |
 | `voice-bridge/` | AudioSocket service + runtime persistence (`src/db.js`) |
 | `scripts/db-migrate-voice-postgres.js` | Create/update role + apply migrations remotely |
 | `scripts/db-test-voice-postgres.js` | Smoke test (DML + grant check) |
@@ -39,6 +40,8 @@ Infra (Docker Compose, firewall, WireGuard) stays in **infra-ansible**; DDL stay
 | `call_transcripts` | Transcript segments |
 | `leads` | Captured leads with match keys for future CRM / `growth.prospects` |
 | `call_summaries` | Post-call summaries |
+| `lead_access_audit` | Internal Lead Dashboard audit events for reveal/status actions |
+| `lead_followup_status` | Internal Lead Dashboard callback follow-up state |
 
 ### Lead matching (future linking)
 

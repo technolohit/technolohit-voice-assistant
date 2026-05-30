@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Audit{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>Audit</h1>
+      <p>Recent reveal and status actions. Audit values never store full phone numbers.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <table class="lead-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Lead</th>
+          <th>Old</th>
+          <th>New</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for event in events %}
+          <tr>
+            <td class="nowrap">{{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') if event.created_at else '-' }}</td>
+            <td>{{ event.user_name }}</td>
+            <td><span class="tag">{{ event.action }}</span></td>
+            <td><a href="/leads/{{ event.lead_id }}" class="mono">{{ event.lead_id }}</a></td>
+            <td>{{ event.old_value or '-' }}</td>
+            <td>{{ event.new_value or '-' }}</td>
+            <td class="mono">{{ event.ip_address or '-' }}</td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="7" class="empty">No audit events found.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

@@ -1,0 +1,26 @@
+services:
+  lead-dashboard:
+    image: ${LEAD_DASHBOARD_IMAGE:-thnhit/thn-dashbrd:lead-dashboard-v0.1.0}
+    container_name: technolohit-lead-dashboard
+    restart: unless-stopped
+    environment:
+      LEAD_DASHBOARD_ENV: ${LEAD_DASHBOARD_ENV:-production}
+      LEAD_DASHBOARD_DATABASE_URL: ${LEAD_DASHBOARD_DATABASE_URL}
+      LEAD_DASHBOARD_USER: ${LEAD_DASHBOARD_USER}
+      LEAD_DASHBOARD_PASSWORD_HASH: ${LEAD_DASHBOARD_PASSWORD_HASH}
+      LEAD_DASHBOARD_APP_BASE_URL: ${LEAD_DASHBOARD_APP_BASE_URL:-http://10.20.0.1:8090}
+    ports:
+      - "${LEAD_DASHBOARD_BIND_HOST:-10.20.0.1}:${LEAD_DASHBOARD_PORT:-8090}:8090"
+    networks:
+      - central-postgres_default
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  central-postgres_default:
+    name: ${LEAD_DASHBOARD_DOCKER_NETWORK:-central-postgres_default}
+    external: true

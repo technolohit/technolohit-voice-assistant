@@ -71,6 +71,16 @@ Success criteria:
 - `action=failed` includes transport/HTTP reason for troubleshooting.
 - `url`, `status_code`, and `error` are persisted for notification diagnostics.
 
+## n8n Consumer (`Tech-Voice-notif`)
+
+Post-call webhook target (when workflow is active):
+
+```text
+https://wf.automobil-agent.de/webhook/voice/post-call
+```
+
+The n8n workflow classifies `voice_post_call_outcome_v1` payloads and sends Telegram + email for callback/review cases. Operational details, tests, and rollback: `docs/Tasks/voice_lead_notification_implementation_report_v1.md`.
+
 ## Rollback
 
 Disable notification only:

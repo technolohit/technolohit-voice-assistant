@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Callback Leads{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>Callback Leads</h1>
+      <p>Phone numbers are masked. Open a lead and use reveal only when calling back.</p>
+    </div>
+  </section>
+
+  <section class="panel toolbar-panel">
+    <form class="filters" method="get" action="/leads">
+      <label>
+        Follow-up
+        <select name="status">
+          <option value="" {% if not filters.status %}selected{% endif %}>All statuses</option>
+          {% for status in valid_statuses %}
+            <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Phone
+        <select name="phone">
+          <option value="" {% if not filters.phone %}selected{% endif %}>All leads</option>
+          <option value="captured" {% if filters.phone == 'captured' %}selected{% endif %}>Phone captured</option>
+          <option value="missing" {% if filters.phone == 'missing' %}selected{% endif %}>No phone captured</option>
+        </select>
+      </label>
+      <label class="search-field">
+        Search
+        <input name="q" value="{{ filters.q }}" placeholder="Lead ID, Call Session ID, external call">
+      </label>
+      <button class="button" type="submit">Apply</button>
+      <a class="button secondary" href="/leads">Reset</a>
+    </form>
+  </section>
+
+  <section class="panel">
+    <table class="lead-table">
+      <thead>
+        <tr>
+          <th>Created</th>
+          <th>Product</th>
+          <th>Need</th>
+          <th>Contact</th>
+          <th>Permission</th>
+          <th>Next action</th>
+          <th>Status</th>
+          <th>Phone</th>
+          <th>Quick status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads %}
+          <tr class="{{ 'missing-phone' if not lead.has_phone else '' }}">
+            <td class="nowrap">{{ lead.created_at.strftime('%Y-%m-%d %H:%M') if lead.created_at else '-' }}</td>
+            <td>{{ lead.product_interest }}</td>
+            <td class="truncate">{{ lead.caller_need or lead.summary_text or '-' }}</td>
+            <td>{{ lead.contact_preference or '-' }}</td>
+            <td>{{ lead.permission or '-' }}</td>
+            <td><span class="tag">{{ lead.next_action or '-' }}</span></td>
+            <td>
+              <span class="status">{{ lead.followup_status }}</span>
+              <span class="muted">/ {{ lead.lead_status }}</span>
+            </td>
+            <td class="mono">
+              {% if lead.has_phone %}
+                {{ lead.masked_phone }}
+              {% else %}
+                <span class="phone-missing">No phone captured</span>
+              {% endif %}
+            </td>
+            <td>
+              <form class="quick-status" method="post" action="/leads/{{ lead.lead_id }}/status">
+                <input type="hidden" name="return_to" value="list">
+                <input type="hidden" name="notes" value="{{ lead.followup_notes }}">
+                <select name="status" aria-label="Quick status for {{ lead.lead_id }}">
+                  {% for status in valid_statuses %}
+                    <option value="{{ status }}" {% if status == lead.followup_status %}selected{% endif %}>{{ status }}</option>
+                  {% endfor %}
+                </select>
+                <button class="button small secondary" type="submit">Save</button>
+              </form>
+            </td>
+            <td><a class="button small" href="/leads/{{ lead.lead_id }}">Open</a></td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="10" class="empty">No callback leads found.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

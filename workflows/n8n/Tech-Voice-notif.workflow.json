@@ -1,0 +1,596 @@
+{
+  "name": "Tech-Voice-notif",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice/post-call",
+        "options": {},
+        "responseMode": "onReceived"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "185618f5-3e9d-4dda-964a-550e2a774778",
+      "name": "Webhook",
+      "webhookId": "07b8d696-e4a5-4993-a3c8-beb4f20820a6"
+    },
+    {
+      "id": "57e5aec8-c4d3-41dc-a132-0f3565061428",
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body ?? $json;\nconst summary = body.summary ?? {};\nconst lead = body.lead ?? {};\nconst idempotency_key = `voice-lead-notif:${body.call_session_id ?? ''}:${summary.id ?? ''}:${lead.action ?? ''}`;\n\nreturn [{\n  json: {\n    type: body.type ?? \"\",\n    occurred_at: body.occurred_at ?? new Date().toISOString(),\n    call_session_id: body.call_session_id ?? \"\",\n    external_call_id: body.external_call_id ?? \"\",\n    bridge_call_id: body.bridge_call_id ?? \"\",\n    summary_id: summary.id ?? \"\",\n    summary_text: summary.text ?? \"\",\n    product_interest: summary.product_interest ?? \"\",\n    caller_need: summary.caller_need ?? \"\",\n    contact_preference: summary.contact_preference ?? \"\",\n    permission: summary.permission ?? \"\",\n    next_action: summary.next_action ?? \"\",\n    confidence: summary.confidence ?? \"\",\n    transcript_quality_notes: summary.transcript_quality_notes ?? \"\",\n    lead_action: lead.action ?? \"\",\n    lead_reason: lead.reason ?? \"\",\n    lead_id: lead.lead_id ?? \"\",\n    idempotency_key\n  }\n}];"
+      }
+    },
+    {
+      "id": "b8f5286e-ac3d-4268-86eb-63833ac1d58f",
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "a90df6f1-740f-4463-a744-51a03a7bd769",
+              "leftValue": "={{ $json.type }}",
+              "rightValue": "voice_post_call_outcome_v1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "e4b9c3a5-0005-449a-842b-62c6c43f739e",
+              "leftValue": "={{ $json.call_session_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "f3988dcc-e78b-45d2-8125-9e4bd8f07556",
+              "leftValue": "={{ $json.summary_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ab3991e3-81e0-4502-912e-bfa069a85510",
+      "name": "Dedupe Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const key = $json.idempotency_key;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.sentKeys || typeof staticData.sentKeys !== 'object') {\n  staticData.sentKeys = {};\n}\nconst existing = staticData.sentKeys[key];\nif (existing) {\n  return [{\n    json: {\n      ...$json,\n      dedupe_status: 'duplicate',\n      dedupe_previous: existing\n    }\n  }];\n}\n\nstaticData.sentKeys[key] = {\n  status: 'pending',\n  call_session_id: $json.call_session_id,\n  summary_id: $json.summary_id,\n  lead_id: $json.lead_id,\n  claimed_at: new Date().toISOString(),\n  execution_id: $execution.id\n};\n\nreturn [{ json: { ...$json, dedupe_status: 'new' } }];"
+      }
+    },
+    {
+      "id": "ac8ed127-f677-41ce-bea3-930b0a1a25fb",
+      "name": "Is New Notification",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "bf33f7d5-9dac-4989-8f14-073e2f56f7b7",
+              "leftValue": "={{ $json.dedupe_status }}",
+              "rightValue": "new",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "add7f374-320e-464a-adcf-0b70353f9b0a",
+      "name": "Classify Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function clean(value, fallback = '-') {\n  const text = String(value ?? '').replace(/\\s+/g, ' ').trim();\n  return text || fallback;\n}\n\nfunction cleanMultiline(value, fallback = '-') {\n  const text = String(value ?? '').replace(/\\r\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return text || fallback;\n}\n\nfunction short(value, max = 600) {\n  const text = clean(value);\n  if (text.length <= max) return text;\n  return text.slice(0, max - 3).trimEnd() + '...';\n}\n\nfunction buildTelegramText(data) {\n  if (data.notification_type === 'callback') {\n    return [\n      'CALLBACK LEAD',\n      'Priority: HIGH',\n      '',\n      'What happened',\n      'Product: ' + clean(data.product_interest),\n      'Need: ' + short(data.caller_need, 280),\n      'Contact: ' + clean(data.contact_preference),\n      'Permission: ' + clean(data.permission),\n      'Confidence: ' + clean(data.confidence),\n      '',\n      'Lead',\n      'Status: ' + clean(data.lead_action) + ' (' + clean(data.lead_reason) + ')',\n      'Lead ID: ' + clean(data.lead_id),\n      '',\n      'Next action',\n      'Call back as soon as possible.',\n      'Phone: not included in webhook payload yet.',\n      '',\n      'IDs',\n      'Call session: ' + clean(data.call_session_id),\n      'Summary: ' + clean(data.summary_id)\n    ].join('\\n');\n  }\n\n  return [\n    'VOICE LEAD REVIEW',\n    'Priority: MEDIUM',\n    '',\n    'Reason: ' + clean(data.notification_reason),\n    'Product: ' + clean(data.product_interest),\n    'Need: ' + short(data.caller_need, 280),\n    'Confidence: ' + clean(data.confidence),\n    'Transcript notes: ' + clean(data.transcript_quality_notes),\n    '',\n    'Lead',\n    'Status: ' + clean(data.lead_action) + ' (' + clean(data.lead_reason) + ')',\n    'Lead ID: ' + clean(data.lead_id),\n    '',\n    'IDs',\n    'Call session: ' + clean(data.call_session_id),\n    'Summary: ' + clean(data.summary_id)\n  ].join('\\n');\n}\n\nfunction buildEmailSubject(data) {\n  const product = clean(data.product_interest, 'Unknown product');\n  if (data.notification_type === 'callback') {\n    return '[HIGH] Voice callback lead - ' + product;\n  }\n  return '[Review] Voice lead needs check - ' + product;\n}\n\nfunction buildEmailText(data) {\n  const title = data.notification_type === 'callback'\n    ? 'CALLBACK LEAD - TechnoloHit Voice Assistant'\n    : 'VOICE LEAD REVIEW - TechnoloHit Voice Assistant';\n  const action = data.notification_type === 'callback'\n    ? 'Call this lead back as soon as possible. Phone is not included in the webhook payload yet; use the lead/call session lookup until the payload is enriched.'\n    : 'Review this call before follow-up. It was routed here because of low confidence, manual review, or lead processing failure.';\n\n  return [\n    title,\n    '',\n    'ACTION',\n    action,\n    '',\n    'LEAD SUMMARY',\n    'Product interest: ' + clean(data.product_interest),\n    'Caller need: ' + clean(data.caller_need),\n    'Preferred contact: ' + clean(data.contact_preference),\n    'Permission: ' + clean(data.permission),\n    'Next action: ' + clean(data.next_action),\n    'Confidence: ' + clean(data.confidence),\n    'Transcript quality: ' + clean(data.transcript_quality_notes),\n    '',\n    'LEAD RESULT',\n    'Action: ' + clean(data.lead_action),\n    'Reason: ' + clean(data.lead_reason),\n    'Lead ID: ' + clean(data.lead_id),\n    '',\n    'CALL IDS',\n    'Call session ID: ' + clean(data.call_session_id),\n    'External call ID: ' + clean(data.external_call_id),\n    'Bridge call ID: ' + clean(data.bridge_call_id),\n    'Summary ID: ' + clean(data.summary_id),\n    '',\n    'SUMMARY TEXT',\n    cleanMultiline(data.summary_text),\n    '',\n    'Automatic notification from n8n workflow Tech-Voice-notif.'\n  ].join('\\n');\n}\n\nlet notification_type = 'ignore';\nlet priority = 'none';\nlet notification_reason = 'not_actionable';\n\nconst isCallback =\n  $json.next_action === 'team_callback'\n  && $json.permission === 'granted'\n  && ['created', 'updated'].includes($json.lead_action);\n\nconst needsReview =\n  $json.next_action === 'manual_review'\n  || $json.confidence === 'low'\n  || $json.lead_action === 'failed';\n\nif (isCallback) {\n  notification_type = 'callback';\n  priority = 'high';\n  notification_reason = 'callback_requested_permission_granted';\n} else if (needsReview) {\n  notification_type = 'review';\n  priority = 'medium';\n  notification_reason = 'manual_review_or_low_confidence';\n}\n\nconst enriched = { ...$json, notification_type, priority, notification_reason };\nreturn [{\n  json: {\n    ...enriched,\n    telegram_text: buildTelegramText(enriched),\n    email_subject: buildEmailSubject(enriched),\n    email_text: buildEmailText(enriched)\n  }\n}];"
+      }
+    },
+    {
+      "id": "f79f914b-d79d-46ad-a806-f10a44c8e070",
+      "name": "Route Notification",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.notification_type }}",
+                    "rightValue": "callback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "callback"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.notification_type }}",
+                    "rightValue": "review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "review"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "14acdfbb-de94-4e3b-91d4-d5ce47736b30",
+      "name": "Send Telegram Callback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1560,
+        120
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "1978700853",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "WjjoP4hVedXo55Zy",
+          "name": "TechnoloHit Telegram Bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "e0106dd3-cda7-48db-b267-df80b85896ee",
+      "name": "Send Email Callback",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        120
+      ],
+      "parameters": {
+        "fromEmail": "voice-assistant@technolohit.com",
+        "toEmail": "info@technolohit.com",
+        "subject": "={{ $('Classify Notification').first().json.email_subject }}",
+        "emailFormat": "text",
+        "text": "={{ $('Classify Notification').first().json.email_text }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "Ionos-Email-Tech"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "ef684c70-df9d-4865-9b69-af57fedeecc3",
+      "name": "Mark Notification Sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const source = $('Classify Notification').first().json;\nconst key = source.idempotency_key;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.sentKeys || typeof staticData.sentKeys !== 'object') {\n  staticData.sentKeys = {};\n}\n\nconst tgNode = source.notification_type === 'callback' ? 'Send Telegram Callback' : 'Send Telegram Review';\nconst emailNode = source.notification_type === 'callback' ? 'Send Email Callback' : 'Send Email Review';\nconst tgItems = $(tgNode).all();\nconst emailItems = $(emailNode).all();\nconst tgFailed = tgItems.some((item) => item.json?.error);\nconst emailFailed = emailItems.some((item) => item.json?.error);\n\nlet delivery_status = 'sent';\nif (tgFailed && emailFailed) delivery_status = 'failed';\nelse if (tgFailed || emailFailed) delivery_status = 'partial';\n\nstaticData.sentKeys[key] = {\n  ...staticData.sentKeys[key],\n  status: 'sent',\n  call_session_id: source.call_session_id,\n  summary_id: source.summary_id,\n  lead_id: source.lead_id,\n  notification_type: source.notification_type,\n  delivery_status,\n  telegram_sent_at: new Date().toISOString(),\n  email_sent_at: new Date().toISOString(),\n  execution_id: $execution.id\n};\n\nreturn [{\n  json: {\n    ...source,\n    delivery_status,\n    notification_recorded: delivery_status !== 'failed'\n  }\n}];"
+      }
+    },
+    {
+      "id": "d517021d-b328-4725-9181-eda380e8fe84",
+      "name": "Send Telegram Review",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1560,
+        420
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "1978700853",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "WjjoP4hVedXo55Zy",
+          "name": "TechnoloHit Telegram Bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "05391984-c196-4cf5-88c0-cbdea13ce206",
+      "name": "Send Email Review",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        420
+      ],
+      "parameters": {
+        "fromEmail": "voice-assistant@technolohit.com",
+        "toEmail": "info@technolohit.com",
+        "subject": "={{ $('Classify Notification').first().json.email_subject }}",
+        "emailFormat": "text",
+        "text": "={{ $('Classify Notification').first().json.email_text }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "Ionos-Email-Tech"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "224197cb-d880-4f82-a13a-32c86084a9e3",
+      "name": "Mark Review Sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const source = $('Classify Notification').first().json;\nconst key = source.idempotency_key;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.sentKeys || typeof staticData.sentKeys !== 'object') {\n  staticData.sentKeys = {};\n}\n\nconst tgNode = source.notification_type === 'callback' ? 'Send Telegram Callback' : 'Send Telegram Review';\nconst emailNode = source.notification_type === 'callback' ? 'Send Email Callback' : 'Send Email Review';\nconst tgItems = $(tgNode).all();\nconst emailItems = $(emailNode).all();\nconst tgFailed = tgItems.some((item) => item.json?.error);\nconst emailFailed = emailItems.some((item) => item.json?.error);\n\nlet delivery_status = 'sent';\nif (tgFailed && emailFailed) delivery_status = 'failed';\nelse if (tgFailed || emailFailed) delivery_status = 'partial';\n\nstaticData.sentKeys[key] = {\n  ...staticData.sentKeys[key],\n  status: 'sent',\n  call_session_id: source.call_session_id,\n  summary_id: source.summary_id,\n  lead_id: source.lead_id,\n  notification_type: source.notification_type,\n  delivery_status,\n  telegram_sent_at: new Date().toISOString(),\n  email_sent_at: new Date().toISOString(),\n  execution_id: $execution.id\n};\n\nreturn [{\n  json: {\n    ...source,\n    delivery_status,\n    notification_recorded: delivery_status !== 'failed'\n  }\n}];"
+      }
+    },
+    {
+      "id": "a69d2c98-e13a-44c5-874a-077965a3e580",
+      "name": "Log Ignored",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1560,
+        640
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b250848-e77d-4e06-a6fc-b6956e251372",
+              "name": "status",
+              "value": "ignored",
+              "type": "string"
+            },
+            {
+              "id": "f117f2b8-750a-4fc8-8b04-fd81226851cf",
+              "name": "notification_type",
+              "value": "={{ $json.notification_type }}",
+              "type": "string"
+            },
+            {
+              "id": "b858c842-eb8d-4ca9-ac45-7042338585ec",
+              "name": "call_session_id",
+              "value": "={{ $json.call_session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "58fe5f85-59f9-4fa1-9230-cd2c525be971",
+              "name": "next_action",
+              "value": "={{ $json.next_action }}",
+              "type": "string"
+            },
+            {
+              "id": "5d30c5fb-7391-43b6-88fc-603549bf1756",
+              "name": "lead_action",
+              "value": "={{ $json.lead_action }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "70b53271-db26-4f16-a133-8e98a757137f",
+      "name": "Log Duplicate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c19affc-ac6b-468f-a466-0af946b45dbc",
+              "name": "status",
+              "value": "duplicate_skipped",
+              "type": "string"
+            },
+            {
+              "id": "1367d1e7-ccb5-4e65-b52b-67257d7bfe84",
+              "name": "idempotency_key",
+              "value": "={{ $json.idempotency_key }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2d9f856f-8a79-40fc-8877-bc3bb8e21e19",
+      "name": "Log Invalid Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7088bdc8-1852-4fe4-bc04-457c953ccbd0",
+              "name": "status",
+              "value": "invalid_payload",
+              "type": "string"
+            },
+            {
+              "id": "2fb70e76-56f0-47db-9298-153cf9661b43",
+              "name": "type",
+              "value": "={{ $json.type }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [
+          {
+            "node": "Dedupe Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Invalid Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedupe Check": {
+      "main": [
+        [
+          {
+            "node": "Is New Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Notification": {
+      "main": [
+        [
+          {
+            "node": "Classify Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Notification": {
+      "main": [
+        [
+          {
+            "node": "Route Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Telegram Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Ignored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Callback": {
+      "main": [
+        [
+          {
+            "node": "Send Email Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Callback": {
+      "main": [
+        [
+          {
+            "node": "Mark Notification Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Review": {
+      "main": [
+        [
+          {
+            "node": "Send Email Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Review": {
+      "main": [
+        [
+          {
+            "node": "Mark Review Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "3uWYMhQ6JfCqKmHv"
+}

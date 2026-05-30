@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>{% block title %}TechnoloHit Lead Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <div class="brand">TechnoloHit</div>
+        <div class="subtitle">Internal voice lead dashboard</div>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <a class="{{ 'active' if active == 'leads' else '' }}" href="/leads">Leads</a>
+        <a class="{{ 'active' if active == 'audit' else '' }}" href="/audit">Audit</a>
+      </nav>
+      <div class="user">{{ user }}</div>
+    </header>
+
+    <main class="page">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

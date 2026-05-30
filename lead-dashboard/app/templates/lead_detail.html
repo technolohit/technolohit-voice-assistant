@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Lead {{ lead.lead_id }}{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>Lead Detail</h1>
+      <p>Reveal actions are audited. Do not copy phone numbers into email or chat.</p>
+    </div>
+    <a class="button secondary" href="/leads">Back to leads</a>
+  </section>
+
+  <div class="detail-grid">
+    <section class="panel">
+      <h2>Lead summary</h2>
+      <dl class="details">
+        <dt>Product interest</dt>
+        <dd>{{ lead.product_interest }}</dd>
+        <dt>Caller need</dt>
+        <dd>{{ lead.caller_need or '-' }}</dd>
+        <dt>Preferred contact</dt>
+        <dd>{{ lead.contact_preference or '-' }}</dd>
+        <dt>Permission</dt>
+        <dd>{{ lead.permission or '-' }}</dd>
+        <dt>Next action</dt>
+        <dd>{{ lead.next_action or '-' }}</dd>
+        <dt>Confidence</dt>
+        <dd>{{ lead.confidence or '-' }}</dd>
+        <dt>Lead status</dt>
+        <dd>{{ lead.lead_status }}</dd>
+        <dt>Follow-up status</dt>
+        <dd><span class="status">{{ lead.followup_status }}</span></dd>
+      </dl>
+    </section>
+
+    <section class="panel phone-panel">
+      <h2>Callback phone</h2>
+      {% if revealed %}
+        <div class="revealed-phone mono">{{ lead.revealed_phone }}</div>
+        <p class="muted">This reveal was audit-logged.</p>
+      {% else %}
+        <div class="masked-phone mono">{{ lead.masked_phone }}</div>
+        <form method="post" action="/leads/{{ lead.lead_id }}/reveal-phone">
+          <button class="button danger" type="submit" {% if not lead.has_phone %}disabled{% endif %}>Reveal phone</button>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Follow-up</h2>
+    <form class="status-form" method="post" action="/leads/{{ lead.lead_id }}/status">
+      <label>
+        Status
+        <select name="status">
+          {% for status in valid_statuses %}
+            <option value="{{ status }}" {% if status == lead.followup_status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Notes
+        <textarea name="notes" rows="3">{{ lead.followup_notes }}</textarea>
+      </label>
+      <button class="button" type="submit">Update status</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Call identifiers</h2>
+    <dl class="details compact">
+      <dt>Lead ID</dt>
+      <dd class="mono">{{ lead.lead_id }}</dd>
+      <dt>Call session ID</dt>
+      <dd class="mono">{{ lead.call_session_id or '-' }}</dd>
+      <dt>External call ID</dt>
+      <dd class="mono">{{ lead.external_call_id or '-' }}</dd>
+      <dt>Bridge call ID</dt>
+      <dd class="mono">{{ lead.bridge_call_id or '-' }}</dd>
+      <dt>Summary ID</dt>
+      <dd class="mono">{{ lead.summary_id or '-' }}</dd>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>Summary</h2>
+    <p class="summary">{{ lead.summary_text or '-' }}</p>
+  </section>
+{% endblock %}

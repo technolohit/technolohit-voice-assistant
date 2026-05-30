@@ -7,6 +7,7 @@ It contains:
 - `asterisk/` - Easybell/Asterisk image inputs and production override.
 - `voice-bridge/` - AudioSocket TCP service, assistant runtime, recording, STT/TTS, post-call processing.
 - `rag-api/` - optional pgvector-backed retrieval service.
+- `lead-dashboard/` - internal-only FastAPI/Jinja dashboard for callback lead lookup behind WireGuard.
 - `db/voice/` - PostgreSQL schema `voice` migrations.
 - `db/knowledge/` - PostgreSQL schema `knowledge` migrations for RAG.
 - `scripts/docker/` - voice-bridge image build/push/release helpers.
@@ -57,6 +58,16 @@ python -m venv .venv
 . .venv/Scripts/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+```
+
+Run the internal Lead Dashboard locally:
+
+```bash
+cd lead-dashboard
+python -m venv .venv
+. .venv/Scripts/activate
+pip install -r requirements.txt
+LEAD_DASHBOARD_PASSWORD=dev-password uvicorn app.main:app --reload --host 127.0.0.1 --port 8090
 ```
 
 ## Safety Rules
