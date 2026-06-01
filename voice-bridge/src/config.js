@@ -105,6 +105,7 @@ export function loadConfig() {
     1,
     readInt("VOICE_V4_PLAYBACK_CANCEL_SPIKE_SPEECH_FRAMES", 3)
   );
+  const v4InterruptionContextSpikeEnabled = readBool("VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED", false);
   const buildVersion = String(process.env.BUILD_VERSION || process.env.IMAGE_TAG || "unknown").trim();
   const imageTag = String(process.env.IMAGE_TAG || "").trim();
   const gitSha = String(process.env.GIT_SHA || "").trim();
@@ -181,6 +182,9 @@ export function loadConfig() {
       enabled: v4PlaybackCancelSpikeEnabled,
       speechRmsThreshold: v4PlaybackCancelSpikeRmsThreshold,
       speechFramesRequired: v4PlaybackCancelSpikeSpeechFrames
+    },
+    v4InterruptionContextSpike: {
+      enabled: v4InterruptionContextSpikeEnabled
     },
     assistant: {
       enabled: assistantEnabled,

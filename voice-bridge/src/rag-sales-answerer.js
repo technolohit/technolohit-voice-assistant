@@ -4,6 +4,10 @@
 
 import { retrieveRagContext } from "./rag-client.js";
 import { buildSalesProductExplanation, salesPlaybookByProduct } from "./sales-policy.js";
+import {
+  detectProductIdFromCallerText,
+  isInterruptionContextSpikeEnabled
+} from "./interruption-recovery.js";
 
 const PRICE_PATTERN = /\b(preis|kosten|euro|€|garantie|garantiert|implementierung in \d)\b/i;
 const GUARANTEE_PATTERN = /\b(garantie|garantiert|100\s*%|ranking.?garantie)\b/i;
@@ -82,7 +86,10 @@ export async function answerProductQuestionWithRag({
   productId,
   dialogueSummary = ""
 }) {
-  const fallback = playbookFallback(productId, callerText);
+  const callerProductId = detectProductIdFromCallerText(callerText);
+  const effectiveProductId =
+    isInterruptionContextSpikeEnabled(config) && callerProductId ? callerProductId : productId;
+  const fallback = playbookFallback(effectiveProductId, callerText);
 
   if (!isRagSalesAnswererEnabled(config)) {
     return { ...fallback, confidence: "medium" };

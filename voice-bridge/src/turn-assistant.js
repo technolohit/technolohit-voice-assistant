@@ -50,6 +50,15 @@ import {
   isPlaybackCancelSpikeEnabled,
   logPlaybackStarted
 } from "./playback-session.js";
+import {
+  applyInterruptionTurnRepair,
+  buildInterruptionContext,
+  detectInterruptionSignals,
+  isInterruptionContextSpikeEnabled,
+  logInterruptionRecorded,
+  productSelectionIntentForId,
+  recordInterruptionContext
+} from "./interruption-recovery.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -1447,6 +1456,32 @@ async function maybeCreateProductResponse(config, ctx, turnIndex, callerText, an
   const productState = ensureProductState(turnState(ctx));
   const intent = analysis?.detectedIntent ?? "unknown";
 
+  if (isInterruptionContextSpikeEnabled(config) && ctx._interruptionRecovery?.switchToProductId) {
+    const switchId = ctx._interruptionRecovery.switchToProductId;
+    const forcedIntent =
+      ctx._interruptionRecovery.forcedIntent || productSelectionIntentForId(switchId);
+    const signals = detectInterruptionSignals(callerText);
+    delete ctx._interruptionRecovery;
+
+    if (signals.productQuestion) {
+      const explanation = buildSalesProductExplanation(switchId);
+      const suffix = buildCustomerTypeResponse("unknown", switchId);
+      return {
+        text: normalizeAssistantResponse(`${explanation} ${suffix}`, config),
+        detectedIntent: "sales_product_explanation",
+        finalResponseTemplate: "sales_policy",
+        product: productState
+      };
+    }
+
+    return {
+      text: buildCompactProductInterestResponse(config, switchId),
+      detectedIntent: forcedIntent,
+      finalResponseTemplate: "product_intake",
+      product: productState
+    };
+  }
+
   if (intent === "product_overview_request") {
     productState.overviewOffered = true;
     productState.awaitingSelection = true;
@@ -1479,6 +1514,37 @@ async function maybeCreateProductResponse(config, ctx, turnIndex, callerText, an
   const activeSalesDialogue = ["sales_customer_type", "sales_need_discovery", "sales_handoff_offer", "handoff_choice_requested"].includes(
     productState.productDialogueState
   );
+  if (productId && activeSalesDialogue) {
+    if (
+      isInterruptionContextSpikeEnabled(config) &&
+      productId !== productState.selectedProduct
+    ) {
+      const previousProduct = productState.selectedProduct;
+      setSelectedProduct(productState, catalog, productId, intent, turnIndex);
+      productState.handoffChoice = "none";
+      console.log(
+        `[voice-assistant] interruption active_sales_product_switch product_intake_product=${productId} from_product=${previousProduct ?? "none"} turn_index=${turnIndex}`
+      );
+      const signals = detectInterruptionSignals(callerText);
+      if (signals.productQuestion) {
+        const explanation = buildSalesProductExplanation(productId);
+        const suffix = buildCustomerTypeResponse("unknown", productId);
+        return {
+          text: normalizeAssistantResponse(`${explanation} ${suffix}`, config),
+          detectedIntent: "sales_product_explanation",
+          finalResponseTemplate: "sales_policy",
+          product: productState
+        };
+      }
+      return {
+        text: buildCompactProductInterestResponse(config, productId),
+        detectedIntent: intent,
+        finalResponseTemplate: "product_intake",
+        product: productState
+      };
+    }
+  }
+
   if (productId && !activeSalesDialogue) {
     setSelectedProduct(productState, catalog, productId, intent, turnIndex);
     productState.handoffChoice = "none";
@@ -4061,7 +4127,7 @@ async function synthesizeAssistantResponse(config, ctx, turnIndex, text, timings
   return { wavPath, slinPath, pcm };
 }
 
-async function playAssistantAudio(config, ctx, socket, playback, turnIndex, assistantAudio, timings) {
+async function playAssistantAudio(config, ctx, socket, playback, turnIndex, assistantAudio, timings, options = {}) {
   if (ctx.closed || !socket.writable) return null;
 
   playback.stopSilenceWriter(ctx);
@@ -4086,6 +4152,16 @@ async function playAssistantAudio(config, ctx, socket, playback, turnIndex, assi
       );
     } finally {
       finalizePlaybackSession(config, ctx, session);
+      if (stats?.cancelled && isInterruptionContextSpikeEnabled(config)) {
+        const interruptionContext = buildInterruptionContext(config, ctx, {
+          session,
+          assistantText: options?.assistantText ?? ctx.lastAssistantResponseText ?? "",
+          turnIndex,
+          productState: ensureProductState(turnState(ctx))
+        });
+        recordInterruptionContext(ctx, interruptionContext);
+        logInterruptionRecorded(config, ctx, interruptionContext);
+      }
       detachActivePlaybackSession(ctx);
     }
   } else {
@@ -4334,6 +4410,17 @@ async function runAssistantConversation(config, ctx, socket, playback) {
       const intake = ensureIntakeState(state);
       const product = ensureProductState(state);
 
+      const interruptionRepair = applyInterruptionTurnRepair({
+        config,
+        ctx,
+        callerText,
+        productState: product,
+        analysis
+      });
+      const effectiveAnalysis = interruptionRepair.repaired
+        ? interruptionRepair.analysis
+        : analysis;
+
       if (callerText && shouldWarmGoodbyeOnClearClose(callerText, intake)) {
         const closeText = normalizeAssistantResponse(POST_CAPTURE_WARM_GOODBYE_TEXT, config);
         logClosingDecision(turnIndex, false, "clear_close");
@@ -4367,7 +4454,8 @@ async function runAssistantConversation(config, ctx, socket, playback) {
       const businessFallbackMatch = Boolean(matchBusinessFallbackFromText(callerText));
       const usable =
         permissionFirst ||
-        analysis.transcriptQuality === "clear" ||
+        effectiveAnalysis.transcriptQuality === "clear" ||
+        interruptionRepair.repaired ||
         awaitingSoftIntakeInput ||
         awaitingProductInput ||
         isPostCompletionBusinessFallbackEligible(intake) ||
@@ -4412,11 +4500,14 @@ async function runAssistantConversation(config, ctx, socket, playback) {
         callerText,
         state.history,
         timings,
-        analysis
+        effectiveAnalysis
       );
       const assistantText = assistantResult.text;
+      ctx.lastAssistantResponseText = assistantText;
       const assistantAudio = await synthesizeAssistantResponse(config, ctx, turnIndex, assistantText, timings);
-      await playAssistantAudio(config, ctx, socket, playback, turnIndex, assistantAudio, timings);
+      await playAssistantAudio(config, ctx, socket, playback, turnIndex, assistantAudio, timings, {
+        assistantText
+      });
 
       state.history.push({ caller: callerText, assistant: assistantText });
       turnsCompleted = turnIndex;
@@ -4553,6 +4644,15 @@ export async function processTextTurn({
   const product = ensureProductState(assistantState);
   const analysis = analyzeCallerTranscript(callerText, minChars);
 
+  const interruptionRepair = applyInterruptionTurnRepair({
+    config,
+    ctx,
+    callerText,
+    productState: product,
+    analysis
+  });
+  const effectiveAnalysis = interruptionRepair.repaired ? interruptionRepair.analysis : analysis;
+
   if (callerText && shouldWarmGoodbyeOnClearClose(callerText, intake)) {
     const closeText = normalizeAssistantResponse(POST_CAPTURE_WARM_GOODBYE_TEXT, config);
     logClosingDecision(turnIndexNum, false, "clear_close");
@@ -4605,7 +4705,8 @@ export async function processTextTurn({
   const businessFallbackMatch = Boolean(matchBusinessFallbackFromText(callerText));
   const usable =
     permissionFirst ||
-    analysis.transcriptQuality === "clear" ||
+    effectiveAnalysis.transcriptQuality === "clear" ||
+    interruptionRepair.repaired ||
     awaitingSoftIntakeInput ||
     awaitingProductInput ||
     isPostCompletionBusinessFallbackEligible(intake) ||
@@ -4689,7 +4790,7 @@ export async function processTextTurn({
     callerText,
     assistantState.history,
     timings,
-    analysis
+    effectiveAnalysis
   );
   assistantState.history.push({ caller: callerText, assistant: result.text });
   const metadata = buildQaTurnMetadata({
