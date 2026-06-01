@@ -56,7 +56,8 @@ export async function streamPcmToSocket(socket, pcm, config, label, options = {}
   return { frames, bytes, cancelled, cancelReason: playbackSession?.cancelReason ?? null };
 }
 
-export async function playGreetingAndKeepalive(config, ctx, socket) {
+export async function playGreetingAndKeepalive(config, ctx, socket, options = {}) {
+  const skipAssistant = Boolean(options?.skipAssistant);
   if (ctx.greetingHandled) return;
   ctx.greetingHandled = true;
 
@@ -98,11 +99,13 @@ export async function playGreetingAndKeepalive(config, ctx, socket) {
 
     await streamPcmToSocket(socket, resolved.pcm, config, "greeting");
     startSilenceWriter(config, ctx, socket);
-    startOneTurnAssistant(config, ctx, socket, {
-      streamPcmToSocket,
-      startSilenceWriter,
-      stopSilenceWriter
-    });
+    if (!skipAssistant) {
+      startOneTurnAssistant(config, ctx, socket, {
+        streamPcmToSocket,
+        startSilenceWriter,
+        stopSilenceWriter
+      });
+    }
   } catch (err) {
     console.error(`[voice-bridge] greeting playback failed: ${err.message}`);
     await persist.onError(config, ctx, err, { phase: "greeting_playback" });

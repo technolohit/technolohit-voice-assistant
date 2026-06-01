@@ -21,6 +21,13 @@ import {
   isPlaybackCancelSpikeEnabled,
   monitorInboundDuringPlayback
 } from "./playback-session.js";
+import {
+  selectLiveCallHandler,
+  startLiveCanaryCall,
+  handleLiveCanaryInboundFrame,
+  finishLiveCanaryCall,
+  shouldCaptureAssistantTurnAudio
+} from "./v4/live-audiosocket-handler.js";
 
 function normalizePhone(value) {
   const raw = String(value ?? "").trim();
@@ -103,6 +110,8 @@ export function createAudioSocketServer(config) {
       recording: null,
       assistantTurn: null,
       postCallTriggered: false,
+      callHandler: "v3",
+      v4LiveRuntime: null,
       buffer: Buffer.alloc(0)
     };
 
@@ -115,6 +124,13 @@ export function createAudioSocketServer(config) {
       if (ctx.closed) return;
       ctx.closed = true;
       stopSilenceWriter(ctx);
+      if (ctx.callHandler === "v4_canary") {
+        try {
+          finishLiveCanaryCall(config, ctx, reason);
+        } catch (err) {
+          console.error(`[v4-live] call_end_error error=${err?.message ?? String(err)}`);
+        }
+      }
       await persist.onCallEnded(config, ctx, {
         closeReason: reason,
         framesReceived: ctx.framesReceived,
@@ -186,9 +202,22 @@ function handleFrame(config, ctx, socket, type, payload) {
       try {
         await persist.onConnectionOpen(config, ctx);
         await persist.onCallStarted(config, ctx);
-        await playGreetingAndKeepalive(config, ctx, socket);
+
+        const selection = selectLiveCallHandler(config, ctx);
+        ctx.callHandler = selection.handler;
+        console.log(
+          `[voice-bridge] call_handler selected=${selection.handler} reason=${selection.reason} bridge_call_id=${ctx.bridgeCallId ?? "pending"} call_session_id=${ctx.callSessionId ?? "pending"}`
+        );
+
+        if (selection.handler === "v4_canary" && selection.runtime) {
+          await startLiveCanaryCall(config, ctx, socket, selection.runtime);
+        } else {
+          ctx.callHandler = "v3";
+          await playGreetingAndKeepalive(config, ctx, socket);
+        }
       } catch (err) {
         void persist.onError(config, ctx, err, { phase: "uuid_setup" });
+        ctx.callHandler = "v3";
         startSilenceWriter(config, ctx, socket);
       }
     })();
@@ -200,8 +229,12 @@ function handleFrame(config, ctx, socket, type, payload) {
     ctx.inboundAudioFrames += 1;
     ctx.bytesReceived += payload.length;
     captureInboundAudio(config, ctx, payload);
-    captureAssistantTurnAudio(config, ctx, payload);
-    if (isPlaybackCancelSpikeEnabled(config)) {
+    if (ctx.callHandler === "v4_canary") {
+      handleLiveCanaryInboundFrame(config, ctx, socket, payload);
+    } else if (shouldCaptureAssistantTurnAudio(ctx)) {
+      captureAssistantTurnAudio(config, ctx, payload);
+    }
+    if (isPlaybackCancelSpikeEnabled(config) && ctx.callHandler !== "v4_canary") {
       const activePlayback = getActivePlaybackSession(ctx);
       if (activePlayback) {
         monitorInboundDuringPlayback(config, ctx, activePlayback, payload);

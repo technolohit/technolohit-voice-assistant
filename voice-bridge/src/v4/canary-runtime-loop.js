@@ -2,6 +2,7 @@
  * v4 canary runtime loop — test-harness dialogue simulation (Phase 5).
  */
 
+import { loadAgentConfig } from "./agent-config.js";
 import { createRuntimeContext } from "./runtime-context.js";
 import { createAudioSession } from "./audio-session.js";
 import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
@@ -109,6 +110,85 @@ export function createCanaryDialogueRuntime(config, input = {}) {
     runtimeContext,
     qualitySink,
     startResult: started
+  };
+}
+
+/**
+ * Live AudioSocket canary runtime — Phase 10A lifecycle only (no STT/TTS/dialogue loop yet).
+ * Requires env gates + allowlist match before audiosocket.js selects v4_canary handler.
+ */
+export function createLiveCanaryRuntime(config, ctx) {
+  if (!canPrepareV4CanaryMedia(config)) {
+    return {
+      ok: false,
+      handler: "v3",
+      reason: "v4_canary_prerequisites_missing"
+    };
+  }
+
+  const agentConfigResult = loadAgentConfig(config);
+  if (!agentConfigResult.ok) {
+    return {
+      ok: false,
+      handler: "v3",
+      reason: "agent_config_unavailable",
+      error: agentConfigResult.error ?? "agent_config_unavailable"
+    };
+  }
+
+  const route = {
+    runtime: "v4",
+    active: true,
+    stub: false,
+    canaryReady: true,
+    bargeInReady: Boolean(config?.v4?.bargeInEnabled),
+    dialogueReady: false,
+    reason: "v4_live_canary_phase10a"
+  };
+
+  const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
+  const callSessionId = ctx?.callSessionId ?? ctx?.call_session_id ?? null;
+
+  const runtimeContext = createRuntimeContext(
+    config,
+    {
+      bridgeCallId,
+      callSessionId,
+      liveCanary: true
+    },
+    route
+  );
+
+  if (!runtimeContext.agentConfig?.ok) {
+    return {
+      ok: false,
+      handler: "v3",
+      reason: "agent_config_unavailable",
+      error: runtimeContext.agentConfig?.error ?? "agent_config_unavailable"
+    };
+  }
+
+  const audioSession = createAudioSession({
+    bridgeCallId,
+    callSessionId: callSessionId ?? runtimeContext.memory?.call_session_id ?? null,
+    memory: runtimeContext.memory,
+    stateMachine: runtimeContext.stateMachine
+  });
+
+  return {
+    ok: true,
+    handler: "v4_canary",
+    active: true,
+    dropCall: false,
+    reason: route.reason,
+    phase: "phase10a_live_lifecycle",
+    liveCanary: true,
+    config,
+    runtimeContext,
+    audioSession,
+    inboundFrameCount: 0,
+    inboundBytes: 0,
+    startedAt: null
   };
 }
 

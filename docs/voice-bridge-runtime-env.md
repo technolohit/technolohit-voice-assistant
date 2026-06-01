@@ -50,7 +50,30 @@ VOICE_V4_TTS_PROVIDER=openai
 VOICE_V4_TTS_CACHE_ENABLED=true
 ```
 
-`VOICE_V4_CANARY_ENABLED=true` plus `VOICE_RUNTIME_VERSION=v4` and `VOICE_V4_REALTIME_ENABLED=true` only prepares a **test-harness media context** in Phase 3. It does **not** take over live AudioSocket call handling.
+`VOICE_V4_CANARY_ENABLED=true` plus `VOICE_RUNTIME_VERSION=v4` and `VOICE_V4_REALTIME_ENABLED=true` prepares v4 stub/harness contexts in tests. **Live PSTN routing** requires Phase 10A gates below (all default off).
+
+Phase 10A live AudioSocket canary gates (default off; production remains v3):
+
+```env
+VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=false
+VOICE_V4_LIVE_CANARY_ALLOWLIST=
+```
+
+Live v4 canary on AudioSocket requires **all** of:
+
+- `VOICE_RUNTIME_VERSION=v4`
+- `VOICE_V4_REALTIME_ENABLED=true`
+- `VOICE_V4_CANARY_ENABLED=true`
+- `VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=true`
+- Non-empty `VOICE_V4_LIVE_CANARY_ALLOWLIST` with an entry matching `bridge_call_id` or `external_call_id` (prefix/substring/equality — no phone numbers in allowlist)
+
+If any gate fails, the call **fail-closes to v3** (`turn-assistant`). Phase 10A adds lifecycle logs only (`[v4-live]`); STT/TTS/dialogue loop arrives in Phase 10B+.
+
+Example QA allowlist (use bridge id prefix, not DID):
+
+```env
+VOICE_V4_LIVE_CANARY_ALLOWLIST=qa-canary
+```
 
 Phase 4 barge-in flags (canary/test-harness only; **not** production v4):
 

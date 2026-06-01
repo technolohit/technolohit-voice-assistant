@@ -129,6 +129,14 @@ export function loadConfig() {
   );
   const v4BargeInMinPlaybackMs = Math.max(0, readInt("VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS", 120));
   const v4BargeInCancelTimeoutMs = Math.max(50, readInt("VOICE_V4_BARGE_IN_CANCEL_TIMEOUT_MS", 400));
+  const v4LiveAudioSocketEnabled = readBool("VOICE_V4_LIVE_AUDIOSOCKET_ENABLED", false);
+  const v4LiveCanaryAllowlistRaw = String(process.env.VOICE_V4_LIVE_CANARY_ALLOWLIST ?? "").trim();
+  const v4LiveCanaryAllowlist = v4LiveCanaryAllowlistRaw
+    ? v4LiveCanaryAllowlistRaw
+        .split(/[,;\s]+/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    : [];
   const tenantId = String(process.env.VOICE_TENANT_ID ?? "technolohit").trim();
   const agentId = String(process.env.VOICE_AGENT_ID ?? "main_voice_sales").trim();
   const agentConfigPath = String(process.env.VOICE_AGENT_CONFIG_PATH ?? "").trim();
@@ -230,6 +238,8 @@ export function loadConfig() {
       bargeInSpeechFrames: v4BargeInSpeechFrames,
       bargeInMinPlaybackMs: v4BargeInMinPlaybackMs,
       bargeInCancelTimeoutMs: v4BargeInCancelTimeoutMs,
+      liveAudioSocketEnabled: v4LiveAudioSocketEnabled,
+      liveCanaryAllowlist: v4LiveCanaryAllowlist,
       tenantId,
       agentId,
       agentConfigPath
