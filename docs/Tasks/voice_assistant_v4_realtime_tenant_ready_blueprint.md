@@ -35,16 +35,17 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 2 — Runtime Foundation / Application Layer** |
+| **Current completed phase** | **Phase 3 — Realtime Audio Foundation / Media Layer** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
-| **v4 production status** | **Not enabled** — all v4 flags default off; router delegates to v3 |
-| **Next implementation phase** | **Phase 3 — Realtime Audio Foundation / Media Layer** |
+| **v4 production status** | **Not enabled** — canary/media flags default off; router delegates to v3 |
+| **Next implementation phase** | **Phase 4 — Barge-In And Interruption Runtime Implementation** |
 
 Completed foundation work (do not re-implement):
 
 - Phase 0 / 0B / 0C accepted for foundation planning (AudioSocket playback cancel + interruption recovery QA)
 - Phase 1 tenant-ready data/config foundation (tagged `v1.4.0`)
-- Phase 2 runtime foundation: `CallSessionMemory`, state machine, runtime router/context, quality event builders, lead validator, RAG scope guardrails, agent config helpers
+- Phase 2 runtime foundation: `CallSessionMemory`, state machine, runtime router/context, quality event builders, lead validator, RAG scope guardrails, agent config helpers (tagged `v1.5.0`)
+- Phase 3 media foundation: audio session, VAD/endpointing, STT/TTS adapter interfaces, TTS phrase cache, canary-safe AudioSocket routing skeleton, media quality event builders
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -60,8 +61,8 @@ Phase numbering in this blueprint:
 Phase 0  — Architecture And Runtime Feasibility
 Phase 1  — Tenant-Ready Data And Config Foundation
 Phase 2  — Runtime Foundation / Application Layer          [completed]
-Phase 3  — Realtime Audio Foundation / Media Layer         [next]
-Phase 4  — Barge-In And Interruption Runtime Implementation
+Phase 3  — Realtime Audio Foundation / Media Layer         [completed]
+Phase 4  — Barge-In And Interruption Runtime Implementation [next]
 Phase 5  — Live Dialogue Orchestrator Integration
 Phase 6  — RAG Product/Sales Q&A Integration
 Phase 7  — Lead Policy, Post-Call Reliability, And Privacy
@@ -930,7 +931,8 @@ Progress summary:
 - [x] Successful: Phase 0 / 0B / 0C accepted for foundation planning.
 - [x] Successful: Phase 1 tenant-ready foundation implemented (tag `v1.4.0`).
 - [x] Successful: Phase 2 runtime foundation / application layer implemented.
-- [ ] Successful: Phase 3 realtime audio foundation / media layer started.
+- [x] Successful: Phase 3 realtime audio foundation / media layer implemented.
+- [ ] Successful: Phase 4 barge-in and interruption runtime implementation started.
 
 ### Phase 0: Architecture And Runtime Feasibility
 
@@ -975,17 +977,20 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 3: Realtime Audio Foundation / Media Layer
 
-**Status: next implementation phase.**
+**Status: implementation complete in repo; production still on v3; canary is test-harness only.**
 
-- [ ] Successful: Create v4 audio session abstraction (beyond stub).
-- [ ] Successful: Add VAD/endpointing module (beyond stub).
-- [ ] Successful: Add streaming STT adapter or low-latency incremental STT adapter.
-- [ ] Successful: Add streaming/low-latency TTS adapter.
-- [ ] Successful: Add TTS cache for common prompts.
-- [ ] Successful: Measure STT/TTS/endpointing latency.
-- [ ] Successful: Wire audiosocket to v4 runtime behind explicit v4/canary flags (safe; default off).
+- [x] Successful: Create v4 audio session abstraction (beyond stub).
+- [x] Successful: Add VAD/endpointing module (beyond stub).
+- [x] Successful: Add streaming STT adapter or low-latency incremental STT adapter.
+- [x] Successful: Add streaming/low-latency TTS adapter.
+- [x] Successful: Add TTS cache for common prompts.
+- [x] Successful: Latency metric hooks for STT/TTS/endpointing (live pipeline measurement → Phase 5/8).
+- [x] Successful: Wire audiosocket to v4 runtime behind explicit v4/canary flags (safe; default off).
+- [x] Successful: Phase 3 realtime audio foundation report added.
 
 ### Phase 4: Barge-In And Interruption Runtime Implementation
+
+**Status: next implementation phase.**
 
 - [ ] Successful: Detect caller speech during assistant playback (production path).
 - [ ] Successful: Stop/cancel playback safely using `VOICE_V4_BARGE_IN_ENABLED` (not Phase 0B/0C spike flags).
@@ -1084,8 +1089,9 @@ Current project status (see also **Current Project Status** at top):
 - Server capacity: enough for initial v4 tests; operational concurrency target still pending.
 - RAG readiness: ready via host-local URL `http://127.0.0.1:8080` from voice-bridge; Docker DNS `technolohit-rag-api` is not valid in the current host-network setup.
 - Phase 1 foundation: **implementation complete in repo** (tag `v1.4.0`) — migrations pending operator apply.
-- Phase 2 runtime foundation: **implementation complete in repo** — production still on v3.
-- **Next implementation phase: Phase 3 — Realtime Audio Foundation / Media Layer.**
+- Phase 2 runtime foundation: **implementation complete in repo** (tag `v1.5.0`) — production still on v3.
+- Phase 3 media foundation: **implementation complete in repo** — canary/test-harness only; production still on v3.
+- **Next implementation phase: Phase 4 — Barge-In And Interruption Runtime Implementation.**
 - Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1

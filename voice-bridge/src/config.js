@@ -111,6 +111,14 @@ export function loadConfig() {
   const v4BargeInEnabled = readBool("VOICE_V4_BARGE_IN_ENABLED", false);
   const v4StreamingSttEnabled = readBool("VOICE_V4_STREAMING_STT_ENABLED", false);
   const v4StreamingTtsEnabled = readBool("VOICE_V4_STREAMING_TTS_ENABLED", false);
+  const v4CanaryEnabled = readBool("VOICE_V4_CANARY_ENABLED", false);
+  const v4VadRmsThreshold = Math.max(1, readInt("VOICE_V4_VAD_RMS_THRESHOLD", 450));
+  const v4VadSpeechFrames = Math.max(1, readInt("VOICE_V4_VAD_SPEECH_FRAMES", 3));
+  const v4EndpointSilenceMs = Math.max(0, readInt("VOICE_V4_ENDPOINT_SILENCE_MS", 600));
+  const v4EndpointMinSpeechMs = Math.max(0, readInt("VOICE_V4_ENDPOINT_MIN_SPEECH_MS", 240));
+  const v4SttProvider = String(process.env.VOICE_V4_STT_PROVIDER ?? "openai").trim().toLowerCase();
+  const v4TtsProvider = String(process.env.VOICE_V4_TTS_PROVIDER ?? "openai").trim().toLowerCase();
+  const v4TtsCacheEnabled = readBool("VOICE_V4_TTS_CACHE_ENABLED", true);
   const tenantId = String(process.env.VOICE_TENANT_ID ?? "technolohit").trim();
   const agentId = String(process.env.VOICE_AGENT_ID ?? "main_voice_sales").trim();
   const agentConfigPath = String(process.env.VOICE_AGENT_CONFIG_PATH ?? "").trim();
@@ -200,6 +208,14 @@ export function loadConfig() {
       bargeInEnabled: v4BargeInEnabled,
       streamingSttEnabled: v4StreamingSttEnabled,
       streamingTtsEnabled: v4StreamingTtsEnabled,
+      canaryEnabled: v4CanaryEnabled,
+      vadRmsThreshold: v4VadRmsThreshold,
+      vadSpeechFrames: v4VadSpeechFrames,
+      endpointSilenceMs: v4EndpointSilenceMs,
+      endpointMinSpeechMs: v4EndpointMinSpeechMs,
+      sttProvider: v4SttProvider,
+      ttsProvider: v4TtsProvider,
+      ttsCacheEnabled: v4TtsCacheEnabled,
       tenantId,
       agentId,
       agentConfigPath

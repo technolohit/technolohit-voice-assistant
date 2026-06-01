@@ -127,6 +127,28 @@ export const buildLeadCreatedEvent = typedBuilder("lead_created", { eventStage: 
 export const buildLeadSkippedEvent = typedBuilder("lead_skipped", { eventStage: "lead" });
 export const buildRuntimeErrorEvent = typedBuilder("runtime_error", { eventStage: "runtime" });
 
+export const buildVadSpeechStartEvent = typedBuilder("vad_speech_start", {
+  eventStage: "vad",
+  metricName: "vad_speech_start_ms"
+});
+export const buildVadEndpointDetectedEvent = typedBuilder("vad_endpoint_detected", {
+  eventStage: "vad",
+  metricName: "endpoint_ms"
+});
+export const buildSttPartialEvent = typedBuilder("stt_partial", { eventStage: "stt" });
+export const buildSttFinalEvent = typedBuilder("stt_final", {
+  eventStage: "stt",
+  metricName: "stt_final_ms"
+});
+export const buildTtsFirstChunkEvent = typedBuilder("tts_first_chunk", {
+  eventStage: "tts",
+  metricName: "tts_first_chunk_ms"
+});
+export const buildAudioSessionClosedEvent = typedBuilder("audio_session_closed", {
+  eventStage: "session",
+  metricName: "session_duration_ms"
+});
+
 export function buildQualityEventFromState(state, base = {}) {
   return buildQualityEventInput({
     ...base,
