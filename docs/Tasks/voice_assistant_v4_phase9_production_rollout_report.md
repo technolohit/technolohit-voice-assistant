@@ -1,6 +1,6 @@
 # TechnoloHit Voice Assistant v4 — Phase 9 Production Rollout Preparation Report
 
-Date: 2026-06-01  
+Date: 2026-06-01
 Status: **Ready for Sysadmin migration/deploy dry run** (documentation + runbook; **production v4 NOT enabled**)  
 Blueprint: [voice_assistant_v4_realtime_tenant_ready_blueprint.md](./voice_assistant_v4_realtime_tenant_ready_blueprint.md)  
 Prior phase: Phase 8 observability/quality analytics (tag `v1.11.0`)
@@ -136,10 +136,54 @@ Additional tracked items: ARI/ExternalMedia fallback unconfirmed; overload behav
 
 **Not ready** for production v4 enablement until blockers above are explicitly approved and supervised canary/live QA checklist (Phase 9 rollout section) is completed.
 
+## Sysadmin dry run result
+
+Date: 2026-06-01
+Status: **PASSED with warnings**
+
+Summary:
+
+- Previous voice-bridge image recorded: `thnhit/technhvoice:voice-bridge-v1.3.4`
+- Pre-migration DB backup created:
+  `/opt/technolohit-voice/backups/phase9-v1.11.0-20260601T223551Z/technolohit_growth_before_phase9_v1.11.0.dump`
+- Migration SQL artifact gate passed after fetching SQL files from immutable tag `v1.11.0`.
+- Voice migrations `006`-`009` applied successfully.
+- Knowledge migration `003` applied successfully.
+- `voice.call_quality_events` table exists.
+- v4 tenant/agent/version columns verified on voice tables.
+- `knowledge.documents.agent_id` and `knowledge.retrieval_logs.agent_id` verified.
+- voice-bridge deployed successfully on image `thnhit/technhvoice:voice-bridge-v1.11.0`.
+- Production runtime remained v3:
+  - `VOICE_RUNTIME_VERSION=v3`
+  - `VOICE_V4_REALTIME_ENABLED=false`
+  - `VOICE_V4_CANARY_ENABLED=false`
+  - `VOICE_V4_BARGE_IN_ENABLED=false`
+  - `VOICE_V4_STREAMING_STT_ENABLED=false`
+  - `VOICE_V4_STREAMING_TTS_ENABLED=false`
+  - `VOICE_RAG_ENABLED=false`
+  - `VOICE_RAG_SALES_ANSWERER_ENABLED=false`
+- `VOICE_RAG_API_URL` corrected to `http://127.0.0.1:8080`.
+- RAG health passed through host-local URL.
+- One normal v3 test call completed successfully.
+- `voice.call_quality_events` stayed at `0` before and after the v3 test call.
+- Rollback image recorded: `thnhit/technhvoice:voice-bridge-v1.3.4`.
+
+Warnings / follow-ups:
+
+1. Startup log shows `selected=v3 v4_active=true reason=default_v3`.
+   In `v1.11.0`, this means the selected route is active and selected runtime is v3. It does **not** mean v4 realtime/canary is enabled. Operationally, trust `selected=v3` and the explicit `VOICE_V4_*` flags. A future code cleanup should rename this log field to avoid confusion.
+2. `rag-api` was not co-deployed to `rag-api-v1.11.0`; it remains on the previous image. This is acceptable for the v3-safe dry run because voice-bridge RAG remains disabled. Co-deploy or upgrade RAG before any v4 RAG/canary validation that depends on v1.11.0 RAG behavior.
+3. A transcript verification query used `role`, but `voice.call_transcripts` uses speaker/text columns in the current schema. This was a verification-query issue only and did not affect runtime or migrations.
+4. Docker Compose emitted an orphan warning for `technolohit-rag-api`; no cleanup was performed during the dry run.
+
+Dry run conclusion:
+
+The production host is now schema-ready for v4 foundations and running `voice-bridge-v1.11.0` with production v4 disabled. This does **not** approve production v4 enablement.
+
 ## Next steps after operator dry run
 
-1. Apply migrations per runbook.
-2. Deploy `voice-bridge-v1.11.0` (+ optional `rag-api-v1.11.0`) via GitHub Actions with `verify_v3_qa_env=true`.
-3. Run acceptance checklist.
-4. Optional: controlled canary env on **non-production** test host only (runbook section 10).
-5. Post-rollout quality review after any future v4 flag change — not in this phase.
+1. Keep production on v3 with all v4 flags off.
+2. Decide whether to co-deploy `rag-api-v1.11.0` before future v4/RAG validation.
+3. Keep tracking production-v4 blockers: retention approval, backup encryption, QA route, overload fallback, OpenAI streaming limits.
+4. Plan the next supervised canary step only after explicit approval.
+5. Future code cleanup: rename the `v4_active` startup log field so v3 operation is not operationally ambiguous.

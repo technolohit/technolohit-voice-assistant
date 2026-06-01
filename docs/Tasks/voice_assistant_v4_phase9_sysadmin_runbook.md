@@ -334,6 +334,17 @@ docker exec technolohit-voice-bridge sh -lc \
 
 All `VOICE_V4_*` must be `false`; `VOICE_RUNTIME_VERSION=v3`.
 
+Known v1.11.0 log wording:
+
+```text
+[voice-runtime] selected=v3 v4_active=true reason=default_v3
+```
+
+For this release, `v4_active=true` in that log line means the selected route object is
+active, while `selected=v3` confirms the runtime is v3. It does **not** mean v4
+realtime/canary is enabled. Treat the explicit env flags above as the source of
+truth. A future code cleanup should rename this log field.
+
 ---
 
 ## 10. Verify no v4 quality DB writes while v3 active
