@@ -205,13 +205,14 @@ test("markLeadCandidate does not set lead_ready", () => {
 });
 
 test("quality event sink buffers redacts and flushes v4-only", async () => {
-  withEnv(dialogueEnv(), () => {
+  await withEnv(dialogueEnv(), async () => {
     const config = loadConfig();
     const inserts = [];
     const sink = createQualityEventSink({
       v4PathActive: true,
       insertFn: async (event) => {
         inserts.push(event);
+        return { ok: true, reason: "inserted" };
       }
     });
     const bad = sink.bufferQualityEvent({
@@ -223,22 +224,20 @@ test("quality event sink buffers redacts and flushes v4-only", async () => {
     assert.equal(bad.ok, true);
     assert.equal(sink.getBufferedQualityEvents()[0].payload.caller_phone, "[redacted]");
 
-    const v3Sink = createQualityEventSink({ v4PathActive: false, insertFn: async () => {} });
+    const v3Sink = createQualityEventSink({ v4PathActive: false, insertFn: async () => ({ ok: true }) });
     v3Sink.bufferQualityEvent({
       tenantId: "t",
       agentId: "a",
       eventType: "turn_started",
       payload: {}
     });
-    return v3Sink.flushQualityEvents().then((v3Flush) => {
-      assert.equal(v3Flush.ok, false);
-      assert.equal(v3Flush.reason, "v3_path_no_flush");
-      return sink.flushQualityEvents().then((v4Flush) => {
-        assert.equal(v4Flush.ok, true);
-        assert.equal(v4Flush.flushed, 1);
-        assert.equal(isQualityEventSinkWritable(sink, config), true);
-      });
-    });
+    const v3Flush = await v3Sink.flushQualityEvents();
+    assert.equal(v3Flush.ok, false);
+    assert.equal(v3Flush.reason, "v3_path_no_flush");
+    const v4Flush = await sink.flushQualityEvents({ v4PathActive: true });
+    assert.equal(v4Flush.ok, true);
+    assert.equal(v4Flush.flushed, 1);
+    assert.equal(isQualityEventSinkWritable(sink, config), true);
   });
 });
 
@@ -267,7 +266,7 @@ test("canary loop finalize turn completes without drop", async () => {
     const finalized = await finalizeCanaryTurn(runtime);
     assert.equal(finalized.ok, true);
     assert.equal(finalized.stateMachine.state, V4_STATES.LISTENING);
-    const closed = closeCanaryDialogueRuntime(runtime);
+    const closed = await closeCanaryDialogueRuntime(runtime);
     assert.equal(closed.ok, true);
     assert.equal(closed.stateMachine.state, V4_STATES.COMPLETED);
   });

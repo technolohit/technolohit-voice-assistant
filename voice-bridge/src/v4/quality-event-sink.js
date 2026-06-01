@@ -3,6 +3,7 @@
  */
 
 import { validateQualityEventInput, redactQualityPayload } from "./quality-events.js";
+import { enrichQualityEventForPersistence } from "./quality-persistence.js";
 
 export function createQualityEventSink({
   v4PathActive = false,
@@ -11,11 +12,13 @@ export function createQualityEventSink({
 } = {}) {
   const buffer = [];
   const max = Math.max(1, Number(maxBuffer) || 256);
+  let lastFlushFailures = [];
 
   return {
     v4PathActive: Boolean(v4PathActive),
     insertFn: typeof insertFn === "function" ? insertFn : null,
     bufferedCount: () => buffer.length,
+    lastFlushFailures: () => lastFlushFailures.map((item) => ({ ...item })),
     bufferQualityEvent(event) {
       if (!event?.eventType) {
         return { ok: false, reason: "invalid_event" };
@@ -37,18 +40,66 @@ export function createQualityEventSink({
     async flushQualityEvents(options = {}) {
       const forceV4 = options.v4PathActive ?? this.v4PathActive;
       if (!forceV4) {
-        return { ok: false, reason: "v3_path_no_flush", flushed: 0, discarded: buffer.length };
+        return {
+          ok: false,
+          reason: "v3_path_no_flush",
+          flushed: 0,
+          failed: 0,
+          discarded: buffer.length,
+          events: []
+        };
       }
+
       const events = buffer.splice(0, buffer.length);
+      lastFlushFailures = [];
+
       if (!this.insertFn) {
-        return { ok: true, flushed: 0, memory_only: true, events };
+        return {
+          ok: true,
+          flushed: 0,
+          failed: 0,
+          memory_only: true,
+          events
+        };
       }
+
       const inserted = [];
       for (const event of events) {
-        await this.insertFn(event);
-        inserted.push(event.eventType);
+        const enriched = enrichQualityEventForPersistence(event, {
+          persistMetadata: options.persistMetadata ?? null,
+          config: options.config ?? null,
+          agentConfig: options.agentConfig ?? null
+        });
+        try {
+          const result = await this.insertFn(enriched);
+          if (result?.ok) {
+            inserted.push(event.eventType);
+          } else {
+            lastFlushFailures.push({
+              eventType: event.eventType,
+              reason: result?.reason ?? "insert_failed",
+              error: result?.error ?? null
+            });
+            if (typeof options.onInsertError === "function") {
+              options.onInsertError({ event: enriched, result });
+            }
+          }
+        } catch (err) {
+          const error = String(err?.message ?? err ?? "insert_exception");
+          lastFlushFailures.push({ eventType: event.eventType, reason: "insert_exception", error });
+          if (typeof options.onInsertError === "function") {
+            options.onInsertError({ event: enriched, error });
+          }
+        }
       }
-      return { ok: true, flushed: inserted.length, events };
+
+      return {
+        ok: lastFlushFailures.length === 0,
+        flushed: inserted.length,
+        failed: lastFlushFailures.length,
+        failures: lastFlushFailures.map((item) => ({ ...item })),
+        events
+      };
     },
     discardQualityEvents() {
       const count = buffer.length;

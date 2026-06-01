@@ -6,6 +6,7 @@ import { createRuntimeContext } from "./runtime-context.js";
 import { createAudioSession } from "./audio-session.js";
 import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
+import { createDbQualityEventInsertFn, flushOrchestratorQualityEvents } from "./quality-persistence.js";
 import {
   createDialogueOrchestrator,
   startCall,
@@ -61,9 +62,14 @@ export function createCanaryDialogueRuntime(config, input = {}) {
   };
 
   const runtimeContext = createRuntimeContext(config, input, route);
+  const insertFn =
+    input.insertFn ??
+    (input.persistQualityToDb
+      ? createDbQualityEventInsertFn(config, { persistMetadata: runtimeContext.persistMetadata })
+      : null);
   const qualitySink = createQualityEventSink({
     v4PathActive: true,
-    insertFn: input.insertFn ?? null
+    insertFn
   });
 
   const orchestrator = createDialogueOrchestrator({
@@ -217,11 +223,20 @@ export async function finalizeCanaryTurn(runtime, { callerText = null } = {}) {
   };
 }
 
-export function closeCanaryDialogueRuntime(runtime) {
+export async function closeCanaryDialogueRuntime(runtime, options = {}) {
   if (!runtime?.orchestrator) {
     return { ok: false, reason: "orchestrator_missing" };
   }
-  return closeCall(runtime.orchestrator);
+  const closed = closeCall(runtime.orchestrator);
+  const qualityFlush = await flushOrchestratorQualityEvents(runtime.orchestrator, {
+    v4PostCallMetadata: closed.postCallHandoff?.summaryMetadata ?? null,
+    forceV4: options.forceV4 ?? true
+  });
+  return {
+    ...closed,
+    qualityFlush,
+    qualitySummary: qualityFlush.summary ?? null
+  };
 }
 
 export function makeSpeechFrame(amplitude = 900) {

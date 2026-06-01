@@ -305,7 +305,7 @@ test("closeCall on canary runtime produces post-call handoff", async () => {
     });
     runtime.orchestrator.callerPhoneNormalized = "+491701234567";
     runtime.orchestrator.memory = phoneMemory();
-    const closed = closeCanaryDialogueRuntime(runtime);
+    const closed = await closeCanaryDialogueRuntime(runtime);
     assert.equal(closed.ok, true);
     assert.ok(closed.postCallHandoff?.summaryMetadata);
     assert.equal(closed.postCallHandoff.privacy_ok, true);

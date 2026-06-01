@@ -35,10 +35,10 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 7 — Lead Policy, Post-Call Reliability, And Privacy** |
+| **Current completed phase** | **Phase 8 — Observability And Quality Analytics** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
 | **v4 production status** | **Not enabled** — canary/dialogue flags default off; router delegates to v3 |
-| **Next implementation phase** | **Phase 8 — Observability And Quality Analytics** |
+| **Next implementation phase** | **Phase 9 — Production Rollout** |
 
 Completed foundation work (do not re-implement):
 
@@ -50,6 +50,7 @@ Completed foundation work (do not re-implement):
 - Phase 5 dialogue orchestrator: turn lifecycle, response planner, canary runtime loop, quality event sink (canary/test-harness only)
 - Phase 6 RAG product/sales Q&A: v4 RAG orchestrator, state-gated retrieval, fail-closed fallbacks, canary harness tests (canary/test-harness only)
 - Phase 7 lead/post-call/privacy: lead candidate object, post-call metadata bridge, privacy sanitize, notification idempotency (canary/test-harness only)
+- Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -70,8 +71,8 @@ Phase 4  — Barge-In And Interruption Runtime Implementation [completed]
 Phase 5  — Live Dialogue Orchestrator Integration         [completed]
 Phase 6  — RAG Product/Sales Q&A Integration              [completed]
 Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
-Phase 8  — Observability And Quality Analytics            [next]
-Phase 9  — Production Rollout
+Phase 8  — Observability And Quality Analytics            [completed]
+Phase 9  — Production Rollout                             [next]
 ```
 
 ## Current System Baseline
@@ -1048,11 +1049,15 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 8: Observability And Quality Analytics
 
+**Status: implementation complete in repo (canary/test-harness only; production still v3).**
+
 - [x] Successful: Quality event builder shapes defined (Phase 2).
-- [ ] Successful: Usage/quality events persisted from v4 runtime to DB.
-- [ ] Successful: Latency/errors visible in DB.
-- [ ] Successful: QA queries documented.
-- [ ] Successful: Conversion/drop-off metrics defined.
+- [x] Successful: Usage/quality events persisted from v4 canary runtime to DB (when `persistQualityToDb` / insertFn enabled).
+- [x] Successful: Latency/error rollups visible via `buildCallQualitySummary` and SQL runbook.
+- [x] Successful: QA queries documented (`voice_assistant_v4_phase8_quality_analytics_queries.sql`).
+- [x] Successful: Conversion/drop-off metrics defined in per-call quality summary.
+- [x] Successful: Phase 8 observability tests pass (`v4-phase8-observability-quality.test.js`).
+- [ ] Successful: Live production v4 auto-flush on call end (Phase 9 rollout).
 
 ### Phase 9: Production Rollout
 
@@ -1117,7 +1122,8 @@ Current project status (see also **Current Project Status** at top):
 - Phase 5 dialogue orchestrator: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 6 RAG product/sales Q&A: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 7 lead/post-call/privacy: **implementation complete in repo** — canary/test-harness only; production still on v3.
-- **Next implementation phase: Phase 8 — Observability And Quality Analytics.**
+- Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
+- **Next implementation phase: Phase 9 — Production Rollout.**
 - Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1
