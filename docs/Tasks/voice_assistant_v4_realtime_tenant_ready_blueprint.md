@@ -29,6 +29,46 @@ Phase 1 must not build a full SaaS platform. It must build a high-quality Techno
 - [x] Successful: Phase 0 decision document is completed before implementation.
 - [x] Successful: No implementation starts before Phase 0 decisions are confirmed.
 
+## Current Project Status
+
+Last updated: 2026-06-01
+
+| Item | Status |
+|------|--------|
+| **Current completed phase** | **Phase 2 — Runtime Foundation / Application Layer** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
+| **v4 production status** | **Not enabled** — all v4 flags default off; router delegates to v3 |
+| **Next implementation phase** | **Phase 3 — Realtime Audio Foundation / Media Layer** |
+
+Completed foundation work (do not re-implement):
+
+- Phase 0 / 0B / 0C accepted for foundation planning (AudioSocket playback cancel + interruption recovery QA)
+- Phase 1 tenant-ready data/config foundation (tagged `v1.4.0`)
+- Phase 2 runtime foundation: `CallSessionMemory`, state machine, runtime router/context, quality event builders, lead validator, RAG scope guardrails, agent config helpers
+
+Production rollout blockers (tracked; **do not block app implementation**):
+
+- Final retention approval — Mojtaba, Founder of TechnoloHit
+- Backup/encryption confirmation
+- Dedicated QA route
+- Overload fallback destination
+- OpenAI streaming/realtime limits
+
+Phase numbering in this blueprint:
+
+```text
+Phase 0  — Architecture And Runtime Feasibility
+Phase 1  — Tenant-Ready Data And Config Foundation
+Phase 2  — Runtime Foundation / Application Layer          [completed]
+Phase 3  — Realtime Audio Foundation / Media Layer         [next]
+Phase 4  — Barge-In And Interruption Runtime Implementation
+Phase 5  — Live Dialogue Orchestrator Integration
+Phase 6  — RAG Product/Sales Q&A Integration
+Phase 7  — Lead Policy, Post-Call Reliability, And Privacy
+Phase 8  — Observability And Quality Analytics
+Phase 9  — Production Rollout
+```
+
 ## Current System Baseline
 
 The repository already contains valuable production foundations. These should be kept and evolved, not thrown away.
@@ -885,20 +925,25 @@ Do not start implementation before this Phase 0 decision report is complete and 
 
 ## Phase Plan
 
-- [x] Successful: Phase 0C interruption-context spike implemented (disabled by default).
-- [x] Successful: Phase 0C interruption recovery live QA completed.
-- [x] Successful: Full barge-in behavior conditionally accepted for Phase 1 planning.
+Progress summary:
+
+- [x] Successful: Phase 0 / 0B / 0C accepted for foundation planning.
+- [x] Successful: Phase 1 tenant-ready foundation implemented (tag `v1.4.0`).
+- [x] Successful: Phase 2 runtime foundation / application layer implemented.
+- [ ] Successful: Phase 3 realtime audio foundation / media layer started.
 
 ### Phase 0: Architecture And Runtime Feasibility
 
 - [x] Successful: Current AudioSocket playback interruption feasibility tested. v3 default failed; Phase 0B repeatability QA passed with repeated `immediate_stop` results.
+- [x] Successful: Phase 0C interruption recovery live QA passed sufficiently to continue.
+- [x] Successful: Phase 0B/0C spike flags remain QA-only; production v4 uses proper flags later.
 - [x] Successful: Streaming STT provider/API decision made.
 - [x] Successful: Streaming/low-latency TTS provider/API decision made.
 - [x] Successful: Latency targets confirmed.
 - [x] Successful: Retention/security decisions recorded.
 - [x] Successful: v4 media path selected after Phase 0B repeatability validation: AudioSocket playback cancellation.
-- [x] Successful: `voice_assistant_v4_phase0_decision_report.md` completed.
-- [x] Successful: `voice_assistant_v4_phase0_decision_report.md` accepted.
+- [x] Successful: `voice_assistant_v4_phase0_decision_report.md` completed and accepted.
+- [x] Successful: Full barge-in behavior conditionally accepted for foundation planning (production implementation → Phase 4).
 
 ### Phase 1: Tenant-Ready Data And Config Foundation
 
@@ -913,55 +958,76 @@ Do not start implementation before this Phase 0 decision report is complete and 
 - [ ] Successful: Phase 1 migrations applied on target database (operator step).
 - [ ] Successful: Phase 1 team review accepted.
 
-### Phase 2: Realtime Audio Foundation
+### Phase 2: Runtime Foundation / Application Layer
 
-- [ ] Successful: Create v4 audio session abstraction.
-- [ ] Successful: Add VAD/endpointing module.
+**Status: implementation complete in repo; production still on v3.**
+
+- [x] Successful: Structured `CallSessionMemory` with tests.
+- [x] Successful: Deterministic v4 state machine with tests.
+- [x] Successful: Runtime router prepares v4 context (`createRuntimeContext`; v3 default unchanged).
+- [x] Successful: Quality event typed builders with redaction.
+- [x] Successful: v4 lead validator foundation with tests.
+- [x] Successful: RAG scope guardrails (tenant/agent, no lead delegation).
+- [x] Successful: Agent config helper functions.
+- [x] Successful: Phase 2 runtime foundation report added.
+
+Stub modules remain for media/orchestration wiring in later phases (no production behavior change).
+
+### Phase 3: Realtime Audio Foundation / Media Layer
+
+**Status: next implementation phase.**
+
+- [ ] Successful: Create v4 audio session abstraction (beyond stub).
+- [ ] Successful: Add VAD/endpointing module (beyond stub).
 - [ ] Successful: Add streaming STT adapter or low-latency incremental STT adapter.
+- [ ] Successful: Add streaming/low-latency TTS adapter.
 - [ ] Successful: Add TTS cache for common prompts.
 - [ ] Successful: Measure STT/TTS/endpointing latency.
+- [ ] Successful: Wire audiosocket to v4 runtime behind explicit v4/canary flags (safe; default off).
 
-### Phase 3: Barge-In And Playback Control
+### Phase 4: Barge-In And Interruption Runtime Implementation
 
-- [ ] Successful: Detect caller speech during assistant playback.
-- [ ] Successful: Stop/cancel playback safely.
-- [ ] Successful: Preserve interruption context.
+- [ ] Successful: Detect caller speech during assistant playback (production path).
+- [ ] Successful: Stop/cancel playback safely using `VOICE_V4_BARGE_IN_ENABLED` (not Phase 0B/0C spike flags).
+- [ ] Successful: Preserve interruption context in v4 memory/state.
 - [ ] Successful: Resume dialogue from interrupted intent.
 - [ ] Successful: Product/topic change after interruption resets or repairs state correctly.
-- [x] Successful: Barge-in feasibility live QA passes for Phase 0; production implementation still belongs to Phase 3.
+- [x] Successful: Barge-in/interruption feasibility live QA passes for Phase 0; production runtime implementation belongs here.
 
-### Phase 4: CallSessionMemory And State Machine
+### Phase 5: Live Dialogue Orchestrator Integration
 
-- [ ] Successful: Implement `CallSessionMemory`.
-- [ ] Successful: Implement explicit v4 state machine.
-- [ ] Successful: Replace scattered state updates with memory/state transitions.
-- [ ] Successful: Add tests for state transitions.
+- [ ] Successful: Replace scattered v3 state updates with v4 memory/state transitions in live runtime.
 - [ ] Successful: Product Q&A after contact capture does not restart intake.
+- [ ] Successful: Persist quality events from v4 path only (not v3 production flow).
+- [ ] Successful: v4 dialogue orchestrator module (not `turn-assistant.js` monolith expansion).
 
-### Phase 5: RAG Product/Sales Q&A
+### Phase 6: RAG Product/Sales Q&A Integration
 
-- [ ] Successful: RAG retrieval scoped by tenant/agent.
-- [ ] Successful: RAG used only in allowed Q&A states.
-- [ ] Successful: RAG output is grounded and bounded.
-- [ ] Successful: RAG fail-closed behavior verified.
+- [x] Successful: RAG retrieval tenant/agent scoped (Phase 1/2 foundation).
+- [x] Successful: RAG scope guardrails — no lead/permission delegation (Phase 2).
+- [ ] Successful: RAG used only in allowed Q&A states in live v4 runtime.
+- [ ] Successful: RAG output is grounded and bounded in live v4 runtime.
+- [ ] Successful: RAG fail-closed behavior verified end-to-end in v4 path.
 - [ ] Successful: Product/sales answer live QA passes.
 
-### Phase 6: Lead Policy And Post-Call Reliability
+### Phase 7: Lead Policy, Post-Call Reliability, And Privacy
 
-- [ ] Successful: Lead validators read structured memory.
+- [x] Successful: v4 lead validator foundation (Phase 2; live wiring pending).
+- [ ] Successful: Lead validators read structured memory in live v4 runtime.
 - [ ] Successful: Email path creates `await_customer_email`, not callback-ready lead.
-- [ ] Successful: Phone callback requires valid phone and permission.
+- [ ] Successful: Phone callback requires valid phone and permission in live v4 runtime.
 - [ ] Successful: Post-call summary includes tenant/agent/version fields.
 - [ ] Successful: n8n notifications remain privacy-safe.
 
-### Phase 7: Observability And Quality Analytics
+### Phase 8: Observability And Quality Analytics
 
-- [ ] Successful: Usage/quality events emitted.
+- [x] Successful: Quality event builder shapes defined (Phase 2).
+- [ ] Successful: Usage/quality events persisted from v4 runtime to DB.
 - [ ] Successful: Latency/errors visible in DB.
 - [ ] Successful: QA queries documented.
 - [ ] Successful: Conversion/drop-off metrics defined.
 
-### Phase 8: Production Rollout
+### Phase 9: Production Rollout
 
 - [ ] Successful: v4 deploy flags verified.
 - [ ] Successful: v3 rollback tested.
@@ -1010,14 +1076,16 @@ These must be answered in Phase 0:
 - [x] Successful: Open decisions resolved for Phase 1 foundation.
 - [x] Successful: Implementation approved for Phase 1 foundation.
 
-Current Phase 0 validation status:
+Current project status (see also **Current Project Status** at top):
 
 - AudioSocket availability: available.
 - AudioSocket barge-in live/manual behavior: v3 default failed; Phase 0B repeatability QA passed for playback cancellation. Phase 0C interruption recovery live QA passed sufficiently to continue.
 - ARI/ExternalMedia fallback: not confirmed; ARI modules are not currently loaded.
 - Server capacity: enough for initial v4 tests; operational concurrency target still pending.
 - RAG readiness: ready via host-local URL `http://127.0.0.1:8080` from voice-bridge; Docker DNS `technolohit-rag-api` is not valid in the current host-network setup.
-- Phase 1 foundation: **implementation complete in repo** — migrations pending operator apply; production rollout still blocked.
+- Phase 1 foundation: **implementation complete in repo** (tag `v1.4.0`) — migrations pending operator apply.
+- Phase 2 runtime foundation: **implementation complete in repo** — production still on v3.
+- **Next implementation phase: Phase 3 — Realtime Audio Foundation / Media Layer.**
 - Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1

@@ -111,3 +111,55 @@ export function getAgentVersionMetadata(agentConfig) {
     runtime_version: String(cfg.runtime_version ?? "").trim()
   };
 }
+
+function agentConfigRoot(agentConfig) {
+  return agentConfig?.config ?? agentConfig ?? {};
+}
+
+export function getProductById(agentConfig, productId) {
+  const products = Array.isArray(agentConfigRoot(agentConfig).products)
+    ? agentConfigRoot(agentConfig).products
+    : [];
+  return products.find((product) => product.id === productId) ?? null;
+}
+
+export function matchProductAlias(agentConfig, text) {
+  const normalized = String(text ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+
+  const products = Array.isArray(agentConfigRoot(agentConfig).products)
+    ? agentConfigRoot(agentConfig).products
+    : [];
+  for (const product of products) {
+    const aliases = Array.isArray(product.aliases) ? product.aliases : [];
+    for (const alias of aliases) {
+      const aliasNorm = String(alias).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim();
+      if (aliasNorm && normalized.includes(aliasNorm)) {
+        return product;
+      }
+    }
+    const display = String(product.display_name ?? "").toLowerCase();
+    if (display && normalized.includes(display)) return product;
+  }
+  return null;
+}
+
+export function getForbiddenClaims(agentConfig) {
+  const claims = agentConfigRoot(agentConfig).forbidden_claims;
+  return Array.isArray(claims) ? claims.map(String) : [];
+}
+
+export function getLeadFieldSchema(agentConfig) {
+  const fields = agentConfigRoot(agentConfig).lead_fields;
+  return Array.isArray(fields) ? fields.map(String) : [];
+}
+
+export function getClosingQuestion(agentConfig) {
+  const handoff = agentConfigRoot(agentConfig).handoff ?? {};
+  return String(handoff.closing_question_default ?? "Gibt es noch etwas, wobei ich Ihnen helfen kann?").trim();
+}

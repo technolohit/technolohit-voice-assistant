@@ -1,6 +1,40 @@
 /**
- * v4 quality event payload shape — DB insert helper lives in db.js.
+ * v4 quality event builders — redaction-safe payloads for future persistence.
  */
+
+import { redactPhoneLikeText, sanitizeCustomFields } from "./redaction.js";
+import { stateToQualityEvent } from "./state-machine.js";
+
+const SENSITIVE_KEYS = new Set([
+  "phone",
+  "phone_number",
+  "caller_phone",
+  "caller_phone_raw",
+  "caller_phone_normalized",
+  "email",
+  "transcript",
+  "assistant_text",
+  "user_utterance"
+]);
+
+export function redactQualityPayload(payload = {}) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (SENSITIVE_KEYS.has(key)) {
+      out[key] = "[redacted]";
+      continue;
+    }
+    if (typeof value === "string") {
+      out[key] = redactPhoneLikeText(value);
+    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      out[key] = redactQualityPayload(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
 
 export function buildQualityEventInput({
   config,
@@ -32,7 +66,7 @@ export function buildQualityEventInput({
     eventStage: eventStage ? String(eventStage).trim() : null,
     metricName: metricName ? String(metricName).trim() : null,
     metricValue: Number.isFinite(Number(metricValue)) ? Number(metricValue) : null,
-    payload: payload && typeof payload === "object" ? payload : {}
+    payload: redactQualityPayload(payload)
   };
 }
 
@@ -41,5 +75,66 @@ export function validateQualityEventInput(input) {
   if (!String(input?.eventType ?? "").trim()) errors.push("eventType required");
   if (!String(input?.tenantId ?? "").trim()) errors.push("tenantId required");
   if (!String(input?.agentId ?? "").trim()) errors.push("agentId required");
+  const serialized = JSON.stringify(input?.payload ?? {});
+  if (/\b\+?\d{8,}\b/.test(serialized)) {
+    errors.push("payload must not contain raw phone numbers");
+  }
   return { ok: errors.length === 0, errors };
+}
+
+function typedBuilder(eventType, defaults = {}) {
+  return ({ config, agentConfigResult, callSessionId, eventStage, metricName, metricValue, payload } = {}) =>
+    buildQualityEventInput({
+      config,
+      agentConfigResult,
+      callSessionId,
+      eventType,
+      eventStage: eventStage ?? defaults.eventStage ?? null,
+      metricName: metricName ?? defaults.metricName ?? null,
+      metricValue: metricValue ?? defaults.metricValue ?? null,
+      payload: { ...defaults.payload, ...(payload ?? {}) }
+    });
+}
+
+export const buildCallStartedEvent = typedBuilder("call_started", { eventStage: "session" });
+export const buildTurnStartedEvent = typedBuilder("turn_started", { eventStage: "dialogue" });
+export const buildSttStartedEvent = typedBuilder("stt_started", { eventStage: "stt" });
+export const buildSttCompletedEvent = typedBuilder("stt_completed", {
+  eventStage: "stt",
+  metricName: "stt_ms"
+});
+export const buildTtsStartedEvent = typedBuilder("tts_started", { eventStage: "tts" });
+export const buildTtsFirstAudioEvent = typedBuilder("tts_first_audio", {
+  eventStage: "tts",
+  metricName: "tts_first_audio_ms"
+});
+export const buildTtsCompletedEvent = typedBuilder("tts_completed", {
+  eventStage: "tts",
+  metricName: "tts_ms"
+});
+export const buildBargeInDetectedEvent = typedBuilder("barge_in_detected", { eventStage: "playback" });
+export const buildInterruptionRecoveredEvent = typedBuilder("interruption_recovered", {
+  eventStage: "dialogue"
+});
+export const buildRagRetrievalStartedEvent = typedBuilder("rag_retrieval_started", {
+  eventStage: "rag"
+});
+export const buildRagRetrievalCompletedEvent = typedBuilder("rag_retrieval_completed", {
+  eventStage: "rag",
+  metricName: "rag_ms"
+});
+export const buildLeadCreatedEvent = typedBuilder("lead_created", { eventStage: "lead" });
+export const buildLeadSkippedEvent = typedBuilder("lead_skipped", { eventStage: "lead" });
+export const buildRuntimeErrorEvent = typedBuilder("runtime_error", { eventStage: "runtime" });
+
+export function buildQualityEventFromState(state, base = {}) {
+  return buildQualityEventInput({
+    ...base,
+    eventType: stateToQualityEvent(state),
+    payload: { state, ...(base.payload ?? {}) }
+  });
+}
+
+export function sanitizeQualityCustomFields(fields) {
+  return sanitizeCustomFields(fields);
 }
