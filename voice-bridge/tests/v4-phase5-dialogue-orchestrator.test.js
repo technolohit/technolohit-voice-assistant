@@ -95,13 +95,13 @@ test("resolveRuntimeRoute reports dialogue stub reason without barge-in", () => 
   });
 });
 
-test("product question updates memory and state", () => {
-  withEnv(dialogueEnv(), () => {
+test("product question updates memory and state", async () => {
+  await withEnv(dialogueEnv(), async () => {
     const runtime = createCanaryDialogueRuntime(loadConfig(), {
       harnessExplicit: true,
       bridgeCallId: "pq-1"
     });
-    const turn = simulateInboundTranscriptTurn(runtime, "Was ist Smart Website?");
+    const turn = await simulateInboundTranscriptTurn(runtime, "Was ist Smart Website?");
     assert.equal(turn.plan.response_type, RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER);
     assert.equal(turn.plan.rag_allowed, true);
     assert.equal(turn.memory.selected_product_id, "smart_website");
@@ -109,24 +109,24 @@ test("product question updates memory and state", () => {
   });
 });
 
-test("sales context collection updates memory", () => {
-  withEnv(dialogueEnv(), () => {
+test("sales context collection updates memory", async () => {
+  await withEnv(dialogueEnv(), async () => {
     const runtime = createCanaryDialogueRuntime(loadConfig(), { harnessExplicit: true });
-    simulateInboundTranscriptTurn(runtime, "Ich interessiere mich für Smart Website");
-    const turn = simulateInboundTranscriptTurn(runtime, "Wir sind Neukunde");
+    await simulateInboundTranscriptTurn(runtime, "Ich interessiere mich für Smart Website");
+    const turn = await simulateInboundTranscriptTurn(runtime, "Wir sind Neukunde");
     assert.equal(turn.memory.customer_type, "new_prospect");
     assert.equal(turn.plan.response_type, RESPONSE_TYPES.COLLECT_SALES_CONTEXT);
   });
 });
 
-test("interruption product switch changes selected product", () => {
-  withEnv(dialogueEnv({ VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS: "0", VOICE_V4_VAD_RMS_THRESHOLD: "400" }), () => {
+test("interruption product switch changes selected product", async () => {
+  await withEnv(dialogueEnv({ VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS: "0", VOICE_V4_VAD_RMS_THRESHOLD: "400" }), async () => {
     const config = loadConfig();
     const runtime = createCanaryDialogueRuntime(config, { harnessExplicit: true, bridgeCallId: "sw-1" });
-    simulateInboundTranscriptTurn(runtime, "Erzählen Sie mir über Smart Website");
+    await simulateInboundTranscriptTurn(runtime, "Erzählen Sie mir über Smart Website");
     simulateAssistantPlayback(runtime, { frames: 2 });
 
-    const bargeIn = simulateBargeInDuringPlayback(runtime, {
+    const bargeIn = await simulateBargeInDuringPlayback(runtime, {
       speechFrames: 4,
       amplitude: 1000,
       callerText: "Stopp, ich meine Digitale Rezeption"
@@ -184,10 +184,10 @@ test("lead-ready requires validator approval", () => {
   });
 });
 
-test("email path remains non-callback ready", () => {
-  withEnv(dialogueEnv(), () => {
+test("email path remains non-callback ready", async () => {
+  await withEnv(dialogueEnv(), async () => {
     const runtime = createCanaryDialogueRuntime(loadConfig(), { harnessExplicit: true });
-    const turn = simulateInboundTranscriptTurn(runtime, "Lieber per E-Mail");
+    const turn = await simulateInboundTranscriptTurn(runtime, "Lieber per E-Mail");
     assert.equal(turn.plan.response_type, RESPONSE_TYPES.EMAIL_GUIDANCE);
     assert.equal(turn.memory.contact_preference, "email");
     assert.equal(turn.memory.lead_ready, false);
@@ -242,10 +242,10 @@ test("quality event sink buffers redacts and flushes v4-only", async () => {
   });
 });
 
-test("orchestrator buffers events without DB on memory-only sink", () => {
-  withEnv(dialogueEnv(), () => {
+test("orchestrator buffers events without DB on memory-only sink", async () => {
+  await withEnv(dialogueEnv(), async () => {
     const runtime = createCanaryDialogueRuntime(loadConfig(), { harnessExplicit: true });
-    simulateInboundTranscriptTurn(runtime, "Smart Website bitte");
+    await simulateInboundTranscriptTurn(runtime, "Smart Website bitte");
     const events = runtime.qualitySink.getBufferedQualityEvents();
     assert.ok(events.length >= 3);
     for (const event of events) {
@@ -260,11 +260,11 @@ test("response text avoids Rückruf wording", () => {
   assert.doesNotMatch(sanitized, /rückruf|rueckruf|ruckruf/i);
 });
 
-test("canary loop finalize turn completes without drop", () => {
-  withEnv(dialogueEnv(), () => {
+test("canary loop finalize turn completes without drop", async () => {
+  await withEnv(dialogueEnv(), async () => {
     const runtime = createCanaryDialogueRuntime(loadConfig(), { harnessExplicit: true });
-    simulateInboundTranscriptTurn(runtime, "Smart Website");
-    const finalized = finalizeCanaryTurn(runtime);
+    await simulateInboundTranscriptTurn(runtime, "Smart Website");
+    const finalized = await finalizeCanaryTurn(runtime);
     assert.equal(finalized.ok, true);
     assert.equal(finalized.stateMachine.state, V4_STATES.LISTENING);
     const closed = closeCanaryDialogueRuntime(runtime);
@@ -273,8 +273,8 @@ test("canary loop finalize turn completes without drop", () => {
   });
 });
 
-test("handleInterruption preserves recovery plan", () => {
-  withEnv(dialogueEnv(), () => {
+test("handleInterruption preserves recovery plan", async () => {
+  await withEnv(dialogueEnv(), async () => {
     const config = loadConfig();
     const agent = loadAgentConfig(config);
     const ctx = createRuntimeContext(config, { bridgeCallId: "int-1" });
@@ -301,7 +301,7 @@ test("handleInterruption preserves recovery plan", () => {
       stoppedByBargeIn: true
     };
 
-    const result = handleInterruption(orchestrator, {
+    const result = await handleInterruption(orchestrator, {
       callerText: "Stopp, Digitale Rezeption bitte"
     });
     assert.equal(result.recovery.recoveryAction, "product_switch");

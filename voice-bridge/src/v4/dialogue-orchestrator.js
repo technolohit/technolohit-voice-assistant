@@ -27,6 +27,10 @@ import {
   sanitizeResponseText
 } from "./response-planner.js";
 import {
+  shouldUseRagForTurn,
+  retrieveV4RagAnswer
+} from "./rag-orchestrator.js";
+import {
   resolveInterruptionRecovery,
   captureInterruptedAssistantState
 } from "./interruption-context.js";
@@ -82,7 +86,8 @@ export function createDialogueOrchestrator({
     adapters: {
       stt: adapters.stt ?? null,
       tts: adapters.tts ?? null,
-      ragAnswerer: adapters.ragAnswerer ?? null
+      ragAnswerer: adapters.ragAnswerer ?? null,
+      ragRetriever: adapters.ragRetriever ?? null
     },
     qualitySink: qualitySink ?? createQualityEventSink({ v4PathActive }),
     v4PathActive: Boolean(v4PathActive),
@@ -186,28 +191,66 @@ export function acceptUserTranscript(orchestrator, transcript = "") {
   return { ok: true, memory, stateMachine, intent: detectTranscriptIntent(transcript, memory) };
 }
 
-export function decideNextAction(orchestrator, input = {}) {
+export async function decideNextAction(orchestrator, input = {}) {
   const transcript = input.transcript ?? orchestrator.currentTurn?.transcript ?? "";
   const intent = input.intent ?? detectTranscriptIntent(transcript, orchestrator.memory);
   const interruptionRecovery = input.interruptionRecovery ?? null;
 
-  let ragAnswer = null;
-  const preliminaryPlan = buildResponsePlan({
-    agentConfig: orchestrator.agentConfig,
-    memory: orchestrator.memory,
-    stateMachine: orchestrator.stateMachine,
-    transcript,
+  const ragGate = shouldUseRagForTurn({
+    state: orchestrator.stateMachine?.state,
     intent,
-    interruptionRecovery
+    memory: orchestrator.memory,
+    transcript
   });
 
-  if (preliminaryPlan.rag_allowed && typeof orchestrator.adapters.ragAnswerer === "function") {
-    ragAnswer = orchestrator.adapters.ragAnswerer({
-      query: transcript,
-      productId: orchestrator.memory.selected_product_id,
-      memory: orchestrator.memory
+  let ragResult = input.ragResult ?? null;
+  if (ragGate.allowed && !ragResult) {
+    bufferEvent(orchestrator, "rag_retrieval_started", {
+      rag_reason: ragGate.reason,
+      tenant_id: orchestrator.config?.v4?.tenantId ?? "technolohit",
+      agent_id: orchestrator.config?.v4?.agentId ?? "main_voice_sales"
     });
+
+    if (typeof orchestrator.adapters.ragAnswerer === "function") {
+      const legacy = orchestrator.adapters.ragAnswerer({
+        query: transcript,
+        productId: orchestrator.memory.selected_product_id,
+        memory: orchestrator.memory
+      });
+      ragResult =
+        typeof legacy?.then === "function"
+          ? await legacy
+          : {
+              ok: true,
+              answer: legacy?.answer ?? legacy,
+              used_rag: Boolean(legacy?.used_rag),
+              fallback_reason: legacy?.fallback_reason ?? null,
+              creates_lead: false
+            };
+    } else {
+      ragResult = await retrieveV4RagAnswer({
+        config: orchestrator.config,
+        agentConfig: orchestrator.agentConfig,
+        transcript,
+        memory: orchestrator.memory,
+        stateMachine: orchestrator.stateMachine,
+        retrieveFn: orchestrator.adapters.ragRetriever ?? undefined
+      });
+    }
+
+    bufferEvent(
+      orchestrator,
+      ragResult?.used_rag ? "rag_retrieval_completed" : "rag_retrieval_failed",
+      {
+        used_rag: Boolean(ragResult?.used_rag),
+        fallback_reason: ragResult?.fallback_reason ?? null,
+        rag_reason: ragGate.reason
+      },
+      ragResult?.latency_ms ?? null
+    );
   }
+
+  const ragAnswer = ragResult?.answer ?? null;
 
   const plan = buildResponsePlan({
     agentConfig: orchestrator.agentConfig,
@@ -216,6 +259,7 @@ export function decideNextAction(orchestrator, input = {}) {
     transcript,
     intent,
     ragAnswer,
+    ragGate,
     interruptionRecovery
   });
 
@@ -225,7 +269,7 @@ export function decideNextAction(orchestrator, input = {}) {
   }
 
   orchestrator.lastPlan = plan;
-  return { ok: true, plan, intent };
+  return { ok: true, plan, intent, ragResult, ragGate };
 }
 
 export function prepareAssistantResponse(orchestrator, plan = null) {
@@ -310,7 +354,7 @@ export function recordAssistantResponse(orchestrator, text = null, plan = null) 
   return { ok: true, memory, stateMachine, text: responseText, playback: orchestrator.playback };
 }
 
-export function handleInterruption(orchestrator, { callerText = "", playback = null, atMs = Date.now() } = {}) {
+export async function handleInterruption(orchestrator, { callerText = "", playback = null, atMs = Date.now() } = {}) {
   const activePlayback = playback ?? orchestrator.playback;
   const cancelled = requestPlaybackCancel(activePlayback, "barge_in", atMs);
   orchestrator.playback = finalizePlayback(cancelled.controller, "cancelled", atMs).controller;
@@ -350,7 +394,7 @@ export function handleInterruption(orchestrator, { callerText = "", playback = n
     });
   }
 
-  const action = decideNextAction(orchestrator, {
+  const action = await decideNextAction(orchestrator, {
     transcript: callerText,
     interruptionRecovery: recovery
   });

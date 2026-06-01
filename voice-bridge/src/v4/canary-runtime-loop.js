@@ -80,7 +80,8 @@ export function createCanaryDialogueRuntime(config, input = {}) {
     agentConfig: runtimeContext.agentConfig,
     adapters: {
       ...createMediaAdaptersFromConfig(config),
-      ragAnswerer: input.ragAnswerer ?? null
+      ragAnswerer: input.ragAnswerer ?? null,
+      ragRetriever: input.ragRetriever ?? null
     },
     qualitySink,
     v4PathActive: true
@@ -105,14 +106,14 @@ export function createCanaryDialogueRuntime(config, input = {}) {
   };
 }
 
-export function simulateInboundTranscriptTurn(runtime, transcript = "") {
+export async function simulateInboundTranscriptTurn(runtime, transcript = "") {
   if (!runtime?.orchestrator) {
     return { ok: false, reason: "orchestrator_missing" };
   }
 
   startTurn(runtime.orchestrator);
   acceptUserTranscript(runtime.orchestrator, transcript);
-  const action = decideNextAction(runtime.orchestrator, { transcript });
+  const action = await decideNextAction(runtime.orchestrator, { transcript });
   const prepared = prepareAssistantResponse(runtime.orchestrator, action.plan);
   const recorded = recordAssistantResponse(
     runtime.orchestrator,
@@ -152,7 +153,7 @@ export function simulateAssistantPlayback(runtime, { frames = 5, bytesPerFrame =
   return { ok: true, playback: ctx.playback, framesSent: ctx.playback.framesSent };
 }
 
-export function simulateBargeInDuringPlayback(runtime, { amplitude = 900, speechFrames = 3, callerText = "" } = {}) {
+export async function simulateBargeInDuringPlayback(runtime, { amplitude = 900, speechFrames = 3, callerText = "" } = {}) {
   if (!runtime?.orchestrator?.playback) {
     return { ok: false, reason: "orchestrator_missing" };
   }
@@ -185,7 +186,7 @@ export function simulateBargeInDuringPlayback(runtime, { amplitude = 900, speech
   runtime.orchestrator.playback = cancelledPlayback;
   runtime.bargeInDetector = detector;
 
-  const interruption = handleInterruption(runtime.orchestrator, {
+  const interruption = await handleInterruption(runtime.orchestrator, {
     callerText,
     playback: cancelledPlayback
   });
@@ -198,13 +199,13 @@ export function simulateBargeInDuringPlayback(runtime, { amplitude = 900, speech
   };
 }
 
-export function finalizeCanaryTurn(runtime, { callerText = null } = {}) {
+export async function finalizeCanaryTurn(runtime, { callerText = null } = {}) {
   if (!runtime?.orchestrator) {
     return { ok: false, reason: "orchestrator_missing" };
   }
 
   if (callerText != null && runtime.lastBargeIn) {
-    handleInterruption(runtime.orchestrator, { callerText });
+    await handleInterruption(runtime.orchestrator, { callerText });
   }
 
   const completed = completeTurn(runtime.orchestrator);

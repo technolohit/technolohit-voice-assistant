@@ -4,6 +4,7 @@
 
 import { normalizeText } from "./redaction.js";
 import { matchProductAlias, getProductById, getClosingQuestion } from "./agent-config.js";
+import { shouldUseRagForTurn, isPostContactProductQuestion } from "./rag-orchestrator.js";
 import { V4_STATES } from "./state-machine.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
@@ -51,6 +52,9 @@ export function detectTranscriptIntent(transcript = "", memory = {}) {
   if (/\b(was ist|was sind|erklar|erklaer|wie funktioniert|mehr uber|mehr ueber)\b/i.test(lower)) {
     return "product_question";
   }
+  if (/\b(preis|kosten|was kostet|pricing|tarif|gebühr|gebuehr)\b/i.test(lower)) {
+    return "product_question";
+  }
   if (/\b(smart website|digitale rezeption|voice agent|lokalki|botinteg|aiseoq)\b/i.test(lower)) {
     return "product_selection";
   }
@@ -73,11 +77,16 @@ export function buildResponsePlan({
   transcript = "",
   intent = null,
   ragAnswer = null,
+  ragGate = null,
   interruptionRecovery = null
 } = {}) {
   const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory);
   const agent = agentConfig?.config ?? agentConfig ?? {};
   const state = stateMachine?.state ?? memory?.current_state ?? V4_STATES.LISTENING;
+  const gate =
+    ragGate ??
+    shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
+  const postContactProductQa = isPostContactProductQuestion(memory, transcript, resolvedIntent);
 
   if (interruptionRecovery?.recoveryAction === "product_switch") {
     const product = getProductById(agentConfig, memory.selected_product_id);
@@ -101,6 +110,38 @@ export function buildResponsePlan({
     });
   }
 
+  if (postContactProductQa && gate.allowed) {
+    const productId = memory.selected_product_id ?? matchProductAlias(agentConfig, transcript)?.id;
+    const product = productId ? getProductById(agentConfig, productId) : null;
+    const answer =
+      ragAnswer ??
+      sanitizeResponseText(
+        product
+          ? `${product.display_name} wird individuell nach Bedarf kalkuliert. Möchten Sie mehr Details?`
+          : "Gerne erkläre ich Ihnen unsere Lösungen. Welches Produkt interessiert Sie?"
+      );
+    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+      text: answer,
+      next_state: state === V4_STATES.VALIDATING_CONTACT ? V4_STATES.VALIDATING_CONTACT : V4_STATES.ANSWERING_PRODUCT_QUESTION,
+      memory_patch: {
+        selected_product_id: productId ?? memory.selected_product_id,
+        product_interest: productId ?? memory.product_interest,
+        contact_preference: memory.contact_preference,
+        email_present: memory.email_present,
+        callback_permission: memory.callback_permission,
+        lead_ready: memory.lead_ready ?? false,
+        current_state:
+          state === V4_STATES.VALIDATING_CONTACT
+            ? V4_STATES.VALIDATING_CONTACT
+            : V4_STATES.ANSWERING_PRODUCT_QUESTION
+      },
+      quality_event_type: "rag_retrieval_completed",
+      allowed_tools: ["rag"],
+      rag_allowed: true,
+      lead_transition_allowed: false
+    });
+  }
+
   if (resolvedIntent === "product_question") {
     const productId = memory.selected_product_id ?? matchProductAlias(agentConfig, transcript)?.id;
     const product = productId ? getProductById(agentConfig, productId) : null;
@@ -119,9 +160,9 @@ export function buildResponsePlan({
         product_interest: productId ?? memory.product_interest,
         current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION
       },
-      quality_event_type: "rag_retrieval_completed",
-      allowed_tools: ["rag"],
-      rag_allowed: true,
+      quality_event_type: gate.allowed ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gate.allowed ? ["rag"] : [],
+      rag_allowed: gate.allowed,
       lead_transition_allowed: false
     });
   }

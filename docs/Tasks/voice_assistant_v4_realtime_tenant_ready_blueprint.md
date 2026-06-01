@@ -35,10 +35,10 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 5 — Live Dialogue Orchestrator Integration** |
+| **Current completed phase** | **Phase 6 — RAG Product/Sales Q&A Integration** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
 | **v4 production status** | **Not enabled** — canary/dialogue flags default off; router delegates to v3 |
-| **Next implementation phase** | **Phase 6 — RAG Product/Sales Q&A Integration** |
+| **Next implementation phase** | **Phase 7 — Lead Policy, Post-Call Reliability, And Privacy** |
 
 Completed foundation work (do not re-implement):
 
@@ -48,6 +48,7 @@ Completed foundation work (do not re-implement):
 - Phase 3 media foundation: audio session, VAD/endpointing, STT/TTS adapter interfaces, TTS phrase cache, canary-safe AudioSocket routing skeleton, media quality event builders (tagged `v1.6.0`)
 - Phase 4 barge-in foundation: playback controller, barge-in detector, interruption context, canary barge-in harness (tagged `v1.7.0`)
 - Phase 5 dialogue orchestrator: turn lifecycle, response planner, canary runtime loop, quality event sink (canary/test-harness only)
+- Phase 6 RAG product/sales Q&A: v4 RAG orchestrator, state-gated retrieval, fail-closed fallbacks, canary harness tests (canary/test-harness only)
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -66,8 +67,8 @@ Phase 2  — Runtime Foundation / Application Layer          [completed]
 Phase 3  — Realtime Audio Foundation / Media Layer         [completed]
 Phase 4  — Barge-In And Interruption Runtime Implementation [completed]
 Phase 5  — Live Dialogue Orchestrator Integration         [completed]
-Phase 6  — RAG Product/Sales Q&A Integration              [next]
-Phase 7  — Lead Policy, Post-Call Reliability, And Privacy
+Phase 6  — RAG Product/Sales Q&A Integration              [completed]
+Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [next]
 Phase 8  — Observability And Quality Analytics
 Phase 9  — Production Rollout
 ```
@@ -936,7 +937,7 @@ Progress summary:
 - [x] Successful: Phase 3 realtime audio foundation / media layer implemented.
 - [x] Successful: Phase 4 barge-in and interruption runtime foundation implemented.
 - [x] Successful: Phase 5 live dialogue orchestrator integration implemented.
-- [ ] Successful: Phase 6 RAG product/sales Q&A integration started.
+- [x] Successful: Phase 6 RAG product/sales Q&A integration complete (canary path).
 
 ### Phase 0: Architecture And Runtime Feasibility
 
@@ -1016,19 +1017,20 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Quality event sink hooks (v4 path only; memory buffer + optional insert).
 - [x] Successful: Lead validator gates callback-ready in orchestrator.
 - [x] Successful: Phase 5 dialogue orchestrator report added.
-- [ ] Successful: Product Q&A after contact capture does not restart intake (live v4 — Phase 6).
+- [x] Successful: Product Q&A after contact capture does not restart intake (canary v4 orchestrator).
 - [ ] Successful: Persist quality events from v4 path to DB (Phase 8).
 
 ### Phase 6: RAG Product/Sales Q&A Integration
 
-**Status: next implementation phase.**
+**Status: implementation complete in repo (canary/test-harness only; production still v3).**
 
 - [x] Successful: RAG retrieval tenant/agent scoped (Phase 1/2 foundation).
 - [x] Successful: RAG scope guardrails — no lead/permission delegation (Phase 2).
-- [ ] Successful: RAG used only in allowed Q&A states in live v4 runtime.
-- [ ] Successful: RAG output is grounded and bounded in live v4 runtime.
-- [ ] Successful: RAG fail-closed behavior verified end-to-end in v4 path.
-- [ ] Successful: Product/sales answer live QA passes.
+- [x] Successful: RAG used only in allowed Q&A states in canary v4 runtime.
+- [x] Successful: RAG output is grounded and bounded in canary v4 runtime.
+- [x] Successful: RAG fail-closed behavior verified end-to-end in v4 canary path.
+- [x] Successful: Product/sales answer canary QA passes (`v4-phase6-rag-product-sales-qa.test.js`).
+- [ ] Successful: Live AudioSocket production path RAG integration (Phase 9 rollout).
 
 ### Phase 7: Lead Policy, Post-Call Reliability, And Privacy
 
@@ -1108,7 +1110,8 @@ Current project status (see also **Current Project Status** at top):
 - Phase 3 media foundation: **implementation complete in repo** (tag `v1.6.0`) — canary/test-harness only.
 - Phase 4 barge-in foundation: **implementation complete in repo** (tag `v1.7.0`) — canary/test-harness only.
 - Phase 5 dialogue orchestrator: **implementation complete in repo** — canary/test-harness only; production still on v3.
-- **Next implementation phase: Phase 6 — RAG Product/Sales Q&A Integration.**
+- Phase 6 RAG product/sales Q&A: **implementation complete in repo** — canary/test-harness only; production still on v3.
+- **Next implementation phase: Phase 7 — Lead Policy, Post-Call Reliability, And Privacy.**
 - Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1
