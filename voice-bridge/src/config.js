@@ -96,6 +96,15 @@ export function loadConfig() {
   const postCallNotifyEnabled = readBool("VOICE_POST_CALL_NOTIFY_ENABLED", false);
   const postCallNotifyWebhookUrl = String(process.env.VOICE_POST_CALL_NOTIFY_WEBHOOK_URL ?? "").trim();
   const postCallNotifyTimeoutMs = Math.max(1000, readInt("VOICE_POST_CALL_NOTIFY_TIMEOUT_MS", 8000));
+  const v4PlaybackCancelSpikeEnabled = readBool("VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED", false);
+  const v4PlaybackCancelSpikeRmsThreshold = Math.max(
+    100,
+    readInt("VOICE_V4_PLAYBACK_CANCEL_SPIKE_RMS_THRESHOLD", 450)
+  );
+  const v4PlaybackCancelSpikeSpeechFrames = Math.max(
+    1,
+    readInt("VOICE_V4_PLAYBACK_CANCEL_SPIKE_SPEECH_FRAMES", 3)
+  );
   const buildVersion = String(process.env.BUILD_VERSION || process.env.IMAGE_TAG || "unknown").trim();
   const imageTag = String(process.env.IMAGE_TAG || "").trim();
   const gitSha = String(process.env.GIT_SHA || "").trim();
@@ -167,6 +176,11 @@ export function loadConfig() {
       enabled: postCallNotifyEnabled,
       webhookUrl: postCallNotifyWebhookUrl,
       timeoutMs: postCallNotifyTimeoutMs
+    },
+    v4PlaybackCancelSpike: {
+      enabled: v4PlaybackCancelSpikeEnabled,
+      speechRmsThreshold: v4PlaybackCancelSpikeRmsThreshold,
+      speechFramesRequired: v4PlaybackCancelSpikeSpeechFrames
     },
     assistant: {
       enabled: assistantEnabled,

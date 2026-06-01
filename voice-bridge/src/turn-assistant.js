@@ -42,6 +42,14 @@ import {
   shouldDeferToPhoneIntake
 } from "./sales-dialogue-manager.js";
 import { emailContactReferenceText, splitEmailDirectIntakeParts } from "./email-intake-closing.js";
+import {
+  attachActivePlaybackSession,
+  createPlaybackSession,
+  detachActivePlaybackSession,
+  finalizePlaybackSession,
+  isPlaybackCancelSpikeEnabled,
+  logPlaybackStarted
+} from "./playback-session.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -4058,7 +4066,37 @@ async function playAssistantAudio(config, ctx, socket, playback, turnIndex, assi
 
   playback.stopSilenceWriter(ctx);
   const startedAt = nowMs();
-  const stats = await playback.streamPcmToSocket(socket, assistantAudio.pcm, config, "assistant response");
+  let stats;
+
+  if (isPlaybackCancelSpikeEnabled(config)) {
+    const session = createPlaybackSession(config, ctx, {
+      label: "assistant response",
+      turnIndex
+    });
+    session.pcmBytes = assistantAudio.pcm?.length ?? 0;
+    attachActivePlaybackSession(ctx, session);
+    logPlaybackStarted(config, ctx, session);
+    try {
+      stats = await playback.streamPcmToSocket(
+        socket,
+        assistantAudio.pcm,
+        config,
+        "assistant response",
+        { playbackSession: session }
+      );
+    } finally {
+      finalizePlaybackSession(config, ctx, session);
+      detachActivePlaybackSession(ctx);
+    }
+  } else {
+    stats = await playback.streamPcmToSocket(
+      socket,
+      assistantAudio.pcm,
+      config,
+      "assistant response"
+    );
+  }
+
   timings.playbackMs = elapsedSince(startedAt);
   if (timings.turnStartedAt) {
     timings.totalTurnMs = elapsedSince(timings.turnStartedAt);
@@ -4067,8 +4105,8 @@ async function playAssistantAudio(config, ctx, socket, playback, turnIndex, assi
   await persist.onAssistantResponsePlayed(config, ctx, {
     ttsModel: config.assistant.ttsModel,
     ttsVoice: config.assistant.ttsVoice,
-    frames: stats.frames,
-    bytes: stats.bytes,
+    frames: stats?.frames ?? 0,
+    bytes: stats?.bytes ?? 0,
     audioFile: assistantAudio.slinPath,
     turnIndex,
     timings

@@ -16,6 +16,11 @@ import { runPostCallProcessing } from "./post-call.js";
 import { captureInboundAudio } from "./recording.js";
 import { captureAssistantTurnAudio } from "./turn-assistant.js";
 import * as persist from "./persist.js";
+import {
+  getActivePlaybackSession,
+  isPlaybackCancelSpikeEnabled,
+  monitorInboundDuringPlayback
+} from "./playback-session.js";
 
 function normalizePhone(value) {
   const raw = String(value ?? "").trim();
@@ -196,6 +201,12 @@ function handleFrame(config, ctx, socket, type, payload) {
     ctx.bytesReceived += payload.length;
     captureInboundAudio(config, ctx, payload);
     captureAssistantTurnAudio(config, ctx, payload);
+    if (isPlaybackCancelSpikeEnabled(config)) {
+      const activePlayback = getActivePlaybackSession(ctx);
+      if (activePlayback) {
+        monitorInboundDuringPlayback(config, ctx, activePlayback, payload);
+      }
+    }
 
     const n = ctx.inboundAudioFrames;
     if (n === 1 || n % config.inboundLogEvery === 0) {

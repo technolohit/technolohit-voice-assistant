@@ -1,7 +1,7 @@
 # TechnoloHit Voice Assistant v4 — Phase 0 Decision Report
 
 Date: 2026-06-01  
-Status: **Draft for acceptance** (documentation complete; live/sysadmin validations pending)  
+Status: **Blocked for acceptance** (documentation complete; partial live/sysadmin validation found blocking issues)
 Blueprint: [voice_assistant_v4_realtime_tenant_ready_blueprint.md](./voice_assistant_v4_realtime_tenant_ready_blueprint.md)
 
 ---
@@ -41,14 +41,14 @@ Per blueprint non-goals for Phase 1:
 |------|--------|----------|
 | Telephony path (Asterisk + AudioSocket) | Yes (production) | `voice-bridge/src/audiosocket.js`, `media-outbound.js` |
 | Persistence / post-call / leads / dashboard | Yes (foundation) | `persist.js`, `post-call-*.js`, `db/voice/migrations/*.sql`, `lead-dashboard/` |
-| RAG API with tenant scoping | Partial | `tenant_id` in RAG; no `agent_id` yet |
+| RAG API with tenant scoping | Partially ready | RAG is reachable from voice-bridge via host-local URL `http://127.0.0.1:8080`; `tenant_id` exists, `agent_id` still missing |
 | Real-time STT/TTS/barge-in | **No** | Turn-based only; no playback cancel |
 | Tenant-ready voice schema | **No** | Migrations not written yet |
 | Agent config model | **No** | Business logic still in `turn-assistant.js` (~4,332 lines) |
-| Barge-in feasibility | **Unknown** | Code gap + live test required |
-| Concurrency capacity | **Unknown** | No server benchmarks in repo |
+| Barge-in feasibility | **Failed current live/manual test** | Caller interruption did not stop assistant playback |
+| Concurrency capacity | **Partially ready** | Server has enough initial CPU/RAM headroom; operational target still unconfirmed |
 
-**Verdict:** Repository is ready for **Phase 1 foundation work** (schema, config, modular runtime skeleton) **after** acceptance of this report. **Phase 2–3 realtime audio and barge-in** should proceed only after sysadmin confirms AudioSocket playback-stop behavior (§3, §11).
+**Verdict:** Repository is **not ready to start Phase 1 implementation yet**. Phase 0 found blocking issues that must be resolved first: current AudioSocket playback does not stop on caller interruption, the v4 media/runtime implementation path is not decided, ARI/ExternalMedia fallback is not confirmed, and operational/security owners are still missing. RAG is reachable, but the correct voice-bridge URL is the host-local URL `http://127.0.0.1:8080`, not Docker DNS. **Phase 2-3 realtime audio and barge-in** remain blocked until a reliable playback-stop path is proven or a new realtime media bridge path is selected.
 
 ---
 
@@ -100,6 +100,7 @@ No unified `CallSessionMemory` model. No `tenant_id` / `agent_id` on sessions.
 - `RetrieveRequest` has `tenant_id` but **no `agent_id`** — `rag-api/app/models.py`.
 - voice-bridge RAG client: timeout defaults 700 ms (1200 ms QA mode) — `config.js`.
 - Production default: `VOICE_RAG_ENABLED=false` — `docs/voice-bridge-runtime-env.md`.
+- Production networking note: `technolohit-voice-bridge` currently runs on Docker host network while `technolohit-rag-api` is on `asterisk_default`; therefore voice-bridge must use `http://127.0.0.1:8080` for RAG health/retrieve calls unless networking is changed.
 
 ### PostgreSQL voice schema
 
@@ -225,15 +226,123 @@ docker logs -f technolohit-voice-bridge | egrep -i "inbound audio|finished sendi
 
 ### Decision
 
-| Status | **Unknown — pending sysadmin/live test** |
+| Status | **Failed with current live/manual behavior** |
 |--------|------------------------------------------|
 
-**Code analysis:** Architecture is **plausibly extensible** (inbound frames already received during playback; outbound is bridge-controlled), but **barge-in is not implemented** and **Asterisk buffer behavior is unproven**.
+**Code analysis:** Architecture is **plausibly extensible** (inbound frames already received during playback; outbound is bridge-controlled), but **barge-in is not implemented**. Partial live validation showed that caller interruption did **not** stop current assistant playback, so current AudioSocket/v3 playback behavior is not acceptable for v4 barge-in as-is.
 
 **Conditional path (aligned with blueprint):**
 
-- **Prototype barge-in on current AudioSocket first** (recommended).
-- If live test shows **>500 ms stop latency** or **unreliable stop**, escalate to **ARI/ExternalMedia realtime media bridge** (separate worker or service) rather than patching v3 indefinitely.
+- Do **not** assume the current AudioSocket path is sufficient.
+- Either prove that AudioSocket playback cancellation can be implemented reliably, or escalate to **ARI/ExternalMedia / new realtime media bridge** rather than patching v3 indefinitely.
+
+---
+
+## 3B. Phase 0B Media-Path Feasibility Spike
+
+Date: 2026-06-01  
+Runbook: [voice_assistant_v4_phase0b_playback_cancel_spike_runbook.md](./voice_assistant_v4_phase0b_playback_cancel_spike_runbook.md)
+
+### Files inspected
+
+| File | Role |
+|------|------|
+| `voice-bridge/src/media-outbound.js` | Outbound PCM frame loop, silence writer |
+| `voice-bridge/src/turn-assistant.js` | `playAssistantAudio()`, RMS listen path, turn capture |
+| `voice-bridge/src/audiosocket.js` | Inbound frame dispatch during playback |
+| `voice-bridge/src/config.js` | Env flag loading |
+| `voice-bridge/src/playback-session.js` | **New** — spike playback session + inbound monitor |
+
+### Minimal cancellable playback path (implemented)
+
+| Component | Implementation |
+|-----------|----------------|
+| Playback session | `createPlaybackSession()` with `cancelled`, `cancelReason`, frame counters |
+| Cancel signal | `requestPlaybackCancel()` sets `session.cancelled = true` |
+| Stop in frame loop | `streamPcmToSocket()` checks `playbackSession?.cancelled` before/after each frame |
+| Inbound speech during playback | `monitorInboundDuringPlayback()` on inbound AudioSocket frames when `ctx.activePlaybackSession` is set |
+| Silence writer coordination | Unchanged: `stopSilenceWriter` before playback, `startSilenceWriter` after (including cancel exit) |
+| Double-writer prevention | Silence writer stopped for entire playback/cancel window |
+| Socket safety | Loop breaks on `!socket.writable`; no write after break |
+
+### Spike feature flag (default off)
+
+```env
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false   # default — no production change
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_RMS_THRESHOLD=450
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_SPEECH_FRAMES=3   # ~60 ms at 20 ms frames
+```
+
+When **disabled** (default): `playAssistantAudio()` uses the original `streamPcmToSocket()` path with no session and no inbound monitor.
+
+When **enabled** (QA only): assistant TTS playback attaches a session; inbound RMS speech triggers cancel; spike logs emitted.
+
+### Spike logging (flag enabled only)
+
+| Event | Log prefix |
+|-------|------------|
+| `playback_started` | `[v4-playback-spike]` |
+| `playback_cancel_requested` | includes `cancellation_reason`, `frames_sent_before_cancel` |
+| `playback_cancelled` | includes `cancel_latency_ms` |
+| Frame loop stop | `[voice-bridge] cancelled sending ...` |
+
+No secrets, phone numbers, or transcript previews in spike logs.
+
+### Unit tests added
+
+File: `voice-bridge/tests/playback-cancel-spike.test.js`
+
+- Default flag off in `loadConfig()`
+- Full playback without session unchanged
+- Cancel signal stops frame loop early
+- No writes after socket closed
+- Inbound monitor triggers cancel when spike enabled
+- Monitor inactive when spike disabled
+
+All 57 voice-bridge tests pass (`npm test`).
+
+### Risks and limits
+
+| Risk | Mitigation / note |
+|------|-------------------|
+| Asterisk buffers outbound audio after bridge stops sending | **Live test required** — code cancel ≠ audible stop |
+| RMS false positives (line noise) | Tunable threshold/frame count; not production VAD |
+| Spike only covers assistant TTS | Greeting playback unchanged |
+| No dialogue recovery after cancel | Out of spike scope |
+| Prior live test failed on **v3 default** (flag off) | Expected — spike not active in that test |
+
+### Phase 0B decision status
+
+| Layer | Status |
+|-------|--------|
+| Bridge code cancellation | **Implemented behind disabled flag** |
+| Inbound monitor during playback | **Implemented behind disabled flag** |
+| Audible/PSTN stop | **Pending live validation with spike enabled** |
+| Implementation path (AudioSocket vs ARI/ExternalMedia) | **Still open** — do not select until spike live QA classifies result |
+
+### Exact live validation commands (spike enabled on QA host)
+
+```bash
+# Enable on test host only — see runbook
+docker exec technolohit-voice-bridge sh -lc 'printenv | sort | egrep "^VOICE_V4_PLAYBACK_CANCEL_SPIKE_"'
+
+# During test call
+docker logs -f technolohit-voice-bridge 2>&1 | egrep -i "v4-playback-spike|cancelled sending assistant"
+
+# Collect evidence
+docker logs --since=10m technolohit-voice-bridge 2>&1 | egrep -i "v4-playback-spike|cancelled sending|playback_cancel" > /tmp/v4-playback-spike-evidence.txt
+```
+
+Classify per runbook: **immediate_stop** / **delayed_stop** / **no_stop** / **unsafe**.
+
+### Media path recommendation (interim)
+
+| Path | When |
+|------|------|
+| **A) Continue AudioSocket** | Only if spike live QA shows **immediate_stop** (bridge cancel logs + caller hears stop ≤ ~500 ms) on QA/PSTN |
+| **B) ARI/ExternalMedia / new realtime media bridge** | If **no_stop**, **unsafe**, or **delayed_stop** that cannot be tuned acceptably |
+
+**Final media-path decision remains pending live validation with `VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=true`.**
 
 ---
 
@@ -388,9 +497,9 @@ Targets are for **PSTN 8 kHz**, German-first, single-region deployment. Values a
 | Tenant-ready | Good |
 | Operational complexity | Higher |
 
-### Recommendation
+### Current decision status
 
-**Implement v4 inside `voice-bridge` behind feature flags**, with **strict modular boundaries**:
+**Not finally decided after live barge-in validation.** The previous low-risk path was to implement v4 inside `voice-bridge` behind feature flags, with **strict modular boundaries**:
 
 ```text
 voice-bridge/src/
@@ -406,9 +515,18 @@ voice-bridge/src/
   runtime-router.js   # selects v3 vs v4 from flags
 ```
 
+This remains the preferred path for non-media foundation work only if the team explicitly accepts that Phase 1 will not touch realtime playback/barge-in yet.
+
 **Do not add v4 logic to `turn-assistant.js`.** Keep v3 path untouched for rollback.
 
-**Escalation trigger:** If AudioSocket barge-in live test fails (§3), introduce a **separate realtime media worker** (Option 2 partial) for media only; voice-bridge retains persistence/post-call.
+**Escalation trigger has fired:** The AudioSocket barge-in live/manual test failed (§3, §11A) on **v3 default behavior** (spike flag off).
+
+**Phase 0B spike (§3B):** Minimal cancellable playback is now implemented behind `VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false`. Re-test with spike enabled before choosing media path.
+
+Before implementation starts, the team must:
+
+1. Run spike live QA per [Phase 0B runbook](./voice_assistant_v4_phase0b_playback_cancel_spike_runbook.md), or
+2. If spike live QA fails, prepare **ARI/ExternalMedia / new realtime media bridge** while voice-bridge retains persistence/post-call.
 
 **Agent config source of truth (Phase 1):** **Versioned JSON file** seed at `voice-bridge/config/agents/technolohit.main_voice_sales.v4.json`; DB-backed config deferred to post–Phase 1.
 
@@ -612,7 +730,10 @@ df -h /opt/technolohit-voice
 ```bash
 docker exec technolohit-voice-bridge sh -lc 'test -n "$OPENAI_API_KEY" && echo openai_configured=yes || echo openai_configured=no'
 docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://technolohit-rag-api:8080/healthz 2>/dev/null || echo rag_api_unreachable'
+docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://127.0.0.1:8080/healthz 2>/dev/null || echo host_local_rag_api_unreachable'
 ```
+
+**Expected current RAG URL:** Because `technolohit-voice-bridge` runs on Docker host network and `technolohit-rag-api` is on `asterisk_default`, Docker DNS `http://technolohit-rag-api:8080` is not expected to work from voice-bridge. Use `http://127.0.0.1:8080` from voice-bridge unless networking is changed.
 
 **Questions:** OpenAI tier RPM/TPM; approved vendors if Deepgram fallback needed; data processing agreement status.
 
@@ -644,33 +765,105 @@ docker logs --tail=50 technolohit-voice-bridge 2>&1 | tail -20
 
 ---
 
+## 11A. Partial Sysadmin Validation Results
+
+Date: 2026-06-01
+
+### AudioSocket availability
+
+**Result: PASS for availability only.**
+
+- Asterisk has `app_audiosocket.so`, `chan_audiosocket.so`, and `res_audiosocket.so` loaded and running.
+- The AudioSocket application is visible in `core show applications`.
+- This confirms that the current AudioSocket path exists.
+- This does **not** prove reliable barge-in support.
+
+### ARI / ExternalMedia fallback
+
+**Result: BLOCKED / not currently available.**
+
+- ARI is not loaded: `module show like ari` returns `0 modules loaded`.
+- External check only shows `app_externalivr.so`.
+- No clear ARI/ExternalMedia realtime fallback path is currently confirmed.
+- If AudioSocket playback cancellation cannot be made reliable, sysadmin must validate/setup ARI, ExternalMedia, or a new realtime media bridge path.
+
+### Server capacity
+
+**Result: PASS for initial v4 testing.**
+
+- Server has 12 CPU cores, 23 GiB RAM, about 20 GiB available, low load average, and 678 GiB disk free.
+- Current voice/RAG/Asterisk containers use very low CPU/RAM.
+- Keep the initial recommendation: 3 concurrent calls normal target, 5 calls stretch target only after real load tests.
+
+### OpenAI / RAG readiness
+
+**Result: PASS with host-local RAG URL.**
+
+- OpenAI is configured in voice-bridge without exposing secrets.
+- RAG API is running and healthy on the host.
+- `http://127.0.0.1:8080/healthz` returns `{"ok":true,"service":"technolohit-rag-api","environment":"development"}` from the host.
+- `http://127.0.0.1:8080/healthz` also works from inside `technolohit-voice-bridge`.
+- `http://technolohit-rag-api:8080/healthz` does not work because voice-bridge runs on Docker host network while RAG API is on `asterisk_default`.
+- RAG readiness is no longer a Phase 0 blocker, but v4 config/docs must use the correct base URL: `VOICE_RAG_API_URL=http://127.0.0.1:8080`.
+
+### Barge-in feasibility
+
+**Result: FAIL with current live/manual behavior.**
+
+- Test result: no stop.
+- Caller interrupted while assistant was speaking, but assistant playback continued.
+- Current AudioSocket/v3 playback behavior is not acceptable for v4 barge-in as-is.
+- Do not proceed under the assumption that upgraded current AudioSocket is enough.
+
+Decision impact:
+
+1. Prove AudioSocket playback cancellation can be implemented reliably, or
+2. Move toward a new realtime media bridge / ARI / ExternalMedia path.
+
+### Remaining operational blockers
+
+- QA route confirmation is missing.
+- Overload fallback behavior is missing.
+- Encryption at rest confirmation is missing.
+- Retention owner/sign-off is missing.
+- Expected/max concurrent call target still needs operational confirmation.
+
+---
+
 ## 12. Phase 0 Recommendation
 
 ### Go / no-go for Phase 1 implementation
 
 | Decision | Detail |
 |----------|--------|
-| **Go** | Phase 1 **foundation** (schema, agent config, runtime router skeleton, quality events schema, RAG agent scope) |
-| **Conditional go** | Phase 2–3 realtime audio + barge-in after sysadmin AudioSocket stop test |
-| **No-go until resolved** | Production v4 enablement, retention sign-off, concurrency benchmark |
+| **No-go for now** | Phase 1 implementation is paused until the blocking Phase 0 validation items below are resolved |
+| **Conditional go later** | Phase 1 foundation can start after team acceptance, media/runtime path decision, and operational/security blockers are recorded |
+| **No-go until resolved** | Phase 2-3 realtime audio/barge-in, production v4 enablement, retention sign-off, concurrency benchmark |
 
 ### Preferred architecture path
 
-**v4 inside `voice-bridge` behind flags**, modular `src/v4/*`, v3 `turn-assistant.js` frozen, post-call pipeline shared.
+**Not final.** Keep v3 `turn-assistant.js` frozen and keep post-call/persistence shared. The open decision is whether v4 media runs through a proven cancellable AudioSocket path inside voice-bridge, or through ARI/ExternalMedia/new realtime media bridge.
 
 ### Remaining blockers
 
-1. AudioSocket barge-in **live validation** (§3)
-2. Retention **owner sign-off** (§6)
-3. **Concurrent call capacity** benchmark (§9)
-4. **QA phone route** confirmation (§11)
-5. OpenAI **streaming STT** API/limit confirmation (§4)
+1. AudioSocket barge-in **failed current live/manual test** (§3, §11A)
+2. v4 media/runtime implementation path is **not decided**: prove AudioSocket cancellation or choose ARI/ExternalMedia/new media bridge
+3. ARI/ExternalMedia fallback is **not currently confirmed or loaded** (§11A)
+4. Retention **owner sign-off** (§6)
+5. **Concurrent call capacity** operational confirmation (§9)
+6. **QA phone route** confirmation (§11)
+7. OpenAI **streaming STT** API/limit confirmation (§4)
+8. Backup encryption confirmation (§11)
 
 ### Exact next step
 
-1. **Team accepts this Phase 0 report.**
-2. **Sysadmin completes §11 checklist** and records results in a short addendum (or ticket).
-3. **Begin Phase 1** per blueprint: migrations 006–009 (when approved), agent config JSON seed, runtime router stub — **no realtime audio yet**.
+1. **Do not start Phase 1 implementation yet.**
+2. **Run Phase 0B spike live QA** on a test host with `VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=true` — see [runbook](./voice_assistant_v4_phase0b_playback_cancel_spike_runbook.md).
+3. **Record spike result** (immediate_stop / delayed_stop / no_stop / unsafe) in this report §3B.
+4. **Then decide media path:** AudioSocket only if live QA passes; otherwise ARI/ExternalMedia/new media bridge.
+5. **Document RAG config:** use `VOICE_RAG_API_URL=http://127.0.0.1:8080` from voice-bridge unless container networking changes.
+6. **Assign retention/privacy owner** and confirm backup encryption.
+7. After blockers are resolved, update this report to `Accepted for Phase 1 foundation`.
 
 ---
 
@@ -684,19 +877,25 @@ Phase 0 documentation (this report):
 - [x] Successful: Streaming STT/TTS provider decision documented (Option A+D hybrid recommended)
 - [x] Successful: Latency targets documented
 - [x] Successful: Retention owner and proposed values documented (approval pending)
-- [x] Successful: Implementation path selected (v4 in voice-bridge behind flags, modular)
+- [ ] Successful: Implementation path selected after failed barge-in test
 - [x] Successful: Rollback plan documented
 - [x] Successful: Concurrency and overload policy documented (limits pending sysadmin data)
 - [x] Successful: Tenant-ready Phase 1 foundation documented (migration filenames proposed)
 - [x] Successful: Sysadmin required inputs listed with commands
 
+- [x] Successful: Phase 0B playback cancel spike implemented (flag off by default)
+- [x] Successful: Phase 0B unit tests added and passing
+- [x] Successful: Phase 0B manual QA runbook added
+- [ ] Successful: Phase 0B spike live QA completed
+- [ ] Successful: Media path selected after spike live QA
+
 Pending acceptance / validation (leave unchecked):
 
 - [ ] Successful: Phase 0 decision report **accepted** by team
-- [ ] Successful: AudioSocket barge-in feasibility **live-tested**
+- [x] Successful: AudioSocket barge-in feasibility **live-tested** (failed current behavior)
 - [ ] Successful: Retention policy **approved** by responsible person
 - [ ] Successful: Backup encryption **confirmed**
-- [ ] Successful: Server CPU/RAM headroom **confirmed**
+- [x] Successful: Server CPU/RAM headroom **confirmed** for initial v4 testing
 - [ ] Successful: Expected/max concurrent calls **confirmed**
 - [ ] Successful: QA phone route **confirmed**
 - [ ] Successful: OpenAI streaming STT limits **confirmed**
@@ -708,11 +907,12 @@ Pending acceptance / validation (leave unchecked):
 
 | # | Question | Phase 0 answer |
 |---|----------|----------------|
-| 1 | AudioSocket barge-in? | **Unknown** — prototype on AudioSocket; live test required |
+| 1 | AudioSocket barge-in? | **Failed v3 default live test**; Phase 0B spike coded — re-test with spike flag on QA host |
 | 2 | STT/TTS provider? | **OpenAI incremental + local VAD**; Deepgram fallback |
 | 3 | Latency targets? | §5 |
 | 4 | Retention? | §6 proposed defaults — approval pending |
-| 5 | voice-bridge vs new service? | **voice-bridge behind flags** |
+| 5 | voice-bridge vs new service? | **Open** — AudioSocket only if spike live QA proves audible stop; else realtime media bridge |
 | 6 | Agent config source? | **File seed Phase 1**; DB later |
 | 7 | QA phone route? | **Required** — sysadmin to confirm |
-| 8 | Max concurrent calls? | **Initial limit 3** — benchmark pending |
+| 8 | Max concurrent calls? | **Initial limit 3** — server headroom OK, operational confirmation still pending |
+| 9 | RAG readiness? | **Ready via host-local URL** — use `http://127.0.0.1:8080` from voice-bridge; Docker DNS name is not valid in current network mode |

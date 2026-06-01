@@ -875,7 +875,7 @@ Do not start implementation before this Phase 0 decision report is complete and 
 - [x] Successful: Streaming STT/TTS provider decision documented.
 - [x] Successful: Latency targets documented.
 - [x] Successful: Retention owner and values documented.
-- [x] Successful: Implementation path selected.
+- [ ] Successful: Implementation path selected after failed barge-in validation.
 - [x] Successful: Rollback plan documented.
 - [x] Successful: Concurrency and overload policy documented.
 - [ ] Successful: Phase 0 decision report accepted.
@@ -884,12 +884,12 @@ Do not start implementation before this Phase 0 decision report is complete and 
 
 ### Phase 0: Architecture And Runtime Feasibility
 
-- [ ] Successful: Current AudioSocket playback interruption feasibility tested.
+- [x] Successful: Current AudioSocket playback interruption feasibility tested (failed current live/manual behavior; no playback stop).
 - [x] Successful: Streaming STT provider/API decision made.
 - [x] Successful: Streaming/low-latency TTS provider/API decision made.
 - [x] Successful: Latency targets confirmed.
 - [x] Successful: Retention/security decisions recorded.
-- [x] Successful: v4 implementation path selected.
+- [ ] Successful: v4 implementation path selected after failed barge-in validation.
 - [x] Successful: `voice_assistant_v4_phase0_decision_report.md` completed.
 - [ ] Successful: `voice_assistant_v4_phase0_decision_report.md` accepted.
 
@@ -961,9 +961,9 @@ Do not start implementation before this Phase 0 decision report is complete and 
 
 Needed before implementation:
 
-- [ ] Successful: Confirm whether current Asterisk AudioSocket can support reliable playback stop/break for barge-in.
-- [ ] Successful: Confirm whether an ARI/ExternalMedia path is available if AudioSocket is insufficient.
-- [ ] Successful: Confirm server CPU/memory headroom for realtime STT/TTS pipeline.
+- [ ] Successful: Confirm whether current Asterisk AudioSocket can support reliable playback stop/break for barge-in. Current live/manual test failed; cancellation must be proven or abandoned.
+- [ ] Successful: Confirm whether an ARI/ExternalMedia path is available if AudioSocket is insufficient. Current ARI check shows no loaded ARI modules.
+- [x] Successful: Confirm server CPU/memory headroom for realtime STT/TTS pipeline. Initial headroom is acceptable for testing.
 - [ ] Successful: Confirm expected and maximum concurrent call capacity.
 - [ ] Successful: Confirm overload behavior for calls above capacity.
 - [ ] Successful: Confirm allowed provider/API for streaming STT/TTS/realtime audio.
@@ -997,6 +997,15 @@ These must be answered in Phase 0:
 
 - [ ] Successful: Open decisions resolved.
 - [ ] Successful: Implementation approved.
+
+Current Phase 0 validation status:
+
+- AudioSocket availability: available.
+- AudioSocket barge-in live/manual behavior: failed; assistant playback did not stop on caller interruption.
+- ARI/ExternalMedia fallback: not confirmed; ARI modules are not currently loaded.
+- Server capacity: enough for initial v4 tests; operational concurrency target still pending.
+- RAG readiness: ready via host-local URL `http://127.0.0.1:8080` from voice-bridge; Docker DNS `technolohit-rag-api` is not valid in the current host-network setup.
+- Phase 1 implementation: not approved yet.
 
 ## Acceptance Criteria For v4 Phase 1
 

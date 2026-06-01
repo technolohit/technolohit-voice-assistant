@@ -19,8 +19,10 @@ function writeFrame(socket, type, payload) {
 
 /**
  * Stream PCM to Asterisk in fixed 20ms (configurable) frames.
+ * Optional playbackSession (Phase 0B spike): exits early when session.cancelled is set.
  */
-export async function streamPcmToSocket(socket, pcm, config, label) {
+export async function streamPcmToSocket(socket, pcm, config, label, options = {}) {
+  const playbackSession = options?.playbackSession ?? null;
   const chunkBytes = pcmChunkBytes(config.sampleRate, config.frameMs);
   const frameType = FrameType.AUDIO_SLIN16_8K;
   let frames = 0;
@@ -30,14 +32,28 @@ export async function streamPcmToSocket(socket, pcm, config, label) {
 
   for (const chunk of iteratePcmChunks(pcm, chunkBytes)) {
     if (!socket.writable) break;
+    if (playbackSession?.cancelled) break;
     await writeFrame(socket, frameType, chunk);
     frames += 1;
     bytes += chunk.length;
+    if (playbackSession) {
+      playbackSession.framesSent = frames;
+      playbackSession.bytesSent = bytes;
+    }
+    if (playbackSession?.cancelled) break;
     await sleep(config.frameMs);
   }
 
-  console.log(`[voice-bridge] finished sending ${label} frames=${frames} bytes=${bytes}`);
-  return { frames, bytes };
+  const cancelled = Boolean(playbackSession?.cancelled);
+  if (cancelled) {
+    console.log(
+      `[voice-bridge] cancelled sending ${label} frames=${frames} bytes=${bytes} reason=${playbackSession.cancelReason ?? "unknown"}`
+    );
+  } else {
+    console.log(`[voice-bridge] finished sending ${label} frames=${frames} bytes=${bytes}`);
+  }
+
+  return { frames, bytes, cancelled, cancelReason: playbackSession?.cancelReason ?? null };
 }
 
 export async function playGreetingAndKeepalive(config, ctx, socket) {
