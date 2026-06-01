@@ -35,10 +35,10 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 4 — Barge-In And Interruption Runtime Implementation** |
+| **Current completed phase** | **Phase 5 — Live Dialogue Orchestrator Integration** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
-| **v4 production status** | **Not enabled** — canary/barge-in flags default off; router delegates to v3 |
-| **Next implementation phase** | **Phase 5 — Live Dialogue Orchestrator Integration** |
+| **v4 production status** | **Not enabled** — canary/dialogue flags default off; router delegates to v3 |
+| **Next implementation phase** | **Phase 6 — RAG Product/Sales Q&A Integration** |
 
 Completed foundation work (do not re-implement):
 
@@ -46,7 +46,8 @@ Completed foundation work (do not re-implement):
 - Phase 1 tenant-ready data/config foundation (tagged `v1.4.0`)
 - Phase 2 runtime foundation: `CallSessionMemory`, state machine, runtime router/context, quality event builders, lead validator, RAG scope guardrails, agent config helpers (tagged `v1.5.0`)
 - Phase 3 media foundation: audio session, VAD/endpointing, STT/TTS adapter interfaces, TTS phrase cache, canary-safe AudioSocket routing skeleton, media quality event builders (tagged `v1.6.0`)
-- Phase 4 barge-in foundation: playback controller, barge-in detector, interruption context, canary barge-in harness (not production live path)
+- Phase 4 barge-in foundation: playback controller, barge-in detector, interruption context, canary barge-in harness (tagged `v1.7.0`)
+- Phase 5 dialogue orchestrator: turn lifecycle, response planner, canary runtime loop, quality event sink (canary/test-harness only)
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -64,8 +65,8 @@ Phase 1  — Tenant-Ready Data And Config Foundation
 Phase 2  — Runtime Foundation / Application Layer          [completed]
 Phase 3  — Realtime Audio Foundation / Media Layer         [completed]
 Phase 4  — Barge-In And Interruption Runtime Implementation [completed]
-Phase 5  — Live Dialogue Orchestrator Integration         [next]
-Phase 6  — RAG Product/Sales Q&A Integration
+Phase 5  — Live Dialogue Orchestrator Integration         [completed]
+Phase 6  — RAG Product/Sales Q&A Integration              [next]
 Phase 7  — Lead Policy, Post-Call Reliability, And Privacy
 Phase 8  — Observability And Quality Analytics
 Phase 9  — Production Rollout
@@ -934,7 +935,8 @@ Progress summary:
 - [x] Successful: Phase 2 runtime foundation / application layer implemented.
 - [x] Successful: Phase 3 realtime audio foundation / media layer implemented.
 - [x] Successful: Phase 4 barge-in and interruption runtime foundation implemented.
-- [ ] Successful: Phase 5 live dialogue orchestrator integration started.
+- [x] Successful: Phase 5 live dialogue orchestrator integration implemented.
+- [ ] Successful: Phase 6 RAG product/sales Q&A integration started.
 
 ### Phase 0: Architecture And Runtime Feasibility
 
@@ -1001,18 +1003,25 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Product/topic change after interruption resets or repairs state correctly (foundation tests).
 - [x] Successful: Barge-in/interruption feasibility live QA passes for Phase 0; v4 modules now separate from spike.
 - [x] Successful: Phase 4 barge-in runtime report added.
-- [ ] Successful: Resume dialogue from interrupted intent in **live v4 orchestrator** (Phase 5).
+- [x] Successful: Resume dialogue from interrupted intent in **canary v4 orchestrator** (live production path → Phase 6+).
 
 ### Phase 5: Live Dialogue Orchestrator Integration
 
-**Status: next implementation phase.**
+**Status: implementation complete in repo; canary/test-harness only; production still on v3.**
 
-- [ ] Successful: Replace scattered v3 state updates with v4 memory/state transitions in live runtime.
-- [ ] Successful: Product Q&A after contact capture does not restart intake.
-- [ ] Successful: Persist quality events from v4 path only (not v3 production flow).
-- [ ] Successful: v4 dialogue orchestrator module (not `turn-assistant.js` monolith expansion).
+- [x] Successful: v4 memory/state transitions in canary orchestrator (not v3 `turn-assistant.js`).
+- [x] Successful: v4 dialogue orchestrator module (`dialogue-orchestrator.js`).
+- [x] Successful: Deterministic response planner foundation.
+- [x] Successful: Canary runtime loop simulation (transcript, playback, barge-in).
+- [x] Successful: Quality event sink hooks (v4 path only; memory buffer + optional insert).
+- [x] Successful: Lead validator gates callback-ready in orchestrator.
+- [x] Successful: Phase 5 dialogue orchestrator report added.
+- [ ] Successful: Product Q&A after contact capture does not restart intake (live v4 — Phase 6).
+- [ ] Successful: Persist quality events from v4 path to DB (Phase 8).
 
 ### Phase 6: RAG Product/Sales Q&A Integration
+
+**Status: next implementation phase.**
 
 - [x] Successful: RAG retrieval tenant/agent scoped (Phase 1/2 foundation).
 - [x] Successful: RAG scope guardrails — no lead/permission delegation (Phase 2).
@@ -1097,8 +1106,9 @@ Current project status (see also **Current Project Status** at top):
 - Phase 1 foundation: **implementation complete in repo** (tag `v1.4.0`) — migrations pending operator apply.
 - Phase 2 runtime foundation: **implementation complete in repo** (tag `v1.5.0`) — production still on v3.
 - Phase 3 media foundation: **implementation complete in repo** (tag `v1.6.0`) — canary/test-harness only.
-- Phase 4 barge-in foundation: **implementation complete in repo** — canary/test-harness only; production still on v3.
-- **Next implementation phase: Phase 5 — Live Dialogue Orchestrator Integration.**
+- Phase 4 barge-in foundation: **implementation complete in repo** (tag `v1.7.0`) — canary/test-harness only.
+- Phase 5 dialogue orchestrator: **implementation complete in repo** — canary/test-harness only; production still on v3.
+- **Next implementation phase: Phase 6 — RAG Product/Sales Q&A Integration.**
 - Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1

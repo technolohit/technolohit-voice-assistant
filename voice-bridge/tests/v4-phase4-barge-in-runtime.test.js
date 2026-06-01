@@ -144,7 +144,7 @@ test("v4 canary without barge-in flag stays media stub only", () => {
   withEnv(bargeInEnv({ VOICE_V4_BARGE_IN_ENABLED: "false" }), () => {
     const config = loadConfig();
     assert.equal(canPrepareV4BargeIn(config), false);
-    assert.equal(resolveRuntimeRoute(config).reason, "v4_canary_media_stub_phase3");
+    assert.equal(resolveRuntimeRoute(config).reason, "v4_canary_dialogue_stub_phase5");
   });
 });
 

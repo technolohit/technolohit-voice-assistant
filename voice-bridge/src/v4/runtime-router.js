@@ -9,6 +9,10 @@ import {
   routeAudioSocketCall,
   createBargeInRuntimeContext
 } from "./audiosocket-runtime.js";
+import {
+  canPrepareV4Dialogue,
+  createCanaryDialogueRuntime
+} from "./canary-runtime-loop.js";
 
 export { createRuntimeContext };
 
@@ -28,6 +32,7 @@ export function resolveRuntimeRoute(config) {
         stub: true,
         canaryReady: false,
         bargeInReady: false,
+        dialogueReady: false,
         reason: "v4_canary_disabled"
       };
     }
@@ -38,6 +43,7 @@ export function resolveRuntimeRoute(config) {
         stub: true,
         canaryReady: true,
         bargeInReady: true,
+        dialogueReady: true,
         reason: "v4_canary_barge_in_stub_phase4"
       };
     }
@@ -47,7 +53,8 @@ export function resolveRuntimeRoute(config) {
       stub: true,
       canaryReady: true,
       bargeInReady: false,
-      reason: "v4_canary_media_stub_phase3"
+      dialogueReady: true,
+      reason: "v4_canary_dialogue_stub_phase5"
     };
   }
 
@@ -58,6 +65,7 @@ export function resolveRuntimeRoute(config) {
       stub: false,
       canaryReady: false,
       bargeInReady: false,
+      dialogueReady: false,
       reason: "v4_requested_but_realtime_disabled"
     };
   }
@@ -68,6 +76,7 @@ export function resolveRuntimeRoute(config) {
     stub: false,
     canaryReady: false,
     bargeInReady: false,
+    dialogueReady: false,
     reason: "default_v3"
   };
 }
@@ -99,6 +108,7 @@ export function describeRuntimeRoute(config) {
     stub: route.stub,
     canary_ready: Boolean(route.canaryReady),
     barge_in_ready: Boolean(route.bargeInReady),
+    dialogue_ready: Boolean(route.dialogueReady),
     reason: route.reason
   };
 }
@@ -111,13 +121,45 @@ export function routeIncomingCallToRuntime(config, input = {}) {
       route,
       context: null,
       canaryReady: Boolean(route.canaryReady),
-      bargeInReady: Boolean(route.bargeInReady)
+      bargeInReady: Boolean(route.bargeInReady),
+      dialogueReady: Boolean(route.dialogueReady)
     };
   }
   return {
     handler: "v4",
     route,
     context: createRuntimeContext(config, input, route)
+  };
+}
+
+export function routeCanaryDialogueRuntime(config, input = {}) {
+  if (!canPrepareV4Dialogue(config)) {
+    return {
+      handler: "v3",
+      active: false,
+      dropCall: false,
+      runtime: null,
+      reason: "v4_dialogue_not_available"
+    };
+  }
+  if (!input.harnessExplicit) {
+    return {
+      handler: "v3",
+      active: false,
+      dropCall: false,
+      runtime: null,
+      reason: "dialogue_harness_required",
+      dialogueReady: true
+    };
+  }
+  const runtime = createCanaryDialogueRuntime(config, input);
+  return {
+    handler: runtime.ok ? "v4_canary_dialogue_stub" : "v3",
+    active: false,
+    dropCall: false,
+    runtime,
+    reason: runtime.reason,
+    dialogueReady: true
   };
 }
 
@@ -150,4 +192,11 @@ export function routeBargeInTestContext(config, input = {}) {
   };
 }
 
-export { canPrepareV4CanaryMedia, canPrepareV4BargeIn, routeAudioSocketCall, createBargeInRuntimeContext };
+export {
+  canPrepareV4CanaryMedia,
+  canPrepareV4BargeIn,
+  canPrepareV4Dialogue,
+  routeAudioSocketCall,
+  createBargeInRuntimeContext,
+  createCanaryDialogueRuntime
+};
