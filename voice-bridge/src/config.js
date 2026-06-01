@@ -119,6 +119,16 @@ export function loadConfig() {
   const v4SttProvider = String(process.env.VOICE_V4_STT_PROVIDER ?? "openai").trim().toLowerCase();
   const v4TtsProvider = String(process.env.VOICE_V4_TTS_PROVIDER ?? "openai").trim().toLowerCase();
   const v4TtsCacheEnabled = readBool("VOICE_V4_TTS_CACHE_ENABLED", true);
+  const v4BargeInRmsThreshold = Math.max(
+    1,
+    readInt("VOICE_V4_BARGE_IN_RMS_THRESHOLD", v4VadRmsThreshold)
+  );
+  const v4BargeInSpeechFrames = Math.max(
+    1,
+    readInt("VOICE_V4_BARGE_IN_SPEECH_FRAMES", v4VadSpeechFrames)
+  );
+  const v4BargeInMinPlaybackMs = Math.max(0, readInt("VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS", 120));
+  const v4BargeInCancelTimeoutMs = Math.max(50, readInt("VOICE_V4_BARGE_IN_CANCEL_TIMEOUT_MS", 400));
   const tenantId = String(process.env.VOICE_TENANT_ID ?? "technolohit").trim();
   const agentId = String(process.env.VOICE_AGENT_ID ?? "main_voice_sales").trim();
   const agentConfigPath = String(process.env.VOICE_AGENT_CONFIG_PATH ?? "").trim();
@@ -216,6 +226,10 @@ export function loadConfig() {
       sttProvider: v4SttProvider,
       ttsProvider: v4TtsProvider,
       ttsCacheEnabled: v4TtsCacheEnabled,
+      bargeInRmsThreshold: v4BargeInRmsThreshold,
+      bargeInSpeechFrames: v4BargeInSpeechFrames,
+      bargeInMinPlaybackMs: v4BargeInMinPlaybackMs,
+      bargeInCancelTimeoutMs: v4BargeInCancelTimeoutMs,
       tenantId,
       agentId,
       agentConfigPath

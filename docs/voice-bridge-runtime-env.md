@@ -30,7 +30,6 @@ Set in `/opt/technolohit-voice/voice-bridge/.env` only for supervised v4 work:
 ```env
 VOICE_RUNTIME_VERSION=v3
 VOICE_V4_REALTIME_ENABLED=false
-VOICE_V4_BARGE_IN_ENABLED=false
 VOICE_V4_STREAMING_STT_ENABLED=false
 VOICE_V4_STREAMING_TTS_ENABLED=false
 VOICE_TENANT_ID=technolohit
@@ -53,7 +52,17 @@ VOICE_V4_TTS_CACHE_ENABLED=true
 
 `VOICE_V4_CANARY_ENABLED=true` plus `VOICE_RUNTIME_VERSION=v4` and `VOICE_V4_REALTIME_ENABLED=true` only prepares a **test-harness media context** in Phase 3. It does **not** take over live AudioSocket call handling.
 
-Phase 0B/0C spike flags remain **QA-only** and must not become the production v4 implementation:
+Phase 4 barge-in flags (canary/test-harness only; **not** production v4):
+
+```env
+VOICE_V4_BARGE_IN_ENABLED=false
+VOICE_V4_BARGE_IN_RMS_THRESHOLD=450
+VOICE_V4_BARGE_IN_SPEECH_FRAMES=3
+VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS=120
+VOICE_V4_BARGE_IN_CANCEL_TIMEOUT_MS=400
+```
+
+Phase 0B/0C spike flags remain **QA-only legacy** and must not be used as the production v4 barge-in path:
 
 ```env
 VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false

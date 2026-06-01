@@ -113,6 +113,25 @@ export const buildTtsCompletedEvent = typedBuilder("tts_completed", {
   metricName: "tts_ms"
 });
 export const buildBargeInDetectedEvent = typedBuilder("barge_in_detected", { eventStage: "playback" });
+export const buildPlaybackStartedEvent = typedBuilder("playback_started", { eventStage: "playback" });
+export const buildPlaybackCancelRequestedEvent = typedBuilder("playback_cancel_requested", {
+  eventStage: "playback",
+  metricName: "cancel_latency_ms"
+});
+export const buildPlaybackCancelledEvent = typedBuilder("playback_cancelled", {
+  eventStage: "playback",
+  metricName: "cancel_latency_ms"
+});
+export const buildPlaybackCompletedEvent = typedBuilder("playback_completed", {
+  eventStage: "playback",
+  metricName: "playback_duration_ms"
+});
+export const buildInterruptionContextCapturedEvent = typedBuilder("interruption_context_captured", {
+  eventStage: "dialogue"
+});
+export const buildTopicSwitchDetectedEvent = typedBuilder("topic_switch_detected", {
+  eventStage: "dialogue"
+});
 export const buildInterruptionRecoveredEvent = typedBuilder("interruption_recovered", {
   eventStage: "dialogue"
 });
