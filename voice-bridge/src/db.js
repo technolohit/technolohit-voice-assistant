@@ -485,3 +485,41 @@ export async function updateVoiceLead(config, input) {
   );
   return result.rows[0]?.id ?? null;
 }
+
+export async function insertCallQualityEvent(config, input) {
+  const p = getPool(config);
+  if (!p) return null;
+
+  const eventType = String(input.eventType ?? "").trim();
+  if (!eventType) {
+    throw new Error("eventType is required");
+  }
+
+  const sql = `
+    INSERT INTO voice.call_quality_events (
+      tenant_id,
+      agent_id,
+      call_session_id,
+      event_type,
+      event_stage,
+      metric_name,
+      metric_value,
+      payload
+    ) VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, $8::jsonb)
+    RETURNING id::text AS id;
+  `;
+
+  const values = [
+    String(input.tenantId ?? "technolohit").trim(),
+    String(input.agentId ?? "main_voice_sales").trim(),
+    input.callSessionId ? String(input.callSessionId).trim() : null,
+    eventType,
+    input.eventStage ? String(input.eventStage).trim() : null,
+    input.metricName ? String(input.metricName).trim() : null,
+    Number.isFinite(Number(input.metricValue)) ? Number(input.metricValue) : null,
+    JSON.stringify(input.payload && typeof input.payload === "object" ? input.payload : {})
+  ];
+
+  const result = await p.query(sql, values);
+  return result.rows[0]?.id ?? null;
+}

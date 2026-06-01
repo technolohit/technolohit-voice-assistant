@@ -106,6 +106,14 @@ export function loadConfig() {
     readInt("VOICE_V4_PLAYBACK_CANCEL_SPIKE_SPEECH_FRAMES", 3)
   );
   const v4InterruptionContextSpikeEnabled = readBool("VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED", false);
+  const runtimeVersion = String(process.env.VOICE_RUNTIME_VERSION ?? "v3").trim().toLowerCase();
+  const v4RealtimeEnabled = readBool("VOICE_V4_REALTIME_ENABLED", false);
+  const v4BargeInEnabled = readBool("VOICE_V4_BARGE_IN_ENABLED", false);
+  const v4StreamingSttEnabled = readBool("VOICE_V4_STREAMING_STT_ENABLED", false);
+  const v4StreamingTtsEnabled = readBool("VOICE_V4_STREAMING_TTS_ENABLED", false);
+  const tenantId = String(process.env.VOICE_TENANT_ID ?? "technolohit").trim();
+  const agentId = String(process.env.VOICE_AGENT_ID ?? "main_voice_sales").trim();
+  const agentConfigPath = String(process.env.VOICE_AGENT_CONFIG_PATH ?? "").trim();
   const buildVersion = String(process.env.BUILD_VERSION || process.env.IMAGE_TAG || "unknown").trim();
   const imageTag = String(process.env.IMAGE_TAG || "").trim();
   const gitSha = String(process.env.GIT_SHA || "").trim();
@@ -185,6 +193,16 @@ export function loadConfig() {
     },
     v4InterruptionContextSpike: {
       enabled: v4InterruptionContextSpikeEnabled
+    },
+    v4: {
+      runtimeVersion,
+      realtimeEnabled: v4RealtimeEnabled,
+      bargeInEnabled: v4BargeInEnabled,
+      streamingSttEnabled: v4StreamingSttEnabled,
+      streamingTtsEnabled: v4StreamingTtsEnabled,
+      tenantId,
+      agentId,
+      agentConfigPath
     },
     assistant: {
       enabled: assistantEnabled,

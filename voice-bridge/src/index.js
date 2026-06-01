@@ -5,6 +5,8 @@ import { loadConfig } from "./config.js";
 import { isDbConfigured } from "./db.js";
 import { loadVoiceBridgeEnv } from "./load-env.js";
 import * as persist from "./persist.js";
+import { describeRuntimeRoute } from "./v4/runtime-router.js";
+import { loadAgentConfig } from "./v4/agent-config.js";
 
 loadVoiceBridgeEnv();
 
@@ -74,5 +76,21 @@ server.listen(config.listenPort, config.listenHost, () => {
     );
   } else {
     console.log("[voice-assistant] assistant disabled");
+  }
+
+  const runtimeRoute = describeRuntimeRoute(config);
+  console.log(
+    `[voice-runtime] selected=${runtimeRoute.selected_runtime} v4_active=${runtimeRoute.v4_active} reason=${runtimeRoute.reason} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId}`
+  );
+
+  const agentConfigResult = loadAgentConfig(config);
+  if (agentConfigResult.ok) {
+    console.log(
+      `[voice-runtime] agent_config loaded path=${agentConfigResult.path} version=${agentConfigResult.config.agent_config_version}`
+    );
+  } else {
+    console.warn(
+      `[voice-runtime] agent_config unavailable error=${agentConfigResult.error} path=${agentConfigResult.path}`
+    );
   }
 });

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 class RetrieveRequest(BaseModel):
     tenant_id: str = "technolohit"
+    agent_id: str = "main_voice_sales"
     query: str = Field(min_length=1, max_length=4000)
     language: str = "de"
     top_k: int = Field(default=3, ge=1, le=8)
@@ -29,6 +30,7 @@ class RetrieveResponse(BaseModel):
 
 class IngestDocumentRequest(BaseModel):
     tenant_id: str = "technolohit"
+    agent_id: str = "main_voice_sales"
     source_type: str = Field(default="manual", max_length=80)
     source_uri: str = Field(max_length=500)
     title: str = Field(max_length=300)

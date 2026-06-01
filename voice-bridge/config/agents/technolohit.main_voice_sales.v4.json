@@ -1,0 +1,129 @@
+{
+  "schema_version": "v4-agent-config-1",
+  "tenant_id": "technolohit",
+  "agent_id": "main_voice_sales",
+  "agent_config_version": "technolohit-main-v4-20260601",
+  "prompt_playbook_version": "technolohit-sales-v4-20260601",
+  "knowledge_version": "technolohit-knowledge-v20260601",
+  "runtime_version": "voice-runtime-v4.0.0-foundation",
+  "company": {
+    "name": "TechnoloHit",
+    "website": "www.technolohit.com",
+    "contact_email": "info@technolohit.com"
+  },
+  "assistant": {
+    "name": "TechnoloHit Voice Assistant",
+    "language": "de",
+    "voice_style": "professional_friendly"
+  },
+  "greeting": {
+    "mode": "file",
+    "privacy_intro": true,
+    "opening_hint": "Begrüßt den Anrufer und bietet Hilfe zu TechnoloHit-Produkten an."
+  },
+  "products": [
+    {
+      "id": "smart_website",
+      "display_name": "Smart Website",
+      "aliases": [
+        "smart website",
+        "intelligente website",
+        "intelligente webseite",
+        "ki website",
+        "website",
+        "webseite",
+        "homepage"
+      ]
+    },
+    {
+      "id": "aiseoq",
+      "display_name": "AISeoQ",
+      "aliases": [
+        "aiseoq",
+        "seo tool",
+        "seo",
+        "suchmaschinenoptimierung",
+        "google sichtbarkeit"
+      ]
+    },
+    {
+      "id": "botinteg",
+      "display_name": "Botinteg",
+      "aliases": [
+        "botinteg",
+        "bot integ",
+        "chatbot",
+        "ki chatbot",
+        "automation",
+        "automatisierung"
+      ]
+    },
+    {
+      "id": "lokalki",
+      "display_name": "LokalKI",
+      "aliases": [
+        "lokalki",
+        "lokal ki",
+        "lokale ki",
+        "private ki",
+        "interne dokumente"
+      ]
+    },
+    {
+      "id": "voice_agent",
+      "display_name": "Digitale Rezeption",
+      "aliases": [
+        "digitale rezeption",
+        "digitaler telefonassistent",
+        "voice agent",
+        "telefonassistent",
+        "ai voice assistant",
+        "ki telefonassistent"
+      ]
+    }
+  ],
+  "business_hours": {
+    "timezone": "Europe/Berlin",
+    "note": "Placeholder — confirm live hours before production v4 rollout."
+  },
+  "handoff": {
+    "callback_requires_valid_phone": true,
+    "callback_requires_permission": true,
+    "email_path_status": "await_customer_email",
+    "team_callback_status": "callback_ready",
+    "closing_question_default": "Gibt es noch etwas, wobei ich Ihnen helfen kann?"
+  },
+  "forbidden_claims": [
+    "guaranteed rankings",
+    "100% success guarantee",
+    "fixed price without qualification",
+    "medical or legal advice"
+  ],
+  "lead_fields": [
+    "company_name",
+    "email",
+    "phone",
+    "product_interest",
+    "customer_type",
+    "handoff_choice",
+    "use_case_summary"
+  ],
+  "v4_media": {
+    "media_path": "audiosocket",
+    "playback_cancel": {
+      "production_flag": "VOICE_V4_BARGE_IN_ENABLED",
+      "note": "Phase 0B/0C spike flags remain QA-only; production v4 must use proper v4 flags."
+    },
+    "interruption_recovery": {
+      "production_flag": "VOICE_V4_REALTIME_ENABLED",
+      "note": "Phase 0C spike is not the production implementation."
+    },
+    "streaming_stt_flag": "VOICE_V4_STREAMING_STT_ENABLED",
+    "streaming_tts_flag": "VOICE_V4_STREAMING_TTS_ENABLED"
+  },
+  "retention_metadata": {
+    "approval_owner": "Mojtaba, Founder of TechnoloHit",
+    "approval_required_before_production_v4": true,
+    "note": "Metadata only — enforcement belongs to a later rollout phase."
+  }
+}

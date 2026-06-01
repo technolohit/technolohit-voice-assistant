@@ -48,7 +48,7 @@ Per blueprint non-goals for Phase 1:
 | Barge-in feasibility | **Conditionally feasible via AudioSocket** | v3 default failed, but Phase 0B repeatability QA produced repeated `immediate_stop` results |
 | Concurrency capacity | **Partially ready** | Server has enough initial CPU/RAM headroom; operational target still unconfirmed |
 
-**Verdict:** Repository is **ready to move from Phase 0 media/dialogue feasibility into Phase 1 foundation planning after team acceptance**, but Phase 1 should still wait for explicit acceptance and operational/security sign-off. Phase 0B repeatability QA showed that bridge-side AudioSocket playback cancellation can reliably produce audible `immediate_stop` behavior with no call drops or garbled audio. Phase 0C live QA showed that interruption context and product/topic recovery work well enough to continue. The recommended v4 media path is now **AudioSocket, conditionally accepted for playback cancellation and basic interruption recovery**. RAG is reachable via `http://127.0.0.1:8080`, not Docker DNS. Remaining non-media blockers are retention/privacy owner, backup encryption, QA route, concurrency/overload policy, and OpenAI streaming STT/API-limit confirmation.
+**Verdict:** Repository is **ready to move from Phase 0 media/dialogue feasibility into Phase 1 foundation planning after team acceptance**. Phase 0B repeatability QA showed that bridge-side AudioSocket playback cancellation can reliably produce audible `immediate_stop` behavior with no call drops or garbled audio. Phase 0C live QA showed that interruption context and product/topic recovery work well enough to continue. The recommended v4 media path is now **AudioSocket, conditionally accepted for playback cancellation and basic interruption recovery**. RAG is reachable via `http://127.0.0.1:8080`, not Docker DNS. Remaining operational/security items are now clearly recorded: they are **not blockers for Phase 1 foundation planning**, but they **are blockers for production v4 rollout/acceptance** unless explicitly resolved.
 
 ---
 
@@ -728,18 +728,20 @@ Targets are for **PSTN 8 kHz**, German-first, single-region deployment. Values a
 | Raw audio (`.slin`/`.wav` in `VOICE_RECORDING_DIR`) | **21 days** (range 14–30) | Align with blueprint; cron cleanup job |
 | Turn transcripts (`voice.call_transcripts`) | **90 days** | Extend only if linked active lead / legal hold |
 | Call summaries (`voice.call_summaries`) | **90 days** (same as transcripts) | Derived data |
-| Lead records (`voice.leads`) | **Until resolved + 24 months** | Operational default; anonymize phone after closure + period |
+| Lead records (`voice.leads`) | **Until resolved + agreed business retention** | Operational default; anonymize phone after closure + approved period |
 | Lead reveal audit (`voice.lead_access_audit`) | **12 months** minimum | Accountability |
 | Quality events (future table) | **90 days** | Aggregates exported before purge |
 | Knowledge / RAG logs | **90 days** query logs; documents indefinite until version superseded | `knowledge.retrieval_logs` |
 
 | Responsibility | Proposed owner |
 |----------------|----------------|
-| Retention policy approval | **TechnoloHit managing director / DPO** (name TBD by sysadmin) |
+| Retention policy approval | **Mojtaba, Founder of TechnoloHit** |
 | Backup encryption | **Sysadmin / hosting provider** — confirm PostgreSQL and recording volume encryption at rest |
 | Dashboard access list review | **Operations lead** — WireGuard + Basic Auth users documented |
 
 **Approval gate:** Production v4 rollout blocked until written sign-off on retention values (blueprint § Privacy).
+
+Important naming note: **Mojtaba** is the responsible person/founder name. Do not use Linux/server usernames as person names in reports.
 
 ---
 
@@ -943,15 +945,19 @@ runtime_version        = voice-runtime-v4.x.x
 - Extend `RetrieveRequest` / retrieval SQL with optional `agent_id` filter in document metadata.
 - voice-bridge RAG client passes `tenant_id` + `agent_id` on every request.
 
-### Proposed migrations (filenames only — do not apply yet)
+### Phase 1 migrations (created in repo — operator apply required)
 
-| File | Changes |
-|------|---------|
-| `db/voice/migrations/006_v4_tenant_agent_session_fields.sql` | Add `tenant_id`, `agent_id`, `agent_config_version`, `prompt_playbook_version`, `knowledge_version`, `runtime_version` to `voice.call_sessions` |
-| `db/voice/migrations/007_v4_tenant_agent_transcripts_events.sql` | Same identifiers on `voice.call_transcripts`, `voice.call_events`, `voice.call_summaries` |
-| `db/voice/migrations/008_v4_leads_custom_fields.sql` | Add `tenant_id`, `agent_id`, `custom_fields JSONB` to `voice.leads`; indexes `(tenant_id, agent_id, status, created_at DESC)` |
-| `db/voice/migrations/009_v4_call_quality_events.sql` | Create `voice.call_quality_events` per blueprint |
-| `db/knowledge/migrations/003_knowledge_agent_scope.sql` | Optional `agent_id` on documents metadata index; ingestion script update |
+Report: [voice_assistant_v4_phase1_foundation_report.md](./voice_assistant_v4_phase1_foundation_report.md)
+
+| File | Status |
+|------|--------|
+| `db/voice/migrations/006_v4_tenant_agent_session_fields.sql` | **Created** |
+| `db/voice/migrations/007_v4_tenant_agent_transcripts_events.sql` | **Created** |
+| `db/voice/migrations/008_v4_leads_custom_fields.sql` | **Created** |
+| `db/voice/migrations/009_v4_call_quality_events.sql` | **Created** |
+| `db/knowledge/migrations/003_knowledge_agent_scope.sql` | **Created** |
+
+Apply with `npm run db:migrate:voice` and `npm run db:migrate:knowledge` (knowledge requires pgvector ready).
 
 ### Affected tables summary
 
@@ -1094,11 +1100,12 @@ Decision impact:
 
 ### Remaining operational blockers
 
-- QA route confirmation is missing.
-- Overload fallback behavior is missing.
-- Encryption at rest confirmation is missing.
-- Retention owner/sign-off is missing.
-- Expected/max concurrent call target still needs operational confirmation.
+- Retention/privacy owner is confirmed: **Mojtaba, Founder of TechnoloHit**. Final retention values still require Mojtaba's approval before production v4 rollout.
+- Backup encryption at rest is not confirmed yet for PostgreSQL and voice recordings.
+- A dedicated QA DID/internal extension is not confirmed yet. Live QA has used the available route, but future v4 testing still needs a dedicated QA route.
+- Initial concurrency target is accepted for planning: **3 normal concurrent calls**, **5 stretch/load-test target**.
+- Overload fallback behavior is still open. Recommended default: route excess calls to voicemail/callback intake or human/mobile fallback, not silent failure.
+- OpenAI streaming/realtime API tier and rate limits are not confirmed yet. Design must use backpressure/semaphores and safe fallback for 429/rate-limit events.
 
 ---
 
@@ -1108,9 +1115,9 @@ Decision impact:
 
 | Decision | Detail |
 |----------|--------|
-| **No-go for now** | Phase 1 implementation is paused until the blocking Phase 0 validation items below are resolved |
-| **Conditional go later** | Phase 1 foundation can start after team acceptance, media/runtime path decision, and operational/security blockers are recorded |
-| **No-go until resolved** | Phase 2-3 realtime audio/barge-in, production v4 enablement, retention sign-off, concurrency benchmark |
+| **Go for Phase 1 foundation** | Team acceptance recorded; Phase 1 foundation planning/implementation may start |
+| **Not blockers for Phase 1 foundation** | Backup encryption, dedicated QA route, overload fallback, and OpenAI streaming limits are recorded and may remain open during schema/config/router foundation work |
+| **No-go until resolved** | Production v4 rollout/acceptance requires final retention approval, backup encryption confirmation, QA route/rollout plan, overload fallback, and OpenAI streaming limits |
 
 ### Preferred architecture path
 
@@ -1118,20 +1125,27 @@ Decision impact:
 
 ### Remaining blockers
 
-1. Retention **owner sign-off** (§6)
-2. Backup encryption confirmation (§11)
-3. **QA route** confirmation for v4 rollout (§11)
-4. **Concurrent call capacity and overload fallback** operational confirmation (§9)
-5. OpenAI **streaming STT** API/limit confirmation (§4)
-6. Convert Phase 0B/0C spike behavior into controlled v4 implementation flags and tests; do not leave production behavior dependent on spike flags.
+For **Phase 1 foundation**:
+
+1. Convert Phase 0B/0C spike behavior into controlled v4 implementation flags and tests; do not leave production behavior dependent on spike flags.
+2. Keep Phase 1 scope limited to tenant-ready schema/config/RAG scope/runtime-router foundation and controlled v4 foundations.
+
+For **production v4 rollout/acceptance**:
+
+1. Mojtaba approves final retention values (§6).
+2. Backup encryption at rest confirmed for PostgreSQL and voice recordings (§11).
+3. Dedicated QA DID/internal extension confirmed for future v4 testing (§11).
+4. Overload fallback destination configured/confirmed: voicemail/callback intake or human/mobile fallback, not silent failure (§9).
+5. OpenAI streaming/realtime STT/API limits confirmed (§4).
 
 ### Exact next step
 
 1. Keep both spike flags disabled outside supervised QA.
 2. Do not pursue ARI/ExternalMedia as the next task unless AudioSocket cancellation regresses or becomes unsafe.
-3. Collect remaining operational/security answers: retention/privacy owner, backup encryption, QA route, concurrency/overload fallback, OpenAI streaming limits.
-4. After team acceptance, start Phase 1 foundation planning: tenant-ready schema/config/RAG scope plus a controlled v4 implementation plan for playback cancellation and interruption recovery behind proper v4 flags.
-5. Document RAG config: use `VOICE_RAG_API_URL=http://127.0.0.1:8080` from voice-bridge unless container networking changes.
+3. Review Phase 1 foundation implementation per [Phase 1 report](./voice_assistant_v4_phase1_foundation_report.md).
+4. Apply voice/knowledge migrations on target DB when ready (`npm run db:migrate:voice`, `npm run db:migrate:knowledge`).
+5. Treat retention approval (Mojtaba), backup encryption, QA route, overload fallback, and OpenAI streaming limits as **production rollout blockers only**.
+6. Document RAG config: use `VOICE_RAG_API_URL=http://127.0.0.1:8080` from voice-bridge unless container networking changes.
 
 ---
 
@@ -1144,11 +1158,12 @@ Phase 0 documentation (this report):
 - [x] Successful: AudioSocket barge-in feasibility documented (code analysis + live test requirements)
 - [x] Successful: Streaming STT/TTS provider decision documented (Option A+D hybrid recommended)
 - [x] Successful: Latency targets documented
-- [x] Successful: Retention owner and proposed values documented (approval pending)
+- [x] Successful: Retention/privacy owner documented: Mojtaba, Founder of TechnoloHit
 - [x] Successful: Media path selected for playback cancellation (AudioSocket, conditional)
 - [x] Successful: Rollback plan documented
 - [x] Successful: Concurrency and overload policy documented (limits pending sysadmin data)
 - [x] Successful: Tenant-ready Phase 1 foundation documented (migration filenames proposed)
+- [x] Successful: Phase 1 foundation implementation added (see Phase 1 report)
 - [x] Successful: Sysadmin required inputs listed with commands
 
 - [x] Successful: Phase 0B playback cancel spike implemented (flag off by default)
@@ -1157,7 +1172,7 @@ Phase 0 documentation (this report):
 - [x] Successful: Phase 0B first spike live QA completed (`immediate_stop`)
 - [x] Successful: Phase 0B repeatability QA completed
 - [x] Successful: Media path selected after repeatability QA
-- [ ] Successful: Interruption-context/dialogue handling task completed
+- [x] Successful: Interruption-context/dialogue handling task completed for Phase 0C spike/live QA
 
 - [x] Successful: Phase 0C interruption-context spike implemented (flag off by default)
 - [x] Successful: Phase 0C unit tests added and passing
@@ -1167,15 +1182,15 @@ Phase 0 documentation (this report):
 
 Pending acceptance / validation (leave unchecked):
 
-- [ ] Successful: Phase 0 decision report **accepted** by team
+- [x] Successful: Phase 0 decision report **accepted** by team
 - [x] Successful: AudioSocket barge-in feasibility **live-tested** (failed current behavior)
-- [ ] Successful: Retention policy **approved** by responsible person
+- [ ] Successful: Final retention values **approved** by Mojtaba
 - [ ] Successful: Backup encryption **confirmed**
 - [x] Successful: Server CPU/RAM headroom **confirmed** for initial v4 testing
-- [ ] Successful: Expected/max concurrent calls **confirmed**
+- [x] Successful: Initial concurrency targets recorded: 3 normal, 5 stretch/load-test
 - [ ] Successful: QA phone route **confirmed**
 - [ ] Successful: OpenAI streaming STT limits **confirmed**
-- [ ] Successful: Open decisions resolved → **implementation approved**
+- [x] Successful: Open decisions resolved for **Phase 1 foundation** → **implementation approved**
 
 ---
 

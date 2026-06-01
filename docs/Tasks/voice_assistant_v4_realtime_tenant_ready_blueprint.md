@@ -23,11 +23,11 @@ TechnoloHit-first production system, tenant-ready by design.
 
 Phase 1 must not build a full SaaS platform. It must build a high-quality TechnoloHit production agent with the right foundations for later managed multi-customer rollout.
 
-- [ ] Successful: Team accepts v4 as a real-time runtime architecture project, not another v3 hotfix.
-- [ ] Successful: Team accepts TechnoloHit-first, tenant-ready-by-design direction.
+- [x] Successful: Team accepts v4 as a real-time runtime architecture project, not another v3 hotfix.
+- [x] Successful: Team accepts TechnoloHit-first, tenant-ready-by-design direction.
 - [ ] Successful: Cursor reads this blueprint before implementation.
 - [x] Successful: Phase 0 decision document is completed before implementation.
-- [ ] Successful: No implementation starts before Phase 0 decisions are confirmed.
+- [x] Successful: No implementation starts before Phase 0 decisions are confirmed.
 
 ## Current System Baseline
 
@@ -716,15 +716,18 @@ Add Phase 1 decisions:
 Recommended initial policy for review:
 
 ```text
-Raw audio: 14-30 days
+Raw audio: 21 days
 Turn transcripts: 90 days unless lead/legal reason requires longer
-Lead records: until operationally resolved plus agreed retention
-Audit events: longer accountability period, e.g. 12 months
+Call summaries: 90 days
+Quality events: 90 days
+Lead records: until operationally resolved plus agreed business retention/anonymization
+Audit events: 12 months
 ```
 
-This is technical planning, not legal advice. A responsible person must approve retention policy.
+This is technical planning, not legal advice. **Mojtaba, Founder of TechnoloHit**, is the retention/privacy approval owner and must approve the final retention values before production v4 rollout.
 
-- [ ] Successful: Retention decision made.
+- [x] Successful: Retention/privacy owner assigned: Mojtaba, Founder of TechnoloHit.
+- [ ] Successful: Final retention values approved by Mojtaba.
 - [ ] Successful: Backup encryption responsibility assigned.
 - [ ] Successful: Dashboard access list reviewed.
 - [ ] Successful: Privacy/legal sign-off obtained before production v4.
@@ -878,7 +881,7 @@ Do not start implementation before this Phase 0 decision report is complete and 
 - [x] Successful: Media path selected after Phase 0B repeatability validation: continue with AudioSocket for playback cancellation.
 - [x] Successful: Rollback plan documented.
 - [x] Successful: Concurrency and overload policy documented.
-- [ ] Successful: Phase 0 decision report accepted.
+- [x] Successful: Phase 0 decision report accepted.
 
 ## Phase Plan
 
@@ -895,16 +898,20 @@ Do not start implementation before this Phase 0 decision report is complete and 
 - [x] Successful: Retention/security decisions recorded.
 - [x] Successful: v4 media path selected after Phase 0B repeatability validation: AudioSocket playback cancellation.
 - [x] Successful: `voice_assistant_v4_phase0_decision_report.md` completed.
-- [ ] Successful: `voice_assistant_v4_phase0_decision_report.md` accepted.
+- [x] Successful: `voice_assistant_v4_phase0_decision_report.md` accepted.
 
 ### Phase 1: Tenant-Ready Data And Config Foundation
 
-- [ ] Successful: Add `tenant_id`, `agent_id`, and version fields to core voice tables.
-- [ ] Successful: Add `custom_fields JSONB` to leads.
-- [ ] Successful: Add usage/quality events table.
-- [ ] Successful: Add versioned TechnoloHit agent config.
-- [ ] Successful: Runtime loads config without hardcoded TechnoloHit business behavior.
-- [ ] Successful: RAG requests include tenant/agent scope.
+- [x] Successful: Add `tenant_id`, `agent_id`, and version fields to core voice tables.
+- [x] Successful: Add `custom_fields JSONB` to leads.
+- [x] Successful: Add usage/quality events table.
+- [x] Successful: Add versioned TechnoloHit agent config.
+- [x] Successful: Runtime loads config without hardcoded TechnoloHit business behavior in v4 loader path.
+- [x] Successful: RAG requests include tenant/agent scope.
+- [x] Successful: v4 runtime router skeleton defaults to v3.
+- [x] Successful: Phase 1 foundation report added.
+- [ ] Successful: Phase 1 migrations applied on target database (operator step).
+- [ ] Successful: Phase 1 team review accepted.
 
 ### Phase 2: Realtime Audio Foundation
 
@@ -969,10 +976,10 @@ Needed before implementation:
 - [x] Successful: Confirm whether current Asterisk AudioSocket can support reliable playback stop/break for barge-in. Phase 0B repeatability QA passed for playback cancellation.
 - [ ] Successful: Confirm whether an ARI/ExternalMedia path is available if AudioSocket is insufficient. Current ARI check shows no loaded ARI modules.
 - [x] Successful: Confirm server CPU/memory headroom for realtime STT/TTS pipeline. Initial headroom is acceptable for testing.
-- [ ] Successful: Confirm expected and maximum concurrent call capacity.
+- [x] Successful: Confirm expected and maximum concurrent call capacity for initial planning: 3 normal, 5 stretch/load-test.
 - [ ] Successful: Confirm overload behavior for calls above capacity.
 - [ ] Successful: Confirm allowed provider/API for streaming STT/TTS/realtime audio.
-- [ ] Successful: Confirm retention policy owner.
+- [x] Successful: Confirm retention policy owner: Mojtaba, Founder of TechnoloHit.
 - [ ] Successful: Confirm encrypted backup status for PostgreSQL and recordings.
 - [ ] Successful: Confirm whether a QA phone number or QA route can be used for v4 tests.
 
@@ -1000,8 +1007,8 @@ These must be answered in Phase 0:
 7. Do we need a separate QA phone route before production rollout?
 8. What is the maximum supported concurrent call count and overload behavior?
 
-- [ ] Successful: Open decisions resolved.
-- [ ] Successful: Implementation approved.
+- [x] Successful: Open decisions resolved for Phase 1 foundation.
+- [x] Successful: Implementation approved for Phase 1 foundation.
 
 Current Phase 0 validation status:
 
@@ -1010,7 +1017,8 @@ Current Phase 0 validation status:
 - ARI/ExternalMedia fallback: not confirmed; ARI modules are not currently loaded.
 - Server capacity: enough for initial v4 tests; operational concurrency target still pending.
 - RAG readiness: ready via host-local URL `http://127.0.0.1:8080` from voice-bridge; Docker DNS `technolohit-rag-api` is not valid in the current host-network setup.
-- Phase 1 implementation: pending team acceptance and operational/security answers. Next work item is Phase 1 foundation planning, not ARI/ExternalMedia.
+- Phase 1 foundation: **implementation complete in repo** — migrations pending operator apply; production rollout still blocked.
+- Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1
 

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
 import * as persist from "./persist.js";
 import { retrieveRagContext } from "./rag-client.js";
+import { buildRagRetrievePayload } from "./v4/rag-scope.js";
 import {
   productPolicyById,
   matchProductPolicyFromText,
@@ -3367,11 +3368,8 @@ async function maybeRetrieveRagFallback(config, callerText, turnIndex, effective
   const qaAcceptFloor = Math.max(0, Number(config?.rag?.qaAcceptFloor || 0.65));
   const normalizedRagQuery = normalizeSemanticRagQuery(callerText);
 
-  const payload = {
-    tenant_id: "technolohit",
+  const payload = buildRagRetrievePayload(config, {
     query: callerText,
-    language: "de",
-    top_k: 3,
     min_score: baseMinScore,
     context: {
       turn_index: turnIndex,
@@ -3379,7 +3377,7 @@ async function maybeRetrieveRagFallback(config, callerText, turnIndex, effective
       transcript_quality: effectiveAnalysis?.transcriptQuality ?? "clear",
       source: "voice_bridge_fallback"
     }
-  };
+  });
 
   console.log(
     `[voice-assistant] rag attempt turn_index=${turnIndex} phase=initial timeout_ms=${baseTimeoutMs} min_score=${baseMinScore.toFixed(2)}`

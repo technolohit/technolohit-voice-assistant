@@ -23,6 +23,36 @@ Keep image selection separate from runtime flags:
 - Runtime flags: `/opt/technolohit-voice/voice-bridge/.env`
 - Image tag: GitHub Actions deploy input, `VOICE_BRIDGE_IMAGE` shell override, or the Compose interpolation env used by `docker compose`
 
+## v4 foundation flags (Phase 1 — default off)
+
+Set in `/opt/technolohit-voice/voice-bridge/.env` only for supervised v4 work:
+
+```env
+VOICE_RUNTIME_VERSION=v3
+VOICE_V4_REALTIME_ENABLED=false
+VOICE_V4_BARGE_IN_ENABLED=false
+VOICE_V4_STREAMING_STT_ENABLED=false
+VOICE_V4_STREAMING_TTS_ENABLED=false
+VOICE_TENANT_ID=technolohit
+VOICE_AGENT_ID=main_voice_sales
+VOICE_AGENT_CONFIG_PATH=/app/config/agents/technolohit.main_voice_sales.v4.json
+```
+
+Phase 0B/0C spike flags remain **QA-only** and must not become the production v4 implementation:
+
+```env
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false
+VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
+```
+
+Production may override agent config via `VOICE_AGENT_CONFIG_PATH` or mount a replacement file. The voice-bridge Docker image includes the default seed at `/app/config/agents/technolohit.main_voice_sales.v4.json`.
+
+Production RAG URL from voice-bridge host network:
+
+```env
+VOICE_RAG_API_URL=http://127.0.0.1:8080
+```
+
 ## v3 QA flags (voice-bridge only)
 
 Set these in `/opt/technolohit-voice/voice-bridge/.env`:

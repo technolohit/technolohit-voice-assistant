@@ -29,6 +29,27 @@ def test_retrieval_logs_do_not_default_to_query_preview():
     assert 'log_query_preview: bool = Field(default=False' in config
 
 
+def test_retrieve_request_supports_agent_id():
+    models = Path("rag-api/app/models.py").read_text(encoding="utf-8")
+    assert 'agent_id: str = "main_voice_sales"' in models
+    retrieval = Path("rag-api/app/retrieval.py").read_text(encoding="utf-8")
+    assert "d.agent_id = $3" in retrieval
+
+
+def test_ingest_conflict_target_is_agent_aware():
+    retrieval = Path("rag-api/app/retrieval.py").read_text(encoding="utf-8")
+    assert "ON CONFLICT (tenant_id, agent_id, source_uri, content_hash)" in retrieval
+
+
+def test_voice_bridge_dockerfile_copies_agent_config():
+    dockerfile = Path("voice-bridge/Dockerfile").read_text(encoding="utf-8")
+    assert "COPY --chown=node:node config ./config" in dockerfile
+    assert Path(
+        "voice-bridge/config/agents/technolohit.main_voice_sales.v4.json"
+    ).is_file()
+
+
 def test_voice_rag_default_is_disabled():
     config = Path("voice-bridge/src/config.js").read_text(encoding="utf-8")
     assert 'readBool("VOICE_RAG_ENABLED", false)' in config
+    assert 'readBool("VOICE_V4_REALTIME_ENABLED", false)' in config

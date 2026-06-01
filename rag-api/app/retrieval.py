@@ -213,19 +213,21 @@ async def ingest_document(
             document_id = await conn.fetchval(
                 """
                 INSERT INTO knowledge.documents (
-                  tenant_id, source_type, source_uri, title, language, content_hash, metadata
+                  tenant_id, agent_id, source_type, source_uri, title, language, content_hash, metadata
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-                ON CONFLICT (tenant_id, source_uri, content_hash)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                ON CONFLICT (tenant_id, agent_id, source_uri, content_hash)
                 DO UPDATE SET
                   title = EXCLUDED.title,
                   language = EXCLUDED.language,
                   metadata = EXCLUDED.metadata,
+                  agent_id = EXCLUDED.agent_id,
                   is_active = true,
                   updated_at = now()
                 RETURNING id;
                 """,
                 request.tenant_id,
+                request.agent_id,
                 request.source_type,
                 request.source_uri,
                 request.title,
@@ -309,14 +311,16 @@ async def retrieve(
             JOIN knowledge.chunks c ON c.id = e.chunk_id
             JOIN knowledge.documents d ON d.id = c.document_id
             WHERE e.tenant_id = $2
-              AND e.model = $3
-              AND e.dimensions = $4
+              AND d.agent_id = $3
+              AND e.model = $4
+              AND e.dimensions = $5
               AND d.is_active = true
             ORDER BY e.embedding <=> $1::vector
-            LIMIT $5;
+            LIMIT $6;
             """,
             query_vector,
             request.tenant_id,
+            request.agent_id,
             settings.embedding_model,
             settings.embedding_dimensions,
             candidate_limit,
@@ -336,18 +340,20 @@ async def retrieve(
                 JOIN knowledge.chunks c ON c.id = e.chunk_id
                 JOIN knowledge.documents d ON d.id = c.document_id
                 WHERE e.tenant_id = $2
-                  AND e.model = $3
-                  AND e.dimensions = $4
+                  AND d.agent_id = $3
+                  AND e.model = $4
+                  AND e.dimensions = $5
                   AND d.is_active = true
                   AND (
                     d.source_uri LIKE '%products.technolohit.json%'
                     OR d.source_uri LIKE '%technolohit.md%'
                   )
                 ORDER BY e.embedding <=> $1::vector
-                LIMIT $5;
+                LIMIT $6;
                 """,
                 query_vector,
                 request.tenant_id,
+                request.agent_id,
                 settings.embedding_model,
                 settings.embedding_dimensions,
                 max(top_k, 6),
@@ -373,8 +379,9 @@ async def retrieve(
                 JOIN knowledge.chunks c ON c.id = e.chunk_id
                 JOIN knowledge.documents d ON d.id = c.document_id
                 WHERE e.tenant_id = $2
-                  AND e.model = $3
-                  AND e.dimensions = $4
+                  AND d.agent_id = $3
+                  AND e.model = $4
+                  AND e.dimensions = $5
                   AND d.is_active = true
                   AND d.source_uri LIKE '%products.technolohit.json%'
                   AND (
@@ -385,10 +392,11 @@ async def retrieve(
                     OR lower(c.content) LIKE '%sensible daten%'
                   )
                 ORDER BY e.embedding <=> $1::vector
-                LIMIT $5;
+                LIMIT $6;
                 """,
                 query_vector,
                 request.tenant_id,
+                request.agent_id,
                 settings.embedding_model,
                 settings.embedding_dimensions,
                 max(top_k, 5),
@@ -509,8 +517,9 @@ async def retrieve(
                     JOIN knowledge.chunks c ON c.id = e.chunk_id
                     JOIN knowledge.documents d ON d.id = c.document_id
                     WHERE e.tenant_id = $2
-                      AND e.model = $3
-                      AND e.dimensions = $4
+                      AND d.agent_id = $3
+                      AND e.model = $4
+                      AND e.dimensions = $5
                       AND d.is_active = true
                       AND d.source_uri LIKE '%products.technolohit.json%'
                       AND (
@@ -523,6 +532,7 @@ async def retrieve(
                     """,
                     query_vector,
                     request.tenant_id,
+                    request.agent_id,
                     settings.embedding_model,
                     settings.embedding_dimensions,
                 )
@@ -561,14 +571,15 @@ async def log_retrieval(
     await conn.execute(
         """
         INSERT INTO knowledge.retrieval_logs (
-          tenant_id, query_hash, query_preview, top_k, min_score, latency_ms,
+          tenant_id, agent_id, query_hash, query_preview, top_k, min_score, latency_ms,
           hit_count, selected_chunk_ids, caller_context
         )
-        SELECT $1, $2, $3, $4, $5, $6, $7,
-               ARRAY(SELECT value::uuid FROM unnest($8::text[]) AS value),
-               $9::jsonb;
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8,
+               ARRAY(SELECT value::uuid FROM unnest($9::text[]) AS value),
+               $10::jsonb;
         """,
         request.tenant_id,
+        request.agent_id,
         sha256_text(request.query),
         query_preview,
         top_k,
@@ -587,6 +598,8 @@ def safe_context(context: dict[str, Any]) -> dict[str, Any]:
         "detected_intent",
         "transcript_quality",
         "source",
+        "tenant_id",
+        "agent_id",
     }
     return {key: value for key, value in context.items() if key in allowed}
 

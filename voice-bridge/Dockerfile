@@ -18,6 +18,7 @@ COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node audio ./audio
 COPY --chown=node:node knowledge ./knowledge
+COPY --chown=node:node config ./config
 RUN mkdir -p /app/recordings && chown -R node:node /app
 
 ENV NODE_ENV=production

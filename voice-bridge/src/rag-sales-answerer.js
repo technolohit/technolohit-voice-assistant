@@ -4,6 +4,7 @@
 
 import { retrieveRagContext } from "./rag-client.js";
 import { buildSalesProductExplanation, salesPlaybookByProduct } from "./sales-policy.js";
+import { buildRagRetrievePayload } from "./v4/rag-scope.js";
 import {
   detectProductIdFromCallerText,
   isInterruptionContextSpikeEnabled
@@ -104,10 +105,17 @@ export async function answerProductQuestionWithRag({
     ? Number(config?.rag?.qaTimeoutMs || config?.rag?.timeoutMs || 1200)
     : Number(config?.rag?.timeoutMs || 700);
 
-  const ragResult = await retrieveRagContext(config, {
+  const ragPayload = buildRagRetrievePayload(config, {
     query: normalize(callerText),
-    product: productId,
-    dialogue_summary: normalize(dialogueSummary).slice(0, 400),
+    context: {
+      product: effectiveProductId,
+      dialogue_summary: normalize(dialogueSummary).slice(0, 400),
+      source: "rag_sales_answerer"
+    }
+  });
+
+  const ragResult = await retrieveRagContext(config, {
+    ...ragPayload,
     timeoutMs
   });
 
