@@ -37,9 +37,9 @@ Last updated: 2026-06-01
 |------|--------|
 | **Current completed phase** | **Phase 9b — Supervised Canary Blueprint/Runbook (documentation)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) on `voice-bridge-v1.11.0` |
-| **v4 production status** | **Not enabled** — canary/dialogue flags default off; router delegates to v3 |
+| **v4 production status** | **Not enabled** — canary/dialogue flags default off; live PSTN uses v3 `turn-assistant` |
 | **Phase 9 dry run** | **Passed** (2026-06-01) — schema + v1.11.0 deploy with v3 active |
-| **Next step** | **Team approval + Sysadmin supervised canary** (Phase 9b execution); production v4 enablement still blocked |
+| **Next step** | **Phase 10 — Live AudioSocket → v4 canary wiring** (implementation blueprint ready) |
 
 Completed foundation work (do not re-implement):
 
@@ -54,6 +54,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
+- Phase 10 live AudioSocket wiring: implementation blueprint prepared (**Tier 9b-B blocker**)
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -77,6 +78,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
+Phase 10 — Live AudioSocket → v4 Canary Wiring          [planned — blueprint ready]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -1092,7 +1094,23 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: v1.11.0 live-call wiring constraint documented (Tier 9b-B N/A until wiring ships).
 - [ ] Successful: Team approval for maintenance window recorded.
 - [ ] Successful: Tier 9b-A executed on production (env verify + v3 baseline + rollback).
-- [ ] Successful: Tier 9b-B executed (live v4 dialogue — when wiring available).
+- [ ] Successful: Tier 9b-B executed (live v4 dialogue — **blocked until Phase 10**).
+
+### Phase 10: Live AudioSocket → v4 Canary Wiring
+
+**Status: implementation blueprint complete; no code yet; production v4 NOT enabled.**
+
+- [x] Successful: Current blocker documented (live PSTN v3 vs v4 harness).
+- [x] Successful: Target flag-gated canary architecture defined.
+- [x] Successful: Routing / fail-closed-to-v3 architecture decision recorded.
+- [x] Successful: Sub-phases 10A–10H defined.
+- [x] Successful: Safety rules and required tests specified.
+- [x] Successful: Sysadmin/live QA needs cross-referenced to Phase 9b + Phase 8 SQL.
+- [x] Successful: Phase 10A implementation prompt prepared.
+- [ ] Successful: Phase 10A route selection + lifecycle logging implemented.
+- [ ] Successful: Phase 10B–10G media/dialogue/quality wiring implemented.
+- [ ] Successful: Phase 10H live QA runbook published.
+- [ ] Successful: Tier 9b-B supervised canary executed.
 
 ## Sysadmin Preparation Checklist
 
@@ -1151,8 +1169,9 @@ Current project status (see also **Current Project Status** at top):
 - Phase 7 lead/post-call/privacy: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
-- Phase 9b supervised canary: **blueprint/runbook complete in repo** — await team approval and precondition sign-off before execution.
-- **Production v4 enablement:** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, and (for full dialogue QA) live AudioSocket v4 wiring.
+- Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
+- Phase 10 live AudioSocket wiring: **blueprint complete** — implementation next (10A→10H); default remains v3.
+- **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **and** Phase 10 live wiring + Tier 9b-B pass.
 
 ## Acceptance Criteria For v4 Phase 1
 
