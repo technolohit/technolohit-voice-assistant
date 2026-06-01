@@ -4,7 +4,12 @@
 
 import { normalizeText } from "./redaction.js";
 import { matchProductAlias, getProductById, getClosingQuestion } from "./agent-config.js";
-import { shouldUseRagForTurn, isPostContactProductQuestion } from "./rag-orchestrator.js";
+import {
+  detectTranscriptIntent,
+  sanitizeResponseText,
+  isPostContactProductQuestion
+} from "./transcript-intent.js";
+import { shouldUseRagForTurn } from "./rag-orchestrator.js";
 import { V4_STATES } from "./state-machine.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
@@ -22,6 +27,13 @@ export const RESPONSE_TYPES = {
   GREETING: "greeting"
 };
 
+export {
+  detectTranscriptIntent,
+  sanitizeResponseText,
+  isPricingOrProductQuestion,
+  isPostContactProductQuestion
+} from "./transcript-intent.js";
+
 function planBase(type, overrides = {}) {
   return {
     response_type: type,
@@ -34,40 +46,6 @@ function planBase(type, overrides = {}) {
     lead_transition_allowed: false,
     ...overrides
   };
-}
-
-export function sanitizeResponseText(text) {
-  const base = normalizeText(text);
-  if (!base) return "";
-  if (NO_RUECKRUF.test(base)) {
-    return base.replace(NO_RUECKRUF, "Kontaktaufnahme");
-  }
-  return base;
-}
-
-export function detectTranscriptIntent(transcript = "", memory = {}) {
-  const lower = normalizeText(transcript).toLowerCase();
-  if (!lower) return "empty";
-  if (/\b(stopp|stop|ich meine|ich meinte)\b/i.test(lower)) return "interruption_recovery";
-  if (/\b(was ist|was sind|erklar|erklaer|wie funktioniert|mehr uber|mehr ueber)\b/i.test(lower)) {
-    return "product_question";
-  }
-  if (/\b(preis|kosten|was kostet|pricing|tarif|gebühr|gebuehr)\b/i.test(lower)) {
-    return "product_question";
-  }
-  if (/\b(smart website|digitale rezeption|voice agent|lokalki|botinteg|aiseoq)\b/i.test(lower)) {
-    return "product_selection";
-  }
-  if (/\b(neukunde|neu kunde|bestandskunde|eigene firma|unternehmen)\b/i.test(lower)) {
-    return "sales_customer_type";
-  }
-  if (/\b(e-?mail|email|per mail)\b/i.test(lower)) return "contact_email";
-  if (/\b(telefon|telefonisch|anruf|anrufen)\b/i.test(lower)) return "contact_phone";
-  if (/\b(ja|einverstanden|gerne|ok)\b/i.test(lower) && memory?.contact_preference) {
-    return "callback_permission_granted";
-  }
-  if (/\b(danke|auf wiedersehen|tschüss|tschuess|das war alles)\b/i.test(lower)) return "closing";
-  return "unclear";
 }
 
 export function buildResponsePlan({

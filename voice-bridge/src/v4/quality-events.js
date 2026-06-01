@@ -146,6 +146,7 @@ export const buildRagRetrievalFailedEvent = typedBuilder("rag_retrieval_failed",
   eventStage: "rag",
   metricName: "rag_ms"
 });
+export const buildPostCallErrorEvent = typedBuilder("post_call_error", { eventStage: "post_call" });
 export const buildLeadCreatedEvent = typedBuilder("lead_created", { eventStage: "lead" });
 export const buildLeadSkippedEvent = typedBuilder("lead_skipped", { eventStage: "lead" });
 export const buildRuntimeErrorEvent = typedBuilder("runtime_error", { eventStage: "runtime" });

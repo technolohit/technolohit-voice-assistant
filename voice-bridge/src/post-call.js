@@ -70,7 +70,25 @@ export async function runPostCallProcessing(config, ctx) {
       leadResult = { action: "failed", reason: "lead_extraction_failed", leadId: "" };
     }
 
-    const notifyResult = await sendPostCallNotification(config, ctx, summary, leadResult);
+    let notifyResult = {
+      action: "skipped",
+      reason: "not_executed",
+      statusCode: null,
+      url: "",
+      error: ""
+    };
+    try {
+      notifyResult = await sendPostCallNotification(config, ctx, summary, leadResult);
+    } catch (notifyErr) {
+      console.error(`[post-call] notification failed: ${notifyErr?.message ?? String(notifyErr)}`);
+      notifyResult = {
+        action: "failed",
+        reason: "notification_exception",
+        statusCode: null,
+        url: config?.postCallNotify?.webhookUrl ?? "",
+        error: String(notifyErr?.message ?? notifyErr ?? "notification_exception")
+      };
+    }
     await persist.onPostCallNotificationProcessed(config, ctx, notifyResult);
     console.log(
       `[post-call] notification processed action=${notifyResult?.action ?? "skipped"} reason=${notifyResult?.reason ?? "unknown"} status_code=${notifyResult?.statusCode ?? ""} call_session_id=${ctx.callSessionId}`

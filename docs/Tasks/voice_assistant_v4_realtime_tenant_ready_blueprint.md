@@ -35,10 +35,10 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 6 — RAG Product/Sales Q&A Integration** |
+| **Current completed phase** | **Phase 7 — Lead Policy, Post-Call Reliability, And Privacy** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
 | **v4 production status** | **Not enabled** — canary/dialogue flags default off; router delegates to v3 |
-| **Next implementation phase** | **Phase 7 — Lead Policy, Post-Call Reliability, And Privacy** |
+| **Next implementation phase** | **Phase 8 — Observability And Quality Analytics** |
 
 Completed foundation work (do not re-implement):
 
@@ -49,6 +49,7 @@ Completed foundation work (do not re-implement):
 - Phase 4 barge-in foundation: playback controller, barge-in detector, interruption context, canary barge-in harness (tagged `v1.7.0`)
 - Phase 5 dialogue orchestrator: turn lifecycle, response planner, canary runtime loop, quality event sink (canary/test-harness only)
 - Phase 6 RAG product/sales Q&A: v4 RAG orchestrator, state-gated retrieval, fail-closed fallbacks, canary harness tests (canary/test-harness only)
+- Phase 7 lead/post-call/privacy: lead candidate object, post-call metadata bridge, privacy sanitize, notification idempotency (canary/test-harness only)
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -68,8 +69,8 @@ Phase 3  — Realtime Audio Foundation / Media Layer         [completed]
 Phase 4  — Barge-In And Interruption Runtime Implementation [completed]
 Phase 5  — Live Dialogue Orchestrator Integration         [completed]
 Phase 6  — RAG Product/Sales Q&A Integration              [completed]
-Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [next]
-Phase 8  — Observability And Quality Analytics
+Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
+Phase 8  — Observability And Quality Analytics            [next]
 Phase 9  — Production Rollout
 ```
 
@@ -1034,12 +1035,16 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 7: Lead Policy, Post-Call Reliability, And Privacy
 
-- [x] Successful: v4 lead validator foundation (Phase 2; live wiring pending).
-- [ ] Successful: Lead validators read structured memory in live v4 runtime.
-- [ ] Successful: Email path creates `await_customer_email`, not callback-ready lead.
-- [ ] Successful: Phone callback requires valid phone and permission in live v4 runtime.
-- [ ] Successful: Post-call summary includes tenant/agent/version fields.
-- [ ] Successful: n8n notifications remain privacy-safe.
+**Status: implementation complete in repo (canary/test-harness only; production still v3).**
+
+- [x] Successful: v4 lead validator foundation (Phase 2).
+- [x] Successful: Lead validators read structured memory in canary v4 runtime.
+- [x] Successful: Email path creates `await_customer_email`, not callback-ready lead.
+- [x] Successful: Phone callback requires valid phone and permission in canary v4 runtime.
+- [x] Successful: Post-call summary includes tenant/agent/version fields (v4 metadata bridge).
+- [x] Successful: n8n notification payloads privacy-sanitized with idempotency key.
+- [x] Successful: Phase 7 lead/post-call/privacy tests pass (`v4-phase7-lead-postcall-privacy.test.js`).
+- [ ] Successful: Live production post-call path consumes v4 memory snapshot (Phase 8–9).
 
 ### Phase 8: Observability And Quality Analytics
 
@@ -1111,7 +1116,8 @@ Current project status (see also **Current Project Status** at top):
 - Phase 4 barge-in foundation: **implementation complete in repo** (tag `v1.7.0`) — canary/test-harness only.
 - Phase 5 dialogue orchestrator: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 6 RAG product/sales Q&A: **implementation complete in repo** — canary/test-harness only; production still on v3.
-- **Next implementation phase: Phase 7 — Lead Policy, Post-Call Reliability, And Privacy.**
+- Phase 7 lead/post-call/privacy: **implementation complete in repo** — canary/test-harness only; production still on v3.
+- **Next implementation phase: Phase 8 — Observability And Quality Analytics.**
 - Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1

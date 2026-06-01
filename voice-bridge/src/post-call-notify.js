@@ -1,15 +1,22 @@
+import {
+  sanitizeOutboundObject,
+  buildPostCallIdempotencyKey,
+  assertNoRawPhoneInPayload
+} from "./v4/privacy-sanitize.js";
+
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function notificationPayload(ctx, summary, leadResult) {
   const metadata = summary?.metadata && typeof summary.metadata === "object" ? summary.metadata : {};
-  return {
+  return sanitizeOutboundObject({
     type: "voice_post_call_outcome_v1",
     occurred_at: new Date().toISOString(),
     call_session_id: ctx.callSessionId ?? "",
     external_call_id: ctx.externalCallId ?? "",
     bridge_call_id: ctx.bridgeCallId ?? "",
+    idempotency_key: buildPostCallIdempotencyKey(ctx, summary, leadResult),
     summary: {
       id: summary?.summaryId ?? "",
       text: summary?.summaryText ?? "",
@@ -19,14 +26,17 @@ function notificationPayload(ctx, summary, leadResult) {
       permission: metadata.permission ?? "",
       next_action: metadata.next_action ?? "",
       confidence: metadata.confidence ?? "",
-      transcript_quality_notes: metadata.transcript_quality_notes ?? ""
+      transcript_quality_notes: metadata.transcript_quality_notes ?? "",
+      tenant_id: metadata.tenant_id ?? "",
+      agent_id: metadata.agent_id ?? "",
+      runtime_version: metadata.runtime_version ?? ""
     },
     lead: {
       action: leadResult?.action ?? "skipped",
       reason: leadResult?.reason ?? "unknown",
       lead_id: leadResult?.leadId ?? ""
     }
-  };
+  });
 }
 
 export async function sendPostCallNotification(config, ctx, summary, leadResult) {
@@ -45,6 +55,16 @@ export async function sendPostCallNotification(config, ctx, summary, leadResult)
 
   try {
     const payload = notificationPayload(ctx, summary, leadResult);
+    if (!assertNoRawPhoneInPayload(payload)) {
+      return {
+        action: "skipped",
+        reason: "privacy_guard_blocked_raw_phone",
+        statusCode: null,
+        url,
+        error: "raw_phone_detected"
+      };
+    }
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -85,3 +105,5 @@ export async function sendPostCallNotification(config, ctx, summary, leadResult)
     clearTimeout(timer);
   }
 }
+
+export { notificationPayload };

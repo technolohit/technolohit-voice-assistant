@@ -1,5 +1,6 @@
 import * as db from "./db.js";
 import { shouldCreateCallbackReadyLead } from "./lead-policy.js";
+import { sanitizeOutboundObject } from "./v4/privacy-sanitize.js";
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -18,7 +19,7 @@ function summaryField(metadata, key) {
   return normalizeText(metadata[key]);
 }
 
-function shouldCreateLead(summaryMeta) {
+function shouldCreateLead(summaryMeta, config) {
   const contactPreference = summaryField(summaryMeta, "contact_preference");
   const permission = summaryField(summaryMeta, "permission");
   const emailDirected = String(summaryMeta?.email_directed ?? "") === "true";
@@ -34,6 +35,7 @@ function shouldCreateLead(summaryMeta) {
   if (config?.leadPolicy?.strictCallback !== false && !shouldCreateCallbackReadyLead(summaryMeta)) {
     return false;
   }
+  if (contactPreference === "email" && nextAction === "team_callback") return false;
   if (contactPreference === "email" && !emailDirected && nextAction !== "await_customer_email") return false;
 
   const qualityOk = confidence === "high" || confidence === "medium" || productInterest !== "none";
@@ -65,7 +67,7 @@ export async function runPostCallLeadExtraction(config, ctx, summary) {
 
   const existingLead = await db.getLeadByCallSessionId(config, callSessionId);
   const normalizedPhone = normalizePhone(session.caller_phone_normalized || session.caller_phone_raw);
-  const metadataPatch = {
+  const metadataPatch = sanitizeOutboundObject({
     summary_id: summary?.summaryId ?? "",
     summary_type: "auto",
     post_call_lead_extraction_v1: true,
@@ -80,8 +82,12 @@ export async function runPostCallLeadExtraction(config, ctx, summary) {
     email_directed: summaryMeta?.email_directed ?? null,
     next_action: summaryField(summaryMeta, "next_action") || null,
     confidence: summaryField(summaryMeta, "confidence") || null,
-    transcript_quality_notes: summaryField(summaryMeta, "transcript_quality_notes") || null
-  };
+    transcript_quality_notes: summaryField(summaryMeta, "transcript_quality_notes") || null,
+    tenant_id: summaryField(summaryMeta, "tenant_id") || null,
+    agent_id: summaryField(summaryMeta, "agent_id") || null,
+    runtime_version: summaryField(summaryMeta, "runtime_version") || null,
+    agent_config_version: summaryField(summaryMeta, "agent_config_version") || null
+  });
 
   if (existingLead?.id) {
     const updatedLeadId = await db.updateVoiceLead(config, {
@@ -96,7 +102,7 @@ export async function runPostCallLeadExtraction(config, ctx, summary) {
       : { action: "skipped", reason: "lead_update_failed" };
   }
 
-  if (!shouldCreateLead(summaryMeta)) {
+  if (!shouldCreateLead(summaryMeta, config)) {
     return { action: "skipped", reason: "guard_not_met" };
   }
 

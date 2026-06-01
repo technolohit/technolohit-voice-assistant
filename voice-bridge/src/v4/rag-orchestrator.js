@@ -14,7 +14,12 @@ import { V4_STATES } from "./state-machine.js";
 import { getForbiddenClaims, getProductById } from "./agent-config.js";
 import { summarizeMemoryForPrompt } from "./call-session-memory.js";
 import { redactPhoneLikeText, normalizeText } from "./redaction.js";
-import { detectTranscriptIntent, sanitizeResponseText } from "./response-planner.js";
+import {
+  detectTranscriptIntent,
+  sanitizeResponseText,
+  isPricingOrProductQuestion,
+  isPostContactProductQuestion
+} from "./transcript-intent.js";
 import { ragAnswerMustNotCreateLead } from "./lead-validator.js";
 
 const MAX_ANSWER_CHARS = 220;
@@ -39,17 +44,10 @@ export const V4_RAG_FORBIDDEN_STATES = new Set([
   V4_STATES.IDLE
 ]);
 
-export function isPricingOrProductQuestion(transcript = "", intent = null) {
-  const resolved = intent ?? detectTranscriptIntent(transcript);
-  if (resolved === "product_question") return true;
-  const lower = normalizeText(transcript).toLowerCase();
-  return /\b(preis|kosten|was kostet|pricing|tarif|gebühr|gebuehr)\b/i.test(lower);
-}
-
-export function isPostContactProductQuestion(memory = {}, transcript = "", intent = null) {
-  if (!memory?.contact_preference) return false;
-  return isPricingOrProductQuestion(transcript, intent);
-}
+export {
+  isPricingOrProductQuestion,
+  isPostContactProductQuestion
+} from "./transcript-intent.js";
 
 export function shouldUseRagForTurn({ state, intent, memory = {}, transcript = "" } = {}) {
   const resolvedState = String(state ?? memory?.current_state ?? "").trim();

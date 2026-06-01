@@ -1,5 +1,6 @@
 import * as db from "./db.js";
 import { deriveLeadNextAction, enrichSummaryMetadata } from "./lead-policy.js";
+import { mergeV4SummaryMetadataPatch } from "./v4/post-call-bridge.js";
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -215,19 +216,21 @@ export async function generatePostCallSummary(config, ctx, options = {}) {
       })
     : metadataBase;
 
+  const mergedMetadata = mergeV4SummaryMetadataPatch(metadata, ctx?.v4PostCallMetadata);
+
   const summaryId = await db.upsertCallSummary(config, {
     callSessionId,
     summaryType: "auto",
     model: "deterministic-post-call-v1",
     summaryText,
-    metadata
+    metadata: mergedMetadata
   });
 
   return summaryId
     ? {
         summaryId,
         summaryText,
-        metadata
+        metadata: mergedMetadata
       }
     : null;
 }

@@ -91,3 +91,10 @@ export function ragAnswerMustNotCreateLead(ragUsed = false) {
   }
   return { createsLead: false, reason: "not_applicable" };
 }
+
+export function assertRagCannotSetLeadReady(memory = {}, source = "rag") {
+  if (memory?.lead_ready && isRagLeadSource(source)) {
+    return { ok: false, reason: "rag_cannot_set_lead_ready" };
+  }
+  return { ok: true, reason: "allowed" };
+}

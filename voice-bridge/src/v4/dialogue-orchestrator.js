@@ -39,6 +39,8 @@ import {
   buildTurnStartedEvent,
   buildQualityEventInput
 } from "./quality-events.js";
+import { finalizeV4PostCallHandoff } from "./post-call-bridge.js";
+import { buildLeadCandidateFromMemory } from "./lead-candidate.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
 import {
   createPlaybackController,
@@ -73,7 +75,9 @@ export function createDialogueOrchestrator({
   agentConfig = null,
   adapters = {},
   qualitySink = null,
-  v4PathActive = false
+  v4PathActive = false,
+  callerPhoneNormalized = null,
+  callerPhoneRaw = null
 } = {}) {
   return {
     phase: "phase5_dialogue_orchestrator",
@@ -95,6 +99,10 @@ export function createDialogueOrchestrator({
     currentTurn: null,
     lastPlan: null,
     lastAssistantText: null,
+    leadCandidate: null,
+    postCallHandoff: null,
+    callerPhoneNormalized: callerPhoneNormalized ?? null,
+    callerPhoneRaw: callerPhoneRaw ?? null,
     playback: null,
     status: "created"
   };
@@ -306,7 +314,12 @@ export function recordAssistantResponse(orchestrator, text = null, plan = null) 
   let stateMachine = orchestrator.stateMachine;
   if (resolvedPlan?.next_state) {
     const leadPolicy = resolvedPlan.lead_transition_allowed
-      ? validateLeadReadyTransition(memory, { source: "dialogue_orchestrator" })
+      ? validateLeadReadyTransition(memory, {
+          source: "dialogue_orchestrator",
+          callerPhoneNormalized: orchestrator.callerPhoneNormalized,
+          callerPhoneRaw: orchestrator.callerPhoneRaw,
+          explicitUserPermission: true
+        })
       : { allowed: false, reason: "lead_transition_not_requested" };
 
     if (resolvedPlan.next_state === V4_STATES.LEAD_READY) {
@@ -409,11 +422,17 @@ export async function handleInterruption(orchestrator, { callerText = "", playba
 }
 
 export function tryLeadReadyTransition(orchestrator, options = {}) {
-  const validation = validateCallbackReadyLead(orchestrator.memory, {
+  const candidate = buildLeadCandidateFromMemory(orchestrator.memory, {
     source: options.source ?? "dialogue_orchestrator",
-    callerPhoneNormalized: options.callerPhoneNormalized,
-    explicitUserPermission: options.explicitUserPermission ?? true
+    callerPhoneNormalized: options.callerPhoneNormalized ?? orchestrator.callerPhoneNormalized,
+    callerPhoneRaw: options.callerPhoneRaw ?? orchestrator.callerPhoneRaw,
+    spokenPhone: options.spokenPhone,
+    explicitUserPermission: options.explicitUserPermission ?? true,
+    llmGrantedPermission: options.llmGrantedPermission ?? false
   });
+  orchestrator.leadCandidate = candidate;
+
+  const validation = candidate.validation ?? validateCallbackReadyLead(orchestrator.memory, options);
 
   if (!validation.allowed) {
     orchestrator.memory = { ...orchestrator.memory, lead_ready: false };
@@ -465,8 +484,16 @@ export function markLeadCandidate(orchestrator, patch = {}) {
     lead_ready: false,
     current_state: orchestrator.stateMachine?.state ?? V4_STATES.VALIDATING_CONTACT
   });
-  bufferEvent(orchestrator, "lead_skipped", { reason: "needs_contact_validation" });
-  return { ok: true, memory: orchestrator.memory };
+  orchestrator.leadCandidate = buildLeadCandidateFromMemory(orchestrator.memory, {
+    source: "dialogue_orchestrator",
+    callerPhoneNormalized: orchestrator.callerPhoneNormalized,
+    callerPhoneRaw: orchestrator.callerPhoneRaw
+  });
+  bufferEvent(orchestrator, "lead_skipped", {
+    reason: "needs_contact_validation",
+    next_action: orchestrator.leadCandidate?.next_action ?? "manual_review"
+  });
+  return { ok: true, memory: orchestrator.memory, leadCandidate: orchestrator.leadCandidate };
 }
 
 export function completeTurn(orchestrator) {
@@ -497,8 +524,31 @@ export function closeCall(orchestrator, atMs = Date.now()) {
     orchestrator.audioSession = closeAudioSession(orchestrator.audioSession, atMs);
   }
   orchestrator.status = "closed";
+  orchestrator.postCallHandoff = finalizeV4PostCallHandoff(orchestrator, {
+    callerPhoneNormalized: orchestrator.callerPhoneNormalized,
+    callerPhoneRaw: orchestrator.callerPhoneRaw
+  });
+  orchestrator.leadCandidate = orchestrator.postCallHandoff.leadCandidate;
+  if (orchestrator.leadCandidate?.callback_ready) {
+    bufferEvent(orchestrator, "lead_created", {
+      source: "v4_post_call_handoff",
+      next_action: orchestrator.leadCandidate.next_action
+    });
+  } else {
+    bufferEvent(orchestrator, "lead_skipped", {
+      source: "v4_post_call_handoff",
+      reason: orchestrator.leadCandidate?.validation?.reason ?? "not_callback_ready",
+      next_action: orchestrator.leadCandidate?.next_action ?? "manual_review"
+    });
+  }
   bufferEvent(orchestrator, "audio_session_closed", { turn_count: orchestrator.turnIndex });
-  return { ok: true, memory: orchestrator.memory, stateMachine };
+  return {
+    ok: true,
+    memory: orchestrator.memory,
+    stateMachine,
+    leadCandidate: orchestrator.leadCandidate,
+    postCallHandoff: orchestrator.postCallHandoff
+  };
 }
 
 export function applyContactPreference(orchestrator, preference, extras = {}) {
