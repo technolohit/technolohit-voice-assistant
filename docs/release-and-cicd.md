@@ -207,6 +207,8 @@ Redeploy previous immutable image:
 VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-previous-tag docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
 ```
 
+v4 planning (Phase 0 decisions, feature flags, rollback): see [voice_assistant_v4_phase0_decision_report.md](./Tasks/voice_assistant_v4_phase0_decision_report.md).
+
 ## Live call QA matrix (post-deploy)
 
 | Scenario | Expected |
