@@ -81,6 +81,8 @@ This deploys v4 foundation code **without** enabling production v4. Keep `VOICE_
 
 Operator runbook: [docs/Tasks/voice_assistant_v4_phase9_sysadmin_runbook.md](./Tasks/voice_assistant_v4_phase9_sysadmin_runbook.md)
 
+Phase 9b supervised canary (after dry run — **plan only, not execution**): [docs/Tasks/voice_assistant_v4_phase9b_sysadmin_canary_runbook.md](./Tasks/voice_assistant_v4_phase9b_sysadmin_canary_runbook.md)
+
 RAG from voice-bridge (host network): use `VOICE_RAG_API_URL=http://127.0.0.1:8080`, not Docker service DNS.
 
 ## GitHub Secrets
