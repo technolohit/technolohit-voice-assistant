@@ -1,6 +1,6 @@
 # TechnoloHit Voice Assistant v4 — Phase 0 Decision Report
 
-Date: 2026-06-01  
+Date: 2026-06-01
 Status: **Blocked for acceptance** (documentation complete; partial live/sysadmin validation found blocking issues)
 Blueprint: [voice_assistant_v4_realtime_tenant_ready_blueprint.md](./voice_assistant_v4_realtime_tenant_ready_blueprint.md)
 
@@ -48,7 +48,7 @@ Per blueprint non-goals for Phase 1:
 | Barge-in feasibility | **Conditionally feasible via AudioSocket** | v3 default failed, but Phase 0B repeatability QA produced repeated `immediate_stop` results |
 | Concurrency capacity | **Partially ready** | Server has enough initial CPU/RAM headroom; operational target still unconfirmed |
 
-**Verdict:** Repository is **not ready to start Phase 1 implementation yet**, but the Phase 0B media-path blocker has been downgraded. Repeatability QA showed that bridge-side AudioSocket playback cancellation can reliably produce audible `immediate_stop` behavior with no call drops or garbled audio. The recommended v4 media path is now **AudioSocket, conditionally accepted for playback cancellation**. Full barge-in behavior is **not accepted yet** — Phase 0C interruption recovery is implemented behind a disabled flag; live QA is required before accepting post-interruption dialogue correctness. RAG is reachable via `http://127.0.0.1:8080`, not Docker DNS. Remaining blockers include Phase 0C live QA and operational/security acceptance items.
+**Verdict:** Repository is **ready to move from Phase 0 media/dialogue feasibility into Phase 1 foundation planning after team acceptance**, but Phase 1 should still wait for explicit acceptance and operational/security sign-off. Phase 0B repeatability QA showed that bridge-side AudioSocket playback cancellation can reliably produce audible `immediate_stop` behavior with no call drops or garbled audio. Phase 0C live QA showed that interruption context and product/topic recovery work well enough to continue. The recommended v4 media path is now **AudioSocket, conditionally accepted for playback cancellation and basic interruption recovery**. RAG is reachable via `http://127.0.0.1:8080`, not Docker DNS. Remaining non-media blockers are retention/privacy owner, backup encryption, QA route, concurrency/overload policy, and OpenAI streaming STT/API-limit confirmation.
 
 ---
 
@@ -240,7 +240,7 @@ docker logs -f technolohit-voice-bridge | egrep -i "inbound audio|finished sendi
 
 ## 3B. Phase 0B Media-Path Feasibility Spike
 
-Date: 2026-06-01  
+Date: 2026-06-01
 Runbook: [voice_assistant_v4_phase0b_playback_cancel_spike_runbook.md](./voice_assistant_v4_phase0b_playback_cancel_spike_runbook.md)
 
 ### Files inspected
@@ -524,8 +524,9 @@ All **67** voice-bridge tests pass (`npm test`).
 | Interruption context capture | **Implemented behind disabled flag** |
 | Product/topic repair on next turn | **Implemented behind disabled flag** |
 | RAG product scoping fix | **Implemented behind disabled flag** |
-| Full barge-in acceptance | **Not accepted** — live QA pending |
-| Phase 1 | **Not approved** |
+| Phase 0C live QA | **Passed / partial-pass acceptable** |
+| Full barge-in acceptance | **Conditionally accepted for Phase 1 planning** — production-grade VAD/state-machine work still required |
+| Phase 1 | **Pending team acceptance and operational/security sign-off** |
 
 ### Remaining risks
 
@@ -538,7 +539,7 @@ All **67** voice-bridge tests pass (`npm test`).
 
 ### Phase 0C ready for live QA?
 
-**Yes — code and unit tests complete; live QA required before accepting interruption recovery.**
+**Completed — Phase 0C live QA passed sufficiently to continue.**
 
 QA host env (test only):
 
@@ -552,6 +553,68 @@ Log tail:
 ```bash
 docker logs -f technolohit-voice-bridge 2>&1 | egrep -i "v4-playback-spike|v4-interruption-spike|interruption_product_switch|cancelled sending"
 ```
+
+### Phase 0C live QA result
+
+Date: 2026-06-01
+Image: `thnhit/technhvoice:voice-bridge-v1.3.4`
+
+Precondition: **PASS**
+
+- `/app/src/interruption-recovery.js` present
+- `VOICE_V4_INTERRUPTION_CONTEXT_SPIKE` references found
+- `v4-interruption-spike` log references found
+
+QA env during test:
+
+```env
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=true
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_RMS_THRESHOLD=450
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_SPEECH_FRAMES=3
+VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=true
+```
+
+Flags disabled after QA:
+
+```env
+VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false
+```
+
+Scenario results:
+
+| Scenario | Result | Evidence |
+|----------|--------|----------|
+| Digitale Rezeption / Voice Agent -> interrupt -> Smart Website | **pass** | `from_product=voice_agent`, `to_product=smart_website`, `cancel_latency_ms=20` |
+| Smart Website -> interrupt -> AI Voice Assistant / Digitale Rezeption | **pass** | `from_product=smart_website`, `to_product=voice_agent`, `cancel_latency_ms=20` |
+| "Stopp, ich meine Smart Website" | **pass / partial-pass** | product switch detected, `from_product=voice_agent`, `to_product=smart_website`, `cancel_latency_ms=20` |
+
+Human observation:
+
+- Playback stop was audible and quick.
+- Product switching behavior is much better than Phase 0B.
+- Call continued normally.
+- No call drop observed.
+- No garbled audio observed.
+- No production flag left enabled after QA.
+
+Relevant redacted logs:
+
+```text
+[v4-playback-spike] playback_cancelled bridge_call_id=4c3fd745-c8d6-4825-a690-cc38a54fb17c turn_index=1 cancellation_reason=inbound_speech_detected frames_sent_before_cancel=309 cancel_latency_ms=20
+[v4-interruption-spike] interruption_recorded bridge_call_id=4c3fd745-c8d6-4825-a690-cc38a54fb17c turn_index=1 interrupted_product=voice_agent sales_stage=sales_customer_type cancellation_reason=inbound_speech_detected frames_sent_before_cancel=309 cancel_latency_ms=20
+[v4-interruption-spike] interruption_product_switch bridge_call_id=4c3fd745-c8d6-4825-a690-cc38a54fb17c from_product=voice_agent to_product=smart_website turn_index=1 cancel_latency_ms=20
+
+[v4-playback-spike] playback_cancelled bridge_call_id=dd97a994-44e1-4a82-a1e5-7b295c12b15b turn_index=1 cancellation_reason=inbound_speech_detected frames_sent_before_cancel=235 cancel_latency_ms=20
+[v4-interruption-spike] interruption_recorded bridge_call_id=dd97a994-44e1-4a82-a1e5-7b295c12b15b turn_index=1 interrupted_product=smart_website sales_stage=sales_customer_type cancellation_reason=inbound_speech_detected frames_sent_before_cancel=235 cancel_latency_ms=20
+[v4-interruption-spike] interruption_product_switch bridge_call_id=dd97a994-44e1-4a82-a1e5-7b295c12b15b from_product=smart_website to_product=voice_agent turn_index=1 cancel_latency_ms=20
+
+[v4-playback-spike] playback_cancelled bridge_call_id=dd97a994-44e1-4a82-a1e5-7b295c12b15b turn_index=2 cancellation_reason=inbound_speech_detected frames_sent_before_cancel=413 cancel_latency_ms=20
+[v4-interruption-spike] interruption_recorded bridge_call_id=dd97a994-44e1-4a82-a1e5-7b295c12b15b turn_index=2 interrupted_product=voice_agent sales_stage=sales_customer_type cancellation_reason=inbound_speech_detected frames_sent_before_cancel=413 cancel_latency_ms=20
+[v4-interruption-spike] interruption_product_switch bridge_call_id=dd97a994-44e1-4a82-a1e5-7b295c12b15b from_product=voice_agent to_product=smart_website turn_index=2 cancel_latency_ms=20
+```
+
+Recommendation: accept AudioSocket as conditionally viable for the v4 media path, accept Phase 0C interruption-context spike as successful enough to continue, and convert the spike behavior into a controlled v4 implementation plan behind proper v4 feature flags. Do not move to ARI/ExternalMedia at this time.
 
 ---
 
@@ -1055,24 +1118,20 @@ Decision impact:
 
 ### Remaining blockers
 
-1. Phase 0C interruption recovery **live QA pending** — unit tests pass; PSTN validation required.
-2. Full v4 barge-in behavior is **not accepted yet** until interruption recovery live QA passes.
-3. ARI/ExternalMedia fallback is **not needed as the next work item**, but remains an architectural fallback if future AudioSocket tests regress.
-4. Retention **owner sign-off** (§6)
-5. **Concurrent call capacity** operational confirmation (§9)
-6. **QA phone route** confirmation (§11)
-7. OpenAI **streaming STT** API/limit confirmation (§4)
-8. Backup encryption confirmation (§11)
+1. Retention **owner sign-off** (§6)
+2. Backup encryption confirmation (§11)
+3. **QA route** confirmation for v4 rollout (§11)
+4. **Concurrent call capacity and overload fallback** operational confirmation (§9)
+5. OpenAI **streaming STT** API/limit confirmation (§4)
+6. Convert Phase 0B/0C spike behavior into controlled v4 implementation flags and tests; do not leave production behavior dependent on spike flags.
 
 ### Exact next step
 
-1. **Do not start Phase 1 implementation yet.**
-2. **Run Phase 0C live QA** per [Phase 0C runbook](./voice_assistant_v4_phase0c_interruption_recovery_spike_runbook.md) with both spike flags enabled on QA host.
-3. **Keep AudioSocket as the selected media path** for playback cancellation; keep spikes disabled by default outside supervised QA.
-4. **Do not pursue ARI/ExternalMedia as the next task** unless AudioSocket cancellation regresses or becomes unsafe.
-5. **Document RAG config:** use `VOICE_RAG_API_URL=http://127.0.0.1:8080` from voice-bridge unless container networking changes.
-6. **Assign retention/privacy owner** and confirm backup encryption.
-7. After blockers are resolved, update this report to `Accepted for Phase 1 foundation`.
+1. Keep both spike flags disabled outside supervised QA.
+2. Do not pursue ARI/ExternalMedia as the next task unless AudioSocket cancellation regresses or becomes unsafe.
+3. Collect remaining operational/security answers: retention/privacy owner, backup encryption, QA route, concurrency/overload fallback, OpenAI streaming limits.
+4. After team acceptance, start Phase 1 foundation planning: tenant-ready schema/config/RAG scope plus a controlled v4 implementation plan for playback cancellation and interruption recovery behind proper v4 flags.
+5. Document RAG config: use `VOICE_RAG_API_URL=http://127.0.0.1:8080` from voice-bridge unless container networking changes.
 
 ---
 
@@ -1103,8 +1162,8 @@ Phase 0 documentation (this report):
 - [x] Successful: Phase 0C interruption-context spike implemented (flag off by default)
 - [x] Successful: Phase 0C unit tests added and passing
 - [x] Successful: Phase 0C manual QA runbook added
-- [ ] Successful: Phase 0C interruption recovery live QA completed
-- [ ] Successful: Full barge-in behavior accepted
+- [x] Successful: Phase 0C interruption recovery live QA completed
+- [x] Successful: Full barge-in behavior conditionally accepted for Phase 1 planning
 
 Pending acceptance / validation (leave unchecked):
 
@@ -1124,7 +1183,7 @@ Pending acceptance / validation (leave unchecked):
 
 | # | Question | Phase 0 answer |
 |---|----------|----------------|
-| 1 | AudioSocket barge-in? | **Media cancellation feasible** — v3 default failed, but Phase 0B repeatability QA passed; full dialogue recovery still pending |
+| 1 | AudioSocket barge-in? | **Conditionally viable** — Phase 0B media cancellation and Phase 0C interruption recovery live QA passed sufficiently to continue |
 | 2 | STT/TTS provider? | **OpenAI incremental + local VAD**; Deepgram fallback |
 | 3 | Latency targets? | §5 |
 | 4 | Retention? | §6 proposed defaults — approval pending |

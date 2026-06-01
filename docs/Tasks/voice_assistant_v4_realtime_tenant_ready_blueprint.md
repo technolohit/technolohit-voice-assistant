@@ -250,7 +250,7 @@ Prototype barge-in and streaming with the current AudioSocket path first.
 If interruption/playback stop cannot be made reliable, introduce a v4 realtime media bridge rather than patching v3 forever.
 ```
 
-- [x] Successful: AudioSocket playback-cancel feasibility repeatability QA passed; full interruption dialogue recovery still pending.
+- [x] Successful: AudioSocket playback-cancel feasibility repeatability QA passed; Phase 0C interruption recovery live QA passed sufficiently to continue.
 - [x] Successful: Decision recorded: upgraded `voice-bridge` vs new realtime media bridge.
 - [x] Successful: Rollback path documented before production rollout.
 
@@ -883,8 +883,8 @@ Do not start implementation before this Phase 0 decision report is complete and 
 ## Phase Plan
 
 - [x] Successful: Phase 0C interruption-context spike implemented (disabled by default).
-- [ ] Successful: Phase 0C interruption recovery live QA completed.
-- [ ] Successful: Full barge-in behavior accepted.
+- [x] Successful: Phase 0C interruption recovery live QA completed.
+- [x] Successful: Full barge-in behavior conditionally accepted for Phase 1 planning.
 
 ### Phase 0: Architecture And Runtime Feasibility
 
@@ -921,7 +921,7 @@ Do not start implementation before this Phase 0 decision report is complete and 
 - [ ] Successful: Preserve interruption context.
 - [ ] Successful: Resume dialogue from interrupted intent.
 - [ ] Successful: Product/topic change after interruption resets or repairs state correctly.
-- [ ] Successful: Barge-in live QA passes.
+- [x] Successful: Barge-in feasibility live QA passes for Phase 0; production implementation still belongs to Phase 3.
 
 ### Phase 4: CallSessionMemory And State Machine
 
@@ -1006,11 +1006,11 @@ These must be answered in Phase 0:
 Current Phase 0 validation status:
 
 - AudioSocket availability: available.
-- AudioSocket barge-in live/manual behavior: v3 default failed; Phase 0B repeatability QA passed for playback cancellation. Phase 0C interruption recovery spike coded — live QA pending.
+- AudioSocket barge-in live/manual behavior: v3 default failed; Phase 0B repeatability QA passed for playback cancellation. Phase 0C interruption recovery live QA passed sufficiently to continue.
 - ARI/ExternalMedia fallback: not confirmed; ARI modules are not currently loaded.
 - Server capacity: enough for initial v4 tests; operational concurrency target still pending.
 - RAG readiness: ready via host-local URL `http://127.0.0.1:8080` from voice-bridge; Docker DNS `technolohit-rag-api` is not valid in the current host-network setup.
-- Phase 1 implementation: not approved yet; next work item is Phase 0C live QA, not ARI/ExternalMedia.
+- Phase 1 implementation: pending team acceptance and operational/security answers. Next work item is Phase 1 foundation planning, not ARI/ExternalMedia.
 
 ## Acceptance Criteria For v4 Phase 1
 
