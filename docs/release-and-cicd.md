@@ -59,6 +59,30 @@ thnhit/technhvoice:voice-bridge-<git-sha>
 
 Do not pin production only to `latest`.
 
+### Phase 9 example — v1.11.0 with v3 runtime (recommended first production deploy of v4 foundation code)
+
+Immutable tags:
+
+```text
+thnhit/technhvoice:voice-bridge-v1.11.0
+thnhit/technhvoice:rag-api-v1.11.0
+```
+
+GitHub Actions **Deploy Voice Stack** inputs:
+
+| Input | Value |
+|-------|--------|
+| `voice_bridge_tag` | `v1.11.0` (normalized to `voice-bridge-v1.11.0`) |
+| `deploy_rag_api` | `true` when co-deploying RAG |
+| `rag_api_tag` | `v1.11.0` |
+| `verify_v3_qa_env` | `true` |
+
+This deploys v4 foundation code **without** enabling production v4. Keep `VOICE_RUNTIME_VERSION=v3` and all `VOICE_V4_*` flags `false` in `/opt/technolohit-voice/voice-bridge/.env`.
+
+Operator runbook: [docs/Tasks/voice_assistant_v4_phase9_sysadmin_runbook.md](./Tasks/voice_assistant_v4_phase9_sysadmin_runbook.md)
+
+RAG from voice-bridge (host network): use `VOICE_RAG_API_URL=http://127.0.0.1:8080`, not Docker service DNS.
+
 ## GitHub Secrets
 
 Required for Docker publishing:
@@ -145,8 +169,11 @@ File:
 
 Runs manually with:
 
-- `voice_bridge_tag`, for example `voice-bridge-v1.0.0`
-- optional `rag_api_tag`, for example `rag-api-v1.0.0`
+- `voice_bridge_tag`, for example `voice-bridge-v1.11.0` or shorthand `v1.11.0`
+- optional `rag_api_tag`, for example `rag-api-v1.11.0` or `v1.11.0`
+- `verify_v3_qa_env=true` to assert v3 QA flags inside the running container
+
+Input normalization: bare semver tags like `v1.11.0` are expanded to `voice-bridge-v1.11.0` / `rag-api-v1.11.0`. Always pin immutable tags in production — never deploy only `:latest`.
 
 ## Release Procedure
 
@@ -187,9 +214,11 @@ RAG runtime verification:
 
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Networks}}' | grep -E 'technolohit-rag-api|technolohit-voice-bridge|NAME'
-docker exec technolohit-voice-bridge sh -lc 'getent hosts technolohit-rag-api || true'
-docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://technolohit-rag-api:8080/healthz || true'
+docker exec technolohit-voice-bridge sh -lc 'printenv VOICE_RAG_API_URL'
+docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://127.0.0.1:8080/healthz || curl -fsS http://127.0.0.1:8080/healthz'
 ```
+
+Note: voice-bridge uses **host-local** RAG URL `http://127.0.0.1:8080` in the current host-network setup. Docker DNS `technolohit-rag-api` is not valid from voice-bridge.
 
 8. Test a real call and verify `voice.call_sessions`, `voice.call_events`, and turn transcripts.
 

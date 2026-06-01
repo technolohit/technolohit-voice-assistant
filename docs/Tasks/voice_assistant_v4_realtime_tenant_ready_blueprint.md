@@ -35,10 +35,10 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 8 — Observability And Quality Analytics** |
+| **Current completed phase** | **Phase 9 — Production Rollout Preparation (documentation/runbook)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) |
 | **v4 production status** | **Not enabled** — canary/dialogue flags default off; router delegates to v3 |
-| **Next implementation phase** | **Phase 9 — Production Rollout** |
+| **Next step** | **Sysadmin migration + v1.11.0 deploy dry run** (v3 active); production v4 enablement blocked |
 
 Completed foundation work (do not re-implement):
 
@@ -51,6 +51,7 @@ Completed foundation work (do not re-implement):
 - Phase 6 RAG product/sales Q&A: v4 RAG orchestrator, state-gated retrieval, fail-closed fallbacks, canary harness tests (canary/test-harness only)
 - Phase 7 lead/post-call/privacy: lead candidate object, post-call metadata bridge, privacy sanitize, notification idempotency (canary/test-harness only)
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
+- Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (production v4 still disabled)
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -72,7 +73,8 @@ Phase 5  — Live Dialogue Orchestrator Integration         [completed]
 Phase 6  — RAG Product/Sales Q&A Integration              [completed]
 Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
-Phase 9  — Production Rollout                             [next]
+Phase 9  — Production Rollout Preparation                 [completed — docs/runbook]
+Phase 9b — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
 ## Current System Baseline
@@ -1057,15 +1059,21 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: QA queries documented (`voice_assistant_v4_phase8_quality_analytics_queries.sql`).
 - [x] Successful: Conversion/drop-off metrics defined in per-call quality summary.
 - [x] Successful: Phase 8 observability tests pass (`v4-phase8-observability-quality.test.js`).
-- [ ] Successful: Live production v4 auto-flush on call end (Phase 9 rollout).
+- [ ] Successful: Live production v4 auto-flush on call end (Phase 9b enablement).
 
-### Phase 9: Production Rollout
+### Phase 9: Production Rollout Preparation
 
-- [ ] Successful: v4 deploy flags verified.
-- [ ] Successful: v3 rollback tested.
-- [ ] Successful: Internal live QA completed.
-- [ ] Successful: Supervised production rollout completed.
-- [ ] Successful: Post-rollout quality review completed.
+**Status: documentation and runbook complete; production v4 NOT enabled.**
+
+- [x] Successful: v4 deploy flags documented and verification commands defined.
+- [x] Successful: v3 rollback procedure documented (immutable tag pin).
+- [x] Successful: Sysadmin runbook created (`voice_assistant_v4_phase9_sysadmin_runbook.md`).
+- [x] Successful: Phase 9 rollout report created.
+- [x] Successful: GitHub Actions / CI deploy tag format documented for v1.11.0.
+- [x] Successful: Acceptance checklist defined (operator sign-off).
+- [ ] Successful: Internal live QA completed (operator — after deploy dry run).
+- [ ] Successful: Supervised production v4 enablement completed (blocked — see blockers).
+- [ ] Successful: Post-rollout quality review completed (after v4 enablement only).
 
 ## Sysadmin Preparation Checklist
 
@@ -1123,8 +1131,8 @@ Current project status (see also **Current Project Status** at top):
 - Phase 6 RAG product/sales Q&A: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 7 lead/post-call/privacy: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
-- **Next implementation phase: Phase 9 — Production Rollout.**
-- Production v4 rollout: blocked until final retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
+- Phase 9 rollout preparation: **documentation/runbook complete in repo** — Sysadmin dry run ready; **production v4 still disabled**.
+- **Production v4 enablement:** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, and OpenAI streaming limits are resolved.
 
 ## Acceptance Criteria For v4 Phase 1
 
