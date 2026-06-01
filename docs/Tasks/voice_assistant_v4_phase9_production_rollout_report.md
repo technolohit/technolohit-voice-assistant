@@ -75,6 +75,14 @@ Deploying `thnhit/technhvoice:voice-bridge-v1.11.0` with the above flags ships v
 
 Contains exact commands for: image verify, DB backup, migrations 006–009 + knowledge 003, schema verify, env verify, deploy v1.11.0, health checks, RAG host-local URL, quality-event guard, optional canary (non-production), rollback, privacy-safe logs.
 
+Migration SQL artifact note:
+
+- Runtime Docker images do **not** include repo migration SQL files.
+- The runbook now includes an explicit artifact gate to fetch/copy the required SQL files from immutable tag `v1.11.0` before applying migrations.
+- Required server paths:
+  - `/opt/technolohit-voice/db/voice/migrations`
+  - `/opt/technolohit-voice/db/knowledge/migrations`
+
 ## Image tags (immutable — do not use `latest` in production)
 
 | Service | Tag for v1.11.0 release |
@@ -93,6 +101,7 @@ GitHub Actions **Deploy Voice Stack** inputs:
 
 - [ ] Voice migrations 006–009 applied and verified
 - [ ] Knowledge migration 003 applied (if not already)
+- [ ] Migration SQL artifacts present on server before apply
 - [ ] `voice.call_quality_events` table exists
 - [ ] v4 tenant/agent columns present on sessions/transcripts/events/summaries/leads
 - [ ] Agent config seed present in image (`/app/config/agents/technolohit.main_voice_sales.v4.json`)

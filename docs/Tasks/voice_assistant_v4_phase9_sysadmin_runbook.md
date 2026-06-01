@@ -57,6 +57,94 @@ Verify backup file size > 0. Store off-host per backup policy.
 
 ## 3. Apply voice migrations 006–009
 
+### 3A. Make migration SQL artifacts available on the server
+
+The runtime Docker images do **not** include repo migration SQL files. Before applying
+migrations, place the required files on the host under:
+
+```text
+/opt/technolohit-voice/db/voice/migrations
+/opt/technolohit-voice/db/knowledge/migrations
+```
+
+Recommended server-side fetch from the immutable Git tag:
+
+```bash
+MIGRATION_TAG="v1.11.0"
+REPO_RAW_BASE="https://raw.githubusercontent.com/technolohit/technolohit-voice-assistant/${MIGRATION_TAG}"
+
+mkdir -p /opt/technolohit-voice/db/voice/migrations
+mkdir -p /opt/technolohit-voice/db/knowledge/migrations
+
+for f in 006_v4_tenant_agent_session_fields.sql \
+         007_v4_tenant_agent_transcripts_events.sql \
+         008_v4_leads_custom_fields.sql \
+         009_v4_call_quality_events.sql; do
+  curl -fsSL \
+    "${REPO_RAW_BASE}/db/voice/migrations/${f}" \
+    -o "/opt/technolohit-voice/db/voice/migrations/${f}"
+done
+
+curl -fsSL \
+  "${REPO_RAW_BASE}/db/knowledge/migrations/003_knowledge_agent_scope.sql" \
+  -o "/opt/technolohit-voice/db/knowledge/migrations/003_knowledge_agent_scope.sql"
+
+ls -lh /opt/technolohit-voice/db/voice/migrations/00{6,7,8,9}_*.sql
+ls -lh /opt/technolohit-voice/db/knowledge/migrations/003_knowledge_agent_scope.sql
+```
+
+If the GitHub repository is private, use a read-only GitHub token without printing it:
+
+```bash
+# export GITHUB_TOKEN=...   # do not echo this value
+curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+  "${REPO_RAW_BASE}/db/voice/migrations/006_v4_tenant_agent_session_fields.sql" \
+  -o /tmp/006_v4_tenant_agent_session_fields.sql
+```
+
+Then repeat the authenticated `curl` pattern for the remaining files, or copy the
+files from a developer-provided tarball.
+
+Developer-side tarball alternative:
+
+```bash
+git archive --format=tar --prefix=phase9-migrations/ v1.11.0 \
+  db/voice/migrations/006_v4_tenant_agent_session_fields.sql \
+  db/voice/migrations/007_v4_tenant_agent_transcripts_events.sql \
+  db/voice/migrations/008_v4_leads_custom_fields.sql \
+  db/voice/migrations/009_v4_call_quality_events.sql \
+  db/knowledge/migrations/003_knowledge_agent_scope.sql \
+  | gzip > phase9-migrations-v1.11.0.tar.gz
+```
+
+After copying the tarball to the server:
+
+```bash
+mkdir -p /opt/technolohit-voice/phase9-migrations
+tar -xzf phase9-migrations-v1.11.0.tar.gz -C /opt/technolohit-voice/phase9-migrations
+mkdir -p /opt/technolohit-voice/db/voice/migrations
+mkdir -p /opt/technolohit-voice/db/knowledge/migrations
+cp /opt/technolohit-voice/phase9-migrations/phase9-migrations/db/voice/migrations/00{6,7,8,9}_*.sql \
+  /opt/technolohit-voice/db/voice/migrations/
+cp /opt/technolohit-voice/phase9-migrations/phase9-migrations/db/knowledge/migrations/003_knowledge_agent_scope.sql \
+  /opt/technolohit-voice/db/knowledge/migrations/
+```
+
+Artifact gate:
+
+```bash
+test -s /opt/technolohit-voice/db/voice/migrations/006_v4_tenant_agent_session_fields.sql
+test -s /opt/technolohit-voice/db/voice/migrations/007_v4_tenant_agent_transcripts_events.sql
+test -s /opt/technolohit-voice/db/voice/migrations/008_v4_leads_custom_fields.sql
+test -s /opt/technolohit-voice/db/voice/migrations/009_v4_call_quality_events.sql
+test -s /opt/technolohit-voice/db/knowledge/migrations/003_knowledge_agent_scope.sql
+echo "migration_artifacts_ready=yes"
+```
+
+Do not continue until the artifact gate passes.
+
+### 3B. Apply voice migrations
+
 Migrations are **idempotent** (`IF NOT EXISTS`). Preferred from developer/CI machine with DB tunnel configured:
 
 ```bash
@@ -75,7 +163,7 @@ for f in 006_v4_tenant_agent_session_fields.sql \
          008_v4_leads_custom_fields.sql \
          009_v4_call_quality_events.sql; do
   docker exec -i central_postgres psql -U postgres -d technolohit_growth -v ON_ERROR_STOP=1 \
-    < "/path/to/repo/db/voice/migrations/${f}"
+    < "/opt/technolohit-voice/db/voice/migrations/${f}"
 done
 ```
 
@@ -101,7 +189,7 @@ Or server-side:
 
 ```bash
 docker exec -i central_postgres psql -U postgres -d technolohit_growth -v ON_ERROR_STOP=1 \
-  < /path/to/repo/db/knowledge/migrations/003_knowledge_agent_scope.sql
+  < /opt/technolohit-voice/db/knowledge/migrations/003_knowledge_agent_scope.sql
 ```
 
 ---
