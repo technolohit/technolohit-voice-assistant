@@ -16,6 +16,7 @@ import {
 import { V4_STATES, transitionState } from "./state-machine.js";
 import { redactPhoneLikeText } from "./redaction.js";
 import { buildRuntimeErrorEvent } from "./quality-events.js";
+import { resolveInterruptionRecovery } from "./interruption-context.js";
 
 function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
@@ -140,8 +141,31 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
 
     startTurn(orchestrator);
     acceptUserTranscript(orchestrator, transcript);
+
+    let interruptionRecovery = null;
+    if (runtime.pendingInterruptionRecovery && runtime.interruptionContext) {
+      const recovery = resolveInterruptionRecovery({
+        agentConfig: orchestrator.agentConfig,
+        memory: orchestrator.memory,
+        stateMachine: orchestrator.stateMachine,
+        context: runtime.interruptionContext,
+        callerText: transcript
+      });
+      orchestrator.memory = recovery.memory;
+      orchestrator.stateMachine = recovery.stateMachine;
+      runtime.runtimeContext.memory = recovery.memory;
+      runtime.runtimeContext.stateMachine = recovery.stateMachine;
+      runtime.interruptionContext = recovery.context;
+      interruptionRecovery = recovery;
+      runtime.pendingInterruptionRecovery = false;
+      runtime.highPriorityInterruptionTurn = false;
+    }
+
     const decideFn = runtime?.liveDialogueHooks?.decideNextAction ?? decideNextAction;
-    const action = await decideFn(orchestrator, { transcript });
+    const action = await decideFn(orchestrator, {
+      transcript,
+      interruptionRecovery
+    });
     const prepared = prepareAssistantResponse(orchestrator, action.plan);
     if (!prepared?.ok) {
       throw new Error(prepared?.reason ?? "prepare_failed");

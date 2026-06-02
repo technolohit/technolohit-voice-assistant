@@ -194,7 +194,7 @@ test("T5: all gates pass + allowlist match → v4_canary", () => {
     assert.equal(selected.handler, "v4_canary");
     assert.equal(selected.reason, "v4_live_canary_selected");
     assert.equal(selected.runtime?.ok, true);
-    assert.equal(selected.runtime?.phase, "phase10e2_live_real_tts");
+    assert.equal(selected.runtime?.phase, "phase10f_live_barge_in");
   });
 });
 

@@ -1,9 +1,9 @@
 /**
- * Phase 10E/10E2 — live v4 TTS synthesis + AudioSocket playback (no barge-in cancel yet).
+ * Phase 10E/10E2/10F — live v4 TTS synthesis + AudioSocket playback with barge-in cancel.
  */
 
-import { streamPcmToSocket } from "../media-outbound.js";
-import { pcmChunkBytes } from "../audio-media.js";
+import { encodeFrame, FrameType } from "../audiosocket-protocol.js";
+import { iteratePcmChunks, pcmChunkBytes } from "../audio-media.js";
 import { createTtsAdapter } from "./tts-adapter.js";
 import { createOpenAiTtsSynthesizeFn, isLiveOpenAiTtsConfigured } from "./openai-tts-provider.js";
 import { sanitizeResponseText } from "./transcript-intent.js";
@@ -28,6 +28,24 @@ import {
   buildPlaybackCompletedEvent,
   buildRuntimeErrorEvent
 } from "./quality-events.js";
+import {
+  createLivePlaybackCancelSession,
+  finalizeLivePlaybackAfterStream
+} from "./live-barge-in-endpoint.js";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function writeFrame(socket, type, payload) {
+  return new Promise((resolve, reject) => {
+    const frame = encodeFrame(type, payload);
+    const ok = socket.write(frame);
+    if (ok) return resolve();
+    socket.once("drain", resolve);
+    socket.once("error", reject);
+  });
+}
 
 const PHONE_LIKE = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
 const SAFE_TTS_FALLBACK =
@@ -53,7 +71,7 @@ function buildLiveTtsQualityEvent(config, ctx, runtime, builder, metricValue, pa
     metricValue,
     payload: {
       bridge_call_id: ctx?.bridgeCallId ?? null,
-      live_phase: runtime?.phase ?? "phase10e2_live_real_tts",
+      live_phase: runtime?.phase ?? "phase10f_live_barge_in",
       ...payload
     }
   });
@@ -347,12 +365,28 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
     atMs: Date.now()
   };
 
-  if (!playbackResult.ok) {
+  if (!playbackResult.ok && !playbackResult.cancelled) {
     return {
       ok: false,
       reason: playbackResult.reason ?? "playback_failed",
       ttsMs,
       synthesized: true,
+      candidate: runtime.lastAssistantPlaybackCandidate
+    };
+  }
+
+  if (playbackResult.cancelled) {
+    runtime.lastAssistantPlaybackCandidate = {
+      ...runtime.lastAssistantPlaybackCandidate,
+      cancelled: true,
+      frames_sent: playbackResult.framesSent ?? 0,
+      bytes_sent: playbackResult.bytesSent ?? 0
+    };
+    return {
+      ok: true,
+      ttsMs,
+      playback: playbackResult,
+      cancelled: true,
       candidate: runtime.lastAssistantPlaybackCandidate
     };
   }
@@ -430,46 +464,85 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
     return { ok: false, reason: "empty_pcm", framesSent: 0, bytesSent: 0 };
   }
 
-  try {
-    const streamResult = await streamPcmToSocket(socket, pcm, config, "v4_live_assistant");
-    const chunkBytes = pcmChunkBytes(config.sampleRate ?? 8000, config.frameMs ?? 20);
-    const frameEstimate = Math.max(1, Math.ceil(pcm.length / chunkBytes));
-    const framesSent = streamResult?.frames ?? frameEstimate;
-    const bytesSent = streamResult?.bytes ?? pcm.length;
+  runtime.livePlaybackSession = createLivePlaybackCancelSession();
+  runtime.playbackInFlight = true;
 
-    for (let i = 0; i < framesSent; i += 1) {
-      const observed = observePlaybackFrameSent(playbackController, { bytes: chunkBytes });
+  const chunkBytes = pcmChunkBytes(config.sampleRate ?? 8000, config.frameMs ?? 20);
+  const frameType = FrameType.AUDIO_SLIN16_8K;
+  let framesSent = 0;
+  let bytesSent = 0;
+
+  try {
+    for (const chunk of iteratePcmChunks(pcm, chunkBytes)) {
+      if (!socket.writable) break;
+      if (runtime.livePlaybackSession?.cancelled) break;
+
+      await writeFrame(socket, frameType, chunk);
+      framesSent += 1;
+      bytesSent += chunk.length;
+
+      const observed = observePlaybackFrameSent(playbackController, { bytes: chunk.length });
       playbackController = observed.controller;
-      runtime.audioSession = appendOutboundFrame(runtime.audioSession, { bytes: chunkBytes });
+      runtime.playback = playbackController;
+      runtime.livePlaybackSession.framesSent = framesSent;
+      runtime.livePlaybackSession.bytesSent = bytesSent;
+      runtime.audioSession = appendOutboundFrame(runtime.audioSession, { bytes: chunk.length });
+
+      if (runtime.livePlaybackSession?.cancelled) break;
+      await sleep(config.frameMs ?? 20);
     }
 
-    playbackController = finalizePlayback(playbackController, "completed", Date.now()).controller;
-    runtime.playback = playbackController;
-    runtime.audioSession = markPlaybackCompleted(runtime.audioSession, Date.now());
-    runtime.playbackCompletedCount = (runtime.playbackCompletedCount ?? 0) + 1;
+    const streamOutcome = {
+      frames: framesSent,
+      bytes: bytesSent,
+      cancelled: Boolean(runtime.livePlaybackSession?.cancelled)
+    };
 
-    const playbackMs = Math.max(0, Date.now() - playbackStartedAt);
-    bufferQualityEvent(
+    const finalized = finalizeLivePlaybackAfterStream(
+      config,
+      ctx,
       runtime,
-      buildLiveTtsQualityEvent(config, ctx, runtime, buildPlaybackCompletedEvent, playbackMs, {
-        frames_sent: framesSent,
-        bytes_sent: bytesSent
-      })
+      playbackController,
+      streamOutcome
     );
+
+    if (!finalized.cancelled) {
+      runtime.audioSession = markPlaybackCompleted(runtime.audioSession, Date.now());
+      runtime.playbackCompletedCount = (runtime.playbackCompletedCount ?? 0) + 1;
+      const playbackMs = Math.max(0, Date.now() - playbackStartedAt);
+      bufferQualityEvent(
+        runtime,
+        buildLiveTtsQualityEvent(config, ctx, runtime, buildPlaybackCompletedEvent, playbackMs, {
+          frames_sent: finalized.framesSent,
+          bytes_sent: finalized.bytesSent
+        })
+      );
+      return {
+        ok: true,
+        framesSent: finalized.framesSent,
+        bytesSent: finalized.bytesSent,
+        playbackMs,
+        playbackController: runtime.playback,
+        cancelled: false
+      };
+    }
 
     return {
       ok: true,
-      framesSent,
-      bytesSent,
-      playbackMs,
-      playbackController
+      cancelled: true,
+      framesSent: finalized.framesSent,
+      bytesSent: finalized.bytesSent,
+      playbackMs: Math.max(0, Date.now() - playbackStartedAt),
+      playbackController: runtime.playback
     };
   } catch (err) {
+    runtime.playbackInFlight = false;
     const message = String(err?.message ?? err).slice(0, 120);
     logPlaybackFailed(ctx, message);
     bufferPlaybackError(config, ctx, runtime, message, Date.now() - playbackStartedAt);
     runtime.playback = finalizePlayback(playbackController, "completed", Date.now()).controller;
     runtime.audioSession = markPlaybackCompleted(runtime.audioSession, Date.now());
+    runtime.playbackInFlight = false;
     return { ok: false, reason: "playback_exception", error: message, framesSent: 0, bytesSent: 0 };
   }
 }

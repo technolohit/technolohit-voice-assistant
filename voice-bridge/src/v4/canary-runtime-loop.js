@@ -116,7 +116,7 @@ export function createCanaryDialogueRuntime(config, input = {}) {
 }
 
 /**
- * Live AudioSocket canary runtime — Phase 10E TTS/playback on dialogue plan (no barge-in yet).
+ * Live AudioSocket canary runtime — Phase 10F TTS/playback + barge-in on gated path.
  * Requires env gates + allowlist match before audiosocket.js selects v4_canary handler.
  */
 export function createLiveCanaryRuntime(config, ctx, options = {}) {
@@ -160,7 +160,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
     dialogueReady: true,
-    reason: "v4_live_canary_phase10e2"
+    reason: "v4_live_canary_phase10f"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -214,7 +214,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10e2_live_real_tts",
+    phase: "phase10f_live_barge_in",
     liveCanary: true,
     config,
     runtimeContext,
@@ -235,6 +235,14 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     ttsCompletedCount: 0,
     ttsFailedCount: 0,
     playbackCompletedCount: 0,
+    playbackInFlight: false,
+    livePlaybackSession: null,
+    bargeInDetector: null,
+    bargeInCount: 0,
+    bargeInHandledPlaybackId: null,
+    interruptionContext: null,
+    pendingInterruptionRecovery: false,
+    highPriorityInterruptionTurn: false,
     lastTtsPlaybackPlanKey: null,
     inboundFrameCount: 0,
     inboundBytes: 0,

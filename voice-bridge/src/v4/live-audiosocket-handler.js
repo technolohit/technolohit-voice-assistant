@@ -24,6 +24,7 @@ import {
   runLiveSttOnEndpoint,
   resetUtteranceBuffer
 } from "./live-stt-endpoint.js";
+import { observeLiveCanaryBargeIn } from "./live-barge-in-endpoint.js";
 
 /**
  * Parse allowlist entries from config (comma/semicolon/whitespace separated).
@@ -178,6 +179,14 @@ export async function processLiveCanaryInboundFrame(config, ctx, runtime, payloa
   runtime.inboundFrameCount = (runtime.inboundFrameCount ?? 0) + 1;
   runtime.inboundBytes = (runtime.inboundBytes ?? 0) + frameBytes;
 
+  try {
+    observeLiveCanaryBargeIn(config, ctx, runtime, payload);
+  } catch (err) {
+    console.warn(
+      `[v4-live] barge_in_observe_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+    );
+  }
+
   const rms = pcmFrameRms(payload);
   const prevVad = runtime.vadState;
   const prevSpeechActive = Boolean(prevVad.speechActive);
@@ -266,7 +275,7 @@ export async function startLiveCanaryCall(config, ctx, socket, runtime) {
   runtime.liveSocket = socket;
   runtime.startedAt = Date.now();
 
-  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10e2"} ${liveLogIds(ctx)}`);
+  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10f"} ${liveLogIds(ctx)}`);
 
   try {
     await playGreetingAndKeepalive(config, ctx, socket, { skipAssistant: true });
@@ -302,7 +311,7 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
   const sessionMetrics = runtime?.audioSession ? getAudioSessionMetrics(runtime.audioSession) : null;
 
   console.log(
-    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} tts_completed_count=${runtime?.ttsCompletedCount ?? 0} playback_completed_count=${runtime?.playbackCompletedCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} tts_completed_count=${runtime?.ttsCompletedCount ?? 0} playback_completed_count=${runtime?.playbackCompletedCount ?? 0} barge_in_count=${runtime?.bargeInCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   ctx.v4LiveRuntime = null;
