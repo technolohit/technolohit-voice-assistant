@@ -79,7 +79,7 @@ function normalizeBufferedEvent(event, callSessionId) {
   };
 }
 
-function buildSummaryQualityEvent(config, ctx, runtime, events, summary, closeReason = null) {
+export function buildSummaryQualityEvent(config, ctx, runtime, events, summary, closeReason = null) {
   const agentConfig = runtime?.runtimeContext?.agentConfig ?? null;
   const callSessionId = resolveLiveCallSessionId(ctx, runtime);
   const durationMs = runtime?.startedAt ? Math.max(0, Date.now() - runtime.startedAt) : null;
@@ -100,9 +100,92 @@ function buildSummaryQualityEvent(config, ctx, runtime, events, summary, closeRe
       latencies: summary?.latencies ?? {},
       errors: summary?.errors ?? {},
       live_counters: summary?.live_counters ?? {},
+      turn_latency: summary?.turn_latency ?? null,
+      turn_latency_history: summary?.turn_latency_history ?? [],
       privacy_ok: summary?.privacy_ok ?? true
     }
   });
+}
+
+const SESSION_CAPSTONE_EVENT_TYPES = new Set([
+  "live_call_quality_summary",
+  "audio_session_closed"
+]);
+
+function bufferFlushEvent(sink, event, ctx, failures = []) {
+  const validation = validateQualityEventInput(event);
+  if (!validation.ok) {
+    failures.push({
+      eventType: event?.eventType ?? "unknown",
+      reason: "validation_failed",
+      errors: validation.errors
+    });
+    console.warn(
+      `[v4-live] quality_flush_skip_event event_type=${event?.eventType ?? "unknown"} reason=validation_failed ${liveLogIds(ctx)}`
+    );
+    return false;
+  }
+  const buffered = sink.bufferQualityEvent(event);
+  if (!buffered?.ok) {
+    failures.push({
+      eventType: event?.eventType ?? "unknown",
+      reason: buffered?.reason ?? "buffer_failed",
+      errors: buffered?.errors ?? null
+    });
+    return false;
+  }
+  return true;
+}
+
+async function insertCapstoneEventsDirectly(insertFn, events, options, failures = [], targetTypes = null) {
+  const inserted = [];
+  const targets =
+    targetTypes instanceof Set
+      ? targetTypes
+      : new Set(
+          [...SESSION_CAPSTONE_EVENT_TYPES].filter((eventType) =>
+            events.some((event) => event?.eventType === eventType)
+          )
+        );
+  for (const event of events) {
+    const eventType = String(event?.eventType ?? "");
+    if (!SESSION_CAPSTONE_EVENT_TYPES.has(eventType) || !targets.has(eventType)) continue;
+    const enriched = enrichQualityEventForPersistence(event, options);
+    const validation = validateQualityEventInput(enriched);
+    if (!validation.ok) {
+      failures.push({
+        eventType: enriched.eventType,
+        reason: "capstone_validation_failed",
+        errors: validation.errors
+      });
+      continue;
+    }
+    if (!assertNoRawPhoneInPayload(enriched.payload)) {
+      failures.push({
+        eventType: enriched.eventType,
+        reason: "capstone_privacy_blocked"
+      });
+      continue;
+    }
+    try {
+      const result = await insertFn(enriched);
+      if (result?.ok) {
+        inserted.push(enriched.eventType);
+      } else {
+        failures.push({
+          eventType: enriched.eventType,
+          reason: result?.reason ?? "capstone_insert_failed"
+        });
+      }
+    } catch (err) {
+      failures.push({
+        eventType: enriched.eventType,
+        reason: "capstone_insert_exception",
+        error: String(err?.message ?? err).slice(0, 120)
+      });
+    }
+  }
+  return inserted;
 }
 
 /**
@@ -171,7 +254,8 @@ export async function flushLiveCanaryQualityEvents(config, ctx, runtime, options
     }
   });
 
-  eventsToFlush.push(summaryEvent, closedEvent);
+  const capstoneEvents = [summaryEvent, closedEvent];
+  eventsToFlush.push(...capstoneEvents);
 
   const insertFn = resolveLiveQualityInsertFn(config, runtime, options);
   const sink = createQualityEventSink({
@@ -180,12 +264,9 @@ export async function flushLiveCanaryQualityEvents(config, ctx, runtime, options
     maxBuffer: Math.max(64, eventsToFlush.length + 8)
   });
 
+  const preFlushFailures = [];
   for (const event of eventsToFlush) {
-    const validation = validateQualityEventInput(event);
-    if (!validation.ok) {
-      continue;
-    }
-    sink.bufferQualityEvent(event);
+    bufferFlushEvent(sink, event, ctx, preFlushFailures);
   }
 
   const eventCount = sink.bufferedCount();
@@ -232,8 +313,33 @@ export async function flushLiveCanaryQualityEvents(config, ctx, runtime, options
       agentConfig
     });
 
-    const insertedCount = flushResult.flushed ?? 0;
-    const failedCount = flushResult.failed ?? 0;
+    let insertedCount = flushResult.flushed ?? 0;
+    let failedCount = flushResult.failed ?? 0;
+
+    const capstoneRetryTypes = new Set([
+      ...preFlushFailures
+        .filter((f) => SESSION_CAPSTONE_EVENT_TYPES.has(f.eventType))
+        .map((f) => f.eventType),
+      ...(flushResult.failures ?? [])
+        .filter((f) => SESSION_CAPSTONE_EVENT_TYPES.has(f.eventType))
+        .map((f) => f.eventType)
+    ]);
+    const capstoneNeedsRetry = capstoneRetryTypes.size > 0;
+
+    if (capstoneNeedsRetry) {
+      const directInserted = await insertCapstoneEventsDirectly(insertFn, capstoneEvents, {
+        persistMetadata,
+        config,
+        agentConfig
+      }, [], capstoneRetryTypes);
+      insertedCount += directInserted.length;
+      failedCount = Math.max(0, failedCount - directInserted.length);
+      if (directInserted.includes("live_call_quality_summary")) {
+        console.log(
+          `[v4-live] quality_flush_capstone_recovered event_type=live_call_quality_summary ${liveLogIds(ctx)}`
+        );
+      }
+    }
 
     if (failedCount > 0) {
       const failureReason = flushResult.failures?.[0]?.reason ?? "insert_failed";

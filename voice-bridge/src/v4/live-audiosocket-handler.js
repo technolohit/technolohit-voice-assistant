@@ -24,6 +24,7 @@ import {
   runLiveSttOnEndpoint,
   resetUtteranceBuffer
 } from "./live-stt-endpoint.js";
+import { beginLiveTurnLatency } from "./live-turn-latency.js";
 import { observeLiveCanaryBargeIn } from "./live-barge-in-endpoint.js";
 import { flushLiveCanaryQualityEvents } from "./live-quality-flush-endpoint.js";
 
@@ -239,6 +240,8 @@ export async function processLiveCanaryInboundFrame(config, ctx, runtime, payloa
         last_rms: Math.round(vad.lastRms ?? rms)
       })
     );
+
+    beginLiveTurnLatency(runtime, runtime.endpointCount ?? 0);
 
     try {
       await runLiveSttOnEndpoint(config, ctx, runtime);

@@ -27,12 +27,17 @@ import {
   buildTtsCompletedEvent,
   buildPlaybackStartedEvent,
   buildPlaybackCompletedEvent,
-  buildRuntimeErrorEvent
+  buildRuntimeErrorEvent,
+  buildTurnLatencyMetricsEvent
 } from "./quality-events.js";
 import {
   createLivePlaybackCancelSession,
   finalizeLivePlaybackAfterStream
 } from "./live-barge-in-endpoint.js";
+import {
+  markLiveTurnLatency,
+  finalizeLiveTurnLatencyMetrics
+} from "./live-turn-latency.js";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -262,6 +267,8 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
     `[v4-live] tts_started provider=${ttsAdapter.provider} response_chars=${prepared.response_chars} plan_type=${planCandidate.response_type ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
+  markLiveTurnLatency(runtime, "tts_started");
+
   bufferQualityEvent(
     runtime,
     buildLiveTtsQualityEvent(config, ctx, runtime, buildTtsStartedEvent, null, {
@@ -299,6 +306,7 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
   }
 
   const firstChunkMs = synthResult.firstChunkMs ?? ttsMs;
+  markLiveTurnLatency(runtime, "tts_first_chunk");
   bufferQualityEvent(
     runtime,
     buildLiveTtsQualityEvent(config, ctx, runtime, buildTtsFirstChunkEvent, firstChunkMs, {
@@ -453,6 +461,8 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
     `[v4-live] playback_started plan_type=${planCandidate?.response_type ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
+  markLiveTurnLatency(runtime, "playback_started");
+
   const pcmParts = [];
   for (const chunk of chunks) {
     if (chunk?.audio?.length) {
@@ -520,6 +530,21 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
       runtime.audioSession = markPlaybackCompleted(runtime.audioSession, Date.now());
       runtime.playbackCompletedCount = (runtime.playbackCompletedCount ?? 0) + 1;
       const playbackMs = Math.max(0, Date.now() - playbackStartedAt);
+      markLiveTurnLatency(runtime, "playback_completed");
+      const turnLatency = finalizeLiveTurnLatencyMetrics(runtime);
+      if (turnLatency) {
+        bufferQualityEvent(
+          runtime,
+          buildLiveTtsQualityEvent(
+            config,
+            ctx,
+            runtime,
+            buildTurnLatencyMetricsEvent,
+            turnLatency.total_turn_response_ms,
+            turnLatency
+          )
+        );
+      }
       bufferQualityEvent(
         runtime,
         buildLiveTtsQualityEvent(config, ctx, runtime, buildPlaybackCompletedEvent, playbackMs, {

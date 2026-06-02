@@ -3,6 +3,7 @@
  */
 
 import { assertNoRawPhoneInPayload } from "./privacy-sanitize.js";
+import { pickLatestTurnLatencyForSummary } from "./live-turn-latency.js";
 
 const LATENCY_METRICS = {
   stt_ms: "stt",
@@ -198,15 +199,24 @@ export function buildLiveCanaryCallQualitySummary(runtime = {}, ctx = {}, events
     ...live_counters
   };
 
+  const turn_latency = pickLatestTurnLatencyForSummary(runtime);
+  const turn_latency_history = Array.isArray(runtime?.turnLatencyHistory)
+    ? runtime.turnLatencyHistory.map((entry) => ({ ...entry }))
+    : [];
+
   const summary = {
     ...base,
     counters,
     live_counters,
+    turn_latency,
+    turn_latency_history,
     privacy_ok: assertNoRawPhoneInPayload({
       counters,
       latencies: base.latencies,
       errors: base.errors,
-      live_counters
+      live_counters,
+      turn_latency,
+      turn_latency_history
     })
   };
 

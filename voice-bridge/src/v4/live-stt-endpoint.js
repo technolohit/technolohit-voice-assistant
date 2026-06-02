@@ -5,6 +5,7 @@
 import { runLiveDialogueOnCallerTranscript } from "./live-dialogue-endpoint.js";
 import { runLiveTtsAndPlayback } from "./live-tts-playback-endpoint.js";
 import { runLiveSttFailureFallback } from "./live-stt-fallback-endpoint.js";
+import { markLiveTurnLatency } from "./live-turn-latency.js";
 
 import { createSttAdapter } from "./stt-adapter.js";
 import {
@@ -265,6 +266,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     atMs: Date.now()
   };
   runtime.sttCompletedCount = (runtime.sttCompletedCount ?? 0) + 1;
+  markLiveTurnLatency(runtime, "stt_completed");
 
   bufferQualityEvent(
     runtime,

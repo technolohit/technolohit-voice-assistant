@@ -302,6 +302,8 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E5 | STT completed | `[v4-live] stt_started stt_provider=openai` and `stt_completed stt_provider=openai` (no raw transcript in log line unless `VOICE_ASSISTANT_LOG_TRANSCRIPT_PREVIEW=true`) |
 | E5a | Full utterance sent to STT (10K) | For multi-frame utterances, SQL diagnostics on `stt_completed` rows where `payload ? 'pcm_bytes'` show `pcm_bytes` much larger than `320`; `wav_bytes = pcm_bytes + 44`. A one-frame `pcm_bytes=320` with high `utterance_frames` is a fail. |
 | E5b | STT failure fallback (10J) | If STT fails: `[v4-live] stt_failed … http_status=…` then `stt_fallback_started` / `stt_fallback_completed`; caller hears short retry prompt — **not** long silence |
+| E5c | Goodbye / closing (10M) | After product Q&A, say **Auf Wiederhören** → warm goodbye (no open-ended “anything else?”) |
+| E5d | Summary + latency SQL (10M) | G.3 returns `live_call_quality_summary`; G.3b shows `turn_latency_metrics` |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -394,20 +396,44 @@ GROUP BY event_type
 ORDER BY n DESC;
 ```
 
-### G.3 Summary event (Phase 10G)
+### G.3 Summary event (Phase 10G / 10M — required after canary)
+
+**Pass:** ≥ 1 row with `event_type = 'live_call_quality_summary'`.
+If 0 rows but logs show `quality_flush_completed`, check v1.24.0+ (10M UUID validation fix).
 
 ```sql
 SELECT
   created_at,
+  event_type,
   payload->>'live_phase' AS live_phase,
+  payload->>'close_reason' AS close_reason,
   payload->'live_counters'->>'endpoint_count' AS endpoint_count,
   payload->'live_counters'->>'stt_completed_count' AS stt_completed_count,
   payload->'live_counters'->>'tts_completed_count' AS tts_completed_count,
   payload->'live_counters'->>'barge_in_count' AS barge_in_count,
-  payload->>'close_reason' AS close_reason
+  payload->'turn_latency'->>'endpoint_to_first_playback_ms' AS endpoint_to_first_playback_ms,
+  payload->'turn_latency'->>'total_turn_response_ms' AS total_turn_response_ms
 FROM voice.call_quality_events
 WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
   AND event_type = 'live_call_quality_summary';
+```
+
+### G.3b Turn latency metrics (Phase 10M)
+
+```sql
+SELECT
+  created_at,
+  metric_value AS total_turn_response_ms,
+  payload->>'endpoint_to_stt_completed_ms' AS endpoint_to_stt_completed_ms,
+  payload->>'stt_completed_to_dialogue_plan_ms' AS stt_completed_to_dialogue_plan_ms,
+  payload->>'dialogue_plan_to_tts_started_ms' AS dialogue_plan_to_tts_started_ms,
+  payload->>'tts_started_to_first_chunk_ms' AS tts_started_to_first_chunk_ms,
+  payload->>'endpoint_to_first_playback_ms' AS endpoint_to_first_playback_ms
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'turn_latency_metrics'
+ORDER BY created_at DESC
+LIMIT 5;
 ```
 
 ### G.4 Session close + privacy-oriented payload scan

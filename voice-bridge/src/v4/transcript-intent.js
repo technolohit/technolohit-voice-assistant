@@ -36,8 +36,22 @@ export function detectTranscriptIntent(transcript = "", memory = {}) {
   if (/\b(ja|einverstanden|gerne|ok)\b/i.test(lower) && memory?.contact_preference) {
     return "callback_permission_granted";
   }
-  if (/\b(danke|auf wiedersehen|tschüss|tschuess|das war alles)\b/i.test(lower)) return "closing";
+  if (isDefiniteCallerGoodbye(transcript)) return "closing";
+  if (/\b(danke)\b/i.test(lower)) return "closing";
   return "unclear";
+}
+
+const DEFINITE_GOODBYE =
+  /\b(auf wiederh[oö]ren|auf wiedersehen|wiederh[oö]ren|wiedersehen|bis dann|nein danke|danke[, ]+das war alles|das war alles|tsch[uü]ss|tschuess|sch[oö]nen tag)\b/i;
+
+export function isDefiniteCallerGoodbye(transcript = "") {
+  const lower = normalizeText(transcript).toLowerCase();
+  if (!lower) return false;
+  return DEFINITE_GOODBYE.test(lower);
+}
+
+export function getWarmGoodbyeResponseText() {
+  return "Vielen Dank für Ihren Anruf. Auf Wiederhören.";
 }
 
 export function isPricingOrProductQuestion(transcript = "", intent = null) {

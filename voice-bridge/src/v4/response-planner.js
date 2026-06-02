@@ -7,7 +7,9 @@ import { matchProductAlias, getProductById, getClosingQuestion } from "./agent-c
 import {
   detectTranscriptIntent,
   sanitizeResponseText,
-  isPostContactProductQuestion
+  isPostContactProductQuestion,
+  isDefiniteCallerGoodbye,
+  getWarmGoodbyeResponseText
 } from "./transcript-intent.js";
 import { shouldUseRagForTurn } from "./rag-orchestrator.js";
 import { V4_STATES } from "./state-machine.js";
@@ -231,10 +233,13 @@ export function buildResponsePlan({
   }
 
   if (resolvedIntent === "closing") {
+    const goodbyeText = isDefiniteCallerGoodbye(transcript)
+      ? getWarmGoodbyeResponseText()
+      : getClosingQuestion(agentConfig);
     return planBase(RESPONSE_TYPES.CLOSING, {
-      text: sanitizeResponseText(getClosingQuestion(agentConfig)),
+      text: sanitizeResponseText(goodbyeText),
       next_state: V4_STATES.COMPLETED,
-      memory_patch: { current_state: V4_STATES.COMPLETED },
+      memory_patch: { current_state: V4_STATES.COMPLETED, call_closing: true },
       quality_event_type: "turn_started"
     });
   }

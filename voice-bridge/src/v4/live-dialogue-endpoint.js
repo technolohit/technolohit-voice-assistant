@@ -17,6 +17,7 @@ import { V4_STATES, transitionState } from "./state-machine.js";
 import { redactPhoneLikeText } from "./redaction.js";
 import { buildRuntimeErrorEvent } from "./quality-events.js";
 import { resolveInterruptionRecovery } from "./interruption-context.js";
+import { markLiveTurnLatency } from "./live-turn-latency.js";
 
 function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
@@ -194,6 +195,7 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
 
     callerCandidate.dialogueProcessed = true;
     runtime.dialogueCompletedCount = (runtime.dialogueCompletedCount ?? 0) + 1;
+    markLiveTurnLatency(runtime, "dialogue_plan");
 
     console.log(
       `[v4-live] dialogue_plan_created state=${orchestrator.stateMachine?.state ?? "unknown"} intent=${action.intent ?? "unknown"} plan_type=${action.plan?.response_type ?? "unknown"} response_chars=${responseChars} ${liveLogIds(ctx)}`

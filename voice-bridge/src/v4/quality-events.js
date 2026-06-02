@@ -24,6 +24,15 @@ const VERSION_METADATA_KEYS = new Set([
   "knowledge_version"
 ]);
 
+/** UUID / correlation ids — excluded from digit-based phone heuristics (Phase 10M). */
+const PHONE_SCAN_EXEMPT_KEYS = new Set([
+  ...VERSION_METADATA_KEYS,
+  "bridge_call_id",
+  "call_session_id",
+  "external_call_id",
+  "audiosocket_uuid"
+]);
+
 export function redactQualityPayload(payload = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
   const out = {};
@@ -90,7 +99,7 @@ export function validateQualityEventInput(input) {
   const payloadForPhoneScan =
     payload && typeof payload === "object" && !Array.isArray(payload)
       ? Object.fromEntries(
-          Object.entries(payload).filter(([key]) => !VERSION_METADATA_KEYS.has(key))
+          Object.entries(payload).filter(([key]) => !PHONE_SCAN_EXEMPT_KEYS.has(key))
         )
       : payload;
   const serialized = JSON.stringify(payloadForPhoneScan);
@@ -195,6 +204,10 @@ export const buildTtsFirstChunkEvent = typedBuilder("tts_first_chunk", {
 export const buildAudioSessionClosedEvent = typedBuilder("audio_session_closed", {
   eventStage: "session",
   metricName: "session_duration_ms"
+});
+export const buildTurnLatencyMetricsEvent = typedBuilder("turn_latency_metrics", {
+  eventStage: "dialogue",
+  metricName: "total_turn_response_ms"
 });
 
 export function buildQualityEventFromState(state, base = {}) {
