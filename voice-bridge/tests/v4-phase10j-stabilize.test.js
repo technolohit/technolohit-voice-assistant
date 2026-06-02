@@ -221,6 +221,41 @@ test("10J: openai STT adapter propagates diagnostics on failure", async () => {
   });
 });
 
+test("10J: openai STT adapter buffers full utterance without direct fetchImpl", async () => {
+  const captured = {};
+  const adapter = createSttAdapter({
+    provider: "openai",
+    enabled: true,
+    endpointTranscribeFn: async (pcmBuffer, meta) => {
+      captured.pcmBytes = pcmBuffer.length;
+      captured.frameCount = meta.frameCount;
+      return {
+        ok: true,
+        text: "Digitale Rezeption",
+        sttMs: 42,
+        provider: "openai",
+        diagnostics: {
+          pcm_bytes: pcmBuffer.length,
+          utterance_frames: meta.frameCount
+        }
+      };
+    }
+  });
+
+  const started = adapter.startSttStream({ streamId: "full-buffer-1", language: "de" });
+  assert.equal(started.ok, true);
+
+  adapter.appendAudio(started.streamId, makePcmFrame(700));
+  adapter.appendAudio(started.streamId, makePcmFrame(800));
+  adapter.appendAudio(started.streamId, makePcmFrame(900));
+
+  const completed = await adapter.completeSttTurnAsync(started.streamId);
+  assert.equal(completed.ok, true);
+  assert.equal(completed.event.text, "Digitale Rezeption");
+  assert.equal(captured.frameCount, 3);
+  assert.equal(captured.pcmBytes, 960);
+});
+
 test("10J: preflight prints safe lines and passes with mock fetch", async () => {
   const config = loadConfig();
   const fetchImpl = async () => ({

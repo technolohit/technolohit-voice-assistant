@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10J — STT failure diagnostics, fallback prompt, session hardening** |
-| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); next canary image target: **`voice-bridge-v1.21.0`** (10J) |
-| **v4 production status** | **Not enabled** — **10H / v1.20.0 retry failed and not accepted** |
+| **Current completed phase** | **Phase 10K — full utterance STT buffer fix after v1.21.0 retry** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); next canary image target: **`voice-bridge-v1.22.0`** (10K) |
+| **v4 production status** | **Not enabled** — **10H / v1.21.0 retry failed and not accepted** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Ship **v1.21.0**, run STT preflight + supervised QA per updated runbook (no acceptance until human pass) |
+| **Next step** | Ship **v1.22.0**, run STT preflight + supervised QA per updated runbook (no acceptance until human pass) |
 
 Completed foundation work (do not re-implement):
 
@@ -1098,7 +1098,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 10: Live AudioSocket → v4 Canary Wiring
 
-**Status: Phases 10A–10G implemented in repo; Phase 10H runbook prepared; production v4 NOT enabled.**
+**Status: Phases 10A–10K implemented in repo; Phase 10H live QA has failed/partial results through v1.21.0; production v4 NOT enabled.**
 
 - [x] Successful: Current blocker documented (live PSTN v3 vs v4 harness).
 - [x] Successful: Target flag-gated canary architecture defined.
@@ -1116,7 +1116,10 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10F live barge-in / playback cancel on gated AudioSocket canary (`VOICE_V4_BARGE_IN_ENABLED`).
 - [x] Successful: Phase 10G live canary quality DB flush on call end (fail-safe, v4-only).
 - [x] Successful: Phase 10H live PSTN QA runbook + report template published (**documentation only — not production accepted**).
-- [ ] Successful: Phase 10H supervised PSTN QA **executed** and report filed (pass/partial/fail).
+- [x] Successful: Phase 10H supervised PSTN QA **executed** and report filed (partial/fail; production v4 not accepted).
+- [x] Successful: Phase 10J STT diagnostics, fallback prompt, and session teardown hardening implemented.
+- [x] Successful: Phase 10K full-utterance STT buffer fix implemented after v1.21.0 showed one-frame OpenAI uploads.
+- [ ] Successful: Phase 10H supervised PSTN QA **passes** on v1.22.0+ with OpenAI STT completion.
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN.
 
 ## Sysadmin Preparation Checklist
@@ -1177,7 +1180,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A–10G implemented**; **Phase 10H runbook** [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md); **supervised human PSTN QA execution pending**; production v4 still disabled.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10K implemented**; **Phase 10H runbook** [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md); **supervised human PSTN QA pass pending**; production v4 still disabled.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **Phase 10H supervised PSTN QA pass**, and explicit production approval.
 
 ### Phase 10H — Supervised live PSTN QA (documentation)

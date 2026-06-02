@@ -9,6 +9,23 @@ Runbook: [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_p
 
 ---
 
+## v1.21.0 retry outcome (human-supervised, partial/fail)
+
+| Item | Result |
+|------|--------|
+| Image | `voice-bridge-v1.21.0` (10J) |
+| Preflight | PASS (`openai_stt_preflight=pass`, `http_status=200`, `error_code=empty_transcript_on_tone`) |
+| v4 route / VAD / fallback / quality flush | PASS |
+| Call teardown | PASS - no new stale active session |
+| STT | FAIL - `stt_completed_count=0`; repeated `openai_stt_http_400 invalid_value` |
+| Key clue | `utterance_frames` high, but `pcm_bytes=320` and `wav_bytes=364` |
+| Interpretation | Adapter sent only one 20 ms frame to OpenAI instead of full utterance |
+| **Classification** | **partial/fail - production v4 not accepted** |
+
+Follow-up engineering: [voice_assistant_v4_phase10k_full_utterance_stt_buffer_fix_report.md](./voice_assistant_v4_phase10k_full_utterance_stt_buffer_fix_report.md)
+
+---
+
 ## v1.20.0 retry outcome (human-supervised, failed)
 
 | Item | Result |

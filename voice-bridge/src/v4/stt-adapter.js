@@ -181,11 +181,11 @@ export function createSttAdapter({
       }
 
       if (resolvedProvider === "openai") {
-        if (!fetchImpl) {
+        if (!fetchImpl && typeof endpointTranscribeFn !== "function") {
           const err = createSttErrorEvent({
             streamId,
             code: "openai_not_configured",
-            message: "OpenAI STT requires injected fetchImpl in tests",
+            message: "OpenAI STT requires endpointTranscribeFn or injected fetchImpl",
             recoverable: false,
             provider: "openai"
           });
