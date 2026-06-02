@@ -266,7 +266,7 @@ export async function startLiveCanaryCall(config, ctx, socket, runtime) {
   runtime.liveSocket = socket;
   runtime.startedAt = Date.now();
 
-  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10e"} ${liveLogIds(ctx)}`);
+  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10e2"} ${liveLogIds(ctx)}`);
 
   try {
     await playGreetingAndKeepalive(config, ctx, socket, { skipAssistant: true });

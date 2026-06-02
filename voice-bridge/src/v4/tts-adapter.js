@@ -47,7 +47,8 @@ export function createTtsAdapter({
   language = "de",
   cache = null,
   cacheEnabled = true,
-  synthesizeImpl = null
+  synthesizeImpl = null,
+  synthesizeImplAsync = null
 } = {}) {
   const resolvedProvider = String(provider ?? "mock").trim().toLowerCase();
   const phraseCache = cache ?? createTtsPhraseCache();
@@ -61,6 +62,48 @@ export function createTtsAdapter({
     first_chunk_count: 0
   };
   let activeSynth = null;
+
+  function finalizeSynthesis({
+    synthesisId,
+    normalizedText,
+    cacheKeyParts,
+    cacheDecision,
+    category,
+    chunkAudio,
+    fromCache,
+    provider: chunkProvider,
+    firstChunkMs = 0
+  }) {
+    const resolvedFirstChunkMs = Math.max(0, Number(firstChunkMs) || 0);
+    metrics.first_chunk_ms_total += resolvedFirstChunkMs;
+    metrics.first_chunk_count += 1;
+
+    const chunk = createTtsChunkEvent({
+      synthesisId,
+      chunkIndex: 0,
+      audio: chunkAudio,
+      isFirst: true,
+      isFinal: true,
+      provider: chunkProvider
+    });
+
+    if (cacheEnabled && cacheDecision.cacheable && !fromCache) {
+      phraseCache.putCachedPhrase(cacheKeyParts, { audio: chunkAudio, sampleRate: 8000 }, {
+        text: normalizedText,
+        category
+      });
+    }
+
+    metrics.syntheses_completed += 1;
+    activeSynth = null;
+    return {
+      ok: true,
+      synthesisId,
+      fromCache,
+      firstChunkMs: resolvedFirstChunkMs,
+      chunks: [chunk]
+    };
+  }
 
   return {
     provider: resolvedProvider,
@@ -124,48 +167,127 @@ export function createTtsAdapter({
         metrics.cache_misses += 1;
       }
 
-      if (resolvedProvider === "openai" && !synthesizeImpl) {
+      if (resolvedProvider === "openai" && !synthesizeImpl && !synthesizeImplAsync) {
         activeSynth = null;
         return {
           ok: false,
           code: "openai_not_configured",
-          message: "OpenAI TTS requires injected synthesizeImpl in tests"
+          message: "OpenAI TTS requires synthesizeImpl or synthesizeImplAsync"
         };
       }
 
       const started = Date.now();
-      const chunkAudio = synthesizeImpl
+      const synthBody = synthesizeImpl
         ? synthesizeImpl(normalizedText, options)
         : Buffer.from(`mock-tts:${normalizedText.length}`, "utf8");
-      const firstChunkMs = Date.now() - started;
-      metrics.first_chunk_ms_total += firstChunkMs;
-      metrics.first_chunk_count += 1;
 
-      const chunk = createTtsChunkEvent({
+      return finalizeSynthesis({
         synthesisId,
-        chunkIndex: 0,
-        audio: chunkAudio,
-        isFirst: true,
-        isFinal: true,
-        provider: resolvedProvider
+        normalizedText,
+        cacheKeyParts,
+        cacheDecision,
+        category,
+        chunkAudio: synthBody,
+        fromCache: false,
+        provider: resolvedProvider,
+        firstChunkMs: Date.now() - started
       });
-
-      if (cacheEnabled && cacheDecision.cacheable) {
-        phraseCache.putCachedPhrase(cacheKeyParts, { audio: chunkAudio, sampleRate: 8000 }, {
-          text: normalizedText,
-          category
-        });
+    },
+    async synthesizeSentenceChunkAsync(text, options = {}) {
+      if (!this.enabled) {
+        return {
+          ok: false,
+          code: "tts_disabled",
+          message: "TTS adapter disabled"
+        };
       }
 
-      metrics.syntheses_completed += 1;
-      activeSynth = null;
-      return {
-        ok: true,
-        synthesisId,
-        fromCache: false,
-        firstChunkMs,
-        chunks: [chunk]
+      synthCounter += 1;
+      const synthesisId = String(options.synthesisId ?? `tts-${synthCounter}`);
+      const category = options.category ?? null;
+      const normalizedText = String(text ?? "").trim();
+      if (!normalizedText) {
+        return { ok: false, code: "empty_text", message: "TTS text required" };
+      }
+
+      metrics.syntheses_started += 1;
+      activeSynth = { synthesisId, status: TTS_STATUS.SYNTHESIZING, startedAt: Date.now() };
+
+      const cacheKeyParts = {
+        voice: options.voice ?? voice,
+        model: options.model ?? model,
+        language: options.language ?? language,
+        text: normalizedText
       };
+      const cacheDecision = shouldCachePhrase(normalizedText, category);
+      if (cacheEnabled && cacheDecision.cacheable) {
+        const cached = phraseCache.getCachedPhrase(cacheKeyParts);
+        if (cached?.audio) {
+          metrics.cache_hits += 1;
+          metrics.syntheses_completed += 1;
+          activeSynth = null;
+          return {
+            ok: true,
+            synthesisId,
+            fromCache: true,
+            chunks: [
+              createTtsChunkEvent({
+                synthesisId,
+                chunkIndex: 0,
+                audio: cached.audio,
+                sampleRate: cached.sample_rate,
+                isFirst: true,
+                isFinal: true,
+                provider: resolvedProvider
+              })
+            ]
+          };
+        }
+        metrics.cache_misses += 1;
+      }
+
+      if (resolvedProvider === "openai") {
+        if (!synthesizeImplAsync && !synthesizeImpl) {
+          activeSynth = null;
+          return {
+            ok: false,
+            code: "openai_not_configured",
+            message: "OpenAI TTS requires synthesizeImplAsync"
+          };
+        }
+
+        const started = Date.now();
+        try {
+          let chunkAudio;
+          if (synthesizeImplAsync) {
+            chunkAudio = await synthesizeImplAsync(normalizedText, options);
+          } else {
+            chunkAudio = synthesizeImpl(normalizedText, options);
+          }
+          const firstChunkMs = Date.now() - started;
+          return finalizeSynthesis({
+            synthesisId,
+            normalizedText,
+            cacheKeyParts,
+            cacheDecision,
+            category,
+            options,
+            chunkAudio,
+            fromCache: false,
+            provider: resolvedProvider,
+            firstChunkMs
+          });
+        } catch (err) {
+          activeSynth = null;
+          return {
+            ok: false,
+            code: err?.code ?? "tts_exception",
+            message: String(err?.message ?? err).slice(0, 200)
+          };
+        }
+      }
+
+      return this.synthesizeSentenceChunk(text, options);
     },
     async *streamTtsChunks(text, options = {}) {
       const result = this.synthesizeSentenceChunk(text, options);

@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10E — Live TTS/playback plumbing** |
+| **Current completed phase** | **Phase 10E2 — Real provider-backed live TTS** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) on `voice-bridge-v1.11.0` |
-| **v4 production status** | **Not enabled** — gated canary has mock-safe TTS/playback plumbing; real intelligible live-call TTS still requires Phase 10E2; **production v4 not approved** |
+| **v4 production status** | **Not enabled** — intelligible live TTS only when gates + allowlist + `VOICE_V4_TTS_PROVIDER=openai` + `OPENAI_API_KEY`; **production v4 not approved** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | **Phase 10E2 — Real provider-backed TTS for intelligible live-call answers** |
+| **Next step** | **Phase 10F — Live barge-in/cancel** (then 10G–10H before supervised human QA) |
 
 Completed foundation work (do not re-implement):
 
@@ -1112,7 +1112,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10C live STT on VAD endpoint implemented.
 - [x] Successful: Phase 10D live dialogue orchestrator on transcript implemented.
 - [x] Successful: Phase 10E live TTS/playback plumbing implemented with mock-safe adapter.
-- [ ] Successful: Phase 10E2 real provider-backed TTS implemented for intelligible live-call answers.
+- [x] Successful: Phase 10E2 real provider-backed TTS implemented for intelligible live-call answers.
 - [ ] Successful: Phase 10H live QA runbook published.
 - [ ] Successful: Tier 9b-B supervised canary executed.
 
@@ -1174,7 +1174,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A–10E implemented** (route gates, VAD, STT, dialogue, mock-safe TTS/playback plumbing); **real intelligible live-call TTS still requires Phase 10E2**; **barge-in not active** (10F after real TTS); production v4 still disabled.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10E2 implemented** (route gates, VAD, STT, dialogue, TTS/playback, OpenAI TTS when `VOICE_V4_TTS_PROVIDER=openai`); **supervised human QA** after 10F–10H; production v4 still disabled.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **and** Phase 10 live wiring + Tier 9b-B pass.
 
 ## Acceptance Criteria For v4 Phase 1

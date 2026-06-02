@@ -105,6 +105,7 @@ test("Phase 3 config defaults keep canary and media flags off", () => {
       assert.equal(config.v4.endpointSilenceMs, 600);
       assert.equal(config.v4.ttsCacheEnabled, true);
       assert.equal(config.v4.sttProvider, "openai");
+      assert.equal(config.v4.ttsProvider, "mock");
     }
   );
 });
@@ -229,6 +230,13 @@ test("STT adapter fail-closed when disabled", () => {
   assert.equal(started.ok, false);
   assert.equal(started.error.type, "stt_error");
   assert.equal(started.error.recoverable, false);
+});
+
+test("TTS openai provider fails closed without synthesize impl", () => {
+  const adapter = createTtsAdapter({ provider: "openai", enabled: true });
+  const result = adapter.synthesizeSentenceChunk("Hallo");
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "openai_not_configured");
 });
 
 test("STT openai provider fails closed without fetchImpl", () => {

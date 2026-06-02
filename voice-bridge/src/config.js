@@ -117,7 +117,7 @@ export function loadConfig() {
   const v4EndpointSilenceMs = Math.max(0, readInt("VOICE_V4_ENDPOINT_SILENCE_MS", 600));
   const v4EndpointMinSpeechMs = Math.max(0, readInt("VOICE_V4_ENDPOINT_MIN_SPEECH_MS", 240));
   const v4SttProvider = String(process.env.VOICE_V4_STT_PROVIDER ?? "openai").trim().toLowerCase();
-  const v4TtsProvider = String(process.env.VOICE_V4_TTS_PROVIDER ?? "openai").trim().toLowerCase();
+  const v4TtsProvider = String(process.env.VOICE_V4_TTS_PROVIDER ?? "mock").trim().toLowerCase();
   const v4TtsCacheEnabled = readBool("VOICE_V4_TTS_CACHE_ENABLED", true);
   const v4BargeInRmsThreshold = Math.max(
     1,

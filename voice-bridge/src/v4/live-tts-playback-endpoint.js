@@ -1,10 +1,11 @@
 /**
- * Phase 10E — live v4 TTS synthesis + AudioSocket playback (no barge-in cancel yet).
+ * Phase 10E/10E2 — live v4 TTS synthesis + AudioSocket playback (no barge-in cancel yet).
  */
 
 import { streamPcmToSocket } from "../media-outbound.js";
 import { pcmChunkBytes } from "../audio-media.js";
 import { createTtsAdapter } from "./tts-adapter.js";
+import { createOpenAiTtsSynthesizeFn, isLiveOpenAiTtsConfigured } from "./openai-tts-provider.js";
 import { sanitizeResponseText } from "./transcript-intent.js";
 import { normalizeText, redactPhoneLikeText } from "./redaction.js";
 import { V4_STATES, transitionState } from "./state-machine.js";
@@ -52,21 +53,62 @@ function buildLiveTtsQualityEvent(config, ctx, runtime, builder, metricValue, pa
     metricValue,
     payload: {
       bridge_call_id: ctx?.bridgeCallId ?? null,
-      live_phase: runtime?.phase ?? "phase10e_live_tts_playback",
+      live_phase: runtime?.phase ?? "phase10e2_live_real_tts",
       ...payload
     }
   });
 }
 
-export function createLiveTtsAdapter(config) {
+export function resolveLiveTtsProvider(config) {
+  const configured = String(config?.v4?.ttsProvider ?? "mock").trim().toLowerCase();
+  if (configured !== "openai") {
+    return { provider: "mock", openaiActive: false, reason: "provider_mock" };
+  }
+  if (!isLiveOpenAiTtsConfigured(config)) {
+    return { provider: "mock", openaiActive: false, reason: "openai_not_configured" };
+  }
+  return { provider: "openai", openaiActive: true, reason: "openai_live_canary" };
+}
+
+export function createLiveTtsAdapter(config, options = {}) {
+  const resolved = resolveLiveTtsProvider(config);
+  const voice = config?.assistant?.ttsVoice ?? "marin";
+  const model = config?.assistant?.ttsModel ?? "gpt-4o-mini-tts";
+  const language = config?.transcription?.language ?? "de";
+
+  if (resolved.openaiActive) {
+    return createTtsAdapter({
+      provider: "openai",
+      enabled: true,
+      voice,
+      model,
+      language,
+      cacheEnabled: false,
+      synthesizeImplAsync:
+        options.synthesizeImplAsync ??
+        createOpenAiTtsSynthesizeFn(config, {
+          fetchImpl: options.fetchImpl,
+          execFileImpl: options.execFileImpl,
+          apiKey: options.apiKey
+        })
+    });
+  }
+
   return createTtsAdapter({
     provider: "mock",
     enabled: true,
-    voice: config?.assistant?.ttsVoice ?? "marin",
-    model: config?.assistant?.ttsModel ?? "gpt-4o-mini-tts",
-    language: config?.transcription?.language ?? "de",
+    voice,
+    model,
+    language,
     cacheEnabled: Boolean(config?.v4?.ttsCacheEnabled)
   });
+}
+
+async function synthesizeLiveSpeech(ttsAdapter, speechText, options = {}) {
+  if (typeof ttsAdapter.synthesizeSentenceChunkAsync === "function") {
+    return ttsAdapter.synthesizeSentenceChunkAsync(speechText, options);
+  }
+  return ttsAdapter.synthesizeSentenceChunk(speechText, options);
 }
 
 export function maxLiveResponseChars(config) {
@@ -195,7 +237,7 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
   }
 
   console.log(
-    `[v4-live] tts_started response_chars=${prepared.response_chars} plan_type=${planCandidate.response_type ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] tts_started provider=${ttsAdapter.provider} response_chars=${prepared.response_chars} plan_type=${planCandidate.response_type ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   bufferQualityEvent(
@@ -203,14 +245,15 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
     buildLiveTtsQualityEvent(config, ctx, runtime, buildTtsStartedEvent, null, {
       response_type: planCandidate.response_type ?? null,
       response_chars: prepared.response_chars,
-      used_fallback: prepared.usedFallback
+      used_fallback: prepared.usedFallback,
+      tts_provider: ttsAdapter.provider
     })
   );
 
   const ttsStartedAt = Date.now();
   let synthResult;
   try {
-    synthResult = ttsAdapter.synthesizeSentenceChunk(speechText, {
+    synthResult = await synthesizeLiveSpeech(ttsAdapter, speechText, {
       category: null,
       synthesisId: `live-tts-${planCandidate.turn_index ?? 0}-${runtime.ttsCompletedCount ?? 0}`
     });
@@ -252,7 +295,7 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
 
   runtime.ttsCompletedCount = (runtime.ttsCompletedCount ?? 0) + 1;
   console.log(
-    `[v4-live] tts_completed tts_ms=${ttsMs} first_chunk_ms=${firstChunkMs} chunks=${synthResult.chunks.length} ${liveLogIds(ctx)}`
+    `[v4-live] tts_completed provider=${ttsAdapter.provider} tts_ms=${ttsMs} first_chunk_ms=${firstChunkMs} chunks=${synthResult.chunks.length} pcm_bytes=${synthResult.chunks.reduce((n, c) => n + (c?.audio?.length ?? 0), 0)} ${liveLogIds(ctx)}`
   );
 
   const socket = resolveLiveSocket(ctx, runtime);
@@ -300,6 +343,7 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
     bytes_sent: playbackResult.bytesSent ?? 0,
     playback_ms: playbackResult.playbackMs ?? null,
     used_fallback: prepared.usedFallback,
+    tts_provider: ttsAdapter.provider,
     atMs: Date.now()
   };
 

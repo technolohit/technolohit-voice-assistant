@@ -160,7 +160,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
     dialogueReady: true,
-    reason: "v4_live_canary_phase10e"
+    reason: "v4_live_canary_phase10e2"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -203,7 +203,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     return { ok: false, handler: "v3", reason: "stt_adapter_init_failed" };
   }
 
-  const ttsAdapter = options.ttsAdapter ?? createLiveTtsAdapter(config);
+  const ttsAdapter = options.ttsAdapter ?? createLiveTtsAdapter(config, options.liveTtsOptions ?? {});
   if (!ttsAdapter) {
     return { ok: false, handler: "v3", reason: "tts_adapter_init_failed" };
   }
@@ -214,7 +214,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10e_live_tts_playback",
+    phase: "phase10e2_live_real_tts",
     liveCanary: true,
     config,
     runtimeContext,
