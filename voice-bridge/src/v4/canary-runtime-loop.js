@@ -5,7 +5,7 @@
 import { loadAgentConfig } from "./agent-config.js";
 import { createRuntimeContext } from "./runtime-context.js";
 import { createAudioSession } from "./audio-session.js";
-import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
+import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, createVadStateFromConfig, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
 import { createDbQualityEventInsertFn, flushOrchestratorQualityEvents } from "./quality-persistence.js";
 import {
@@ -114,7 +114,7 @@ export function createCanaryDialogueRuntime(config, input = {}) {
 }
 
 /**
- * Live AudioSocket canary runtime — Phase 10A lifecycle only (no STT/TTS/dialogue loop yet).
+ * Live AudioSocket canary runtime — Phase 10B VAD endpointing (no STT/TTS/dialogue yet).
  * Requires env gates + allowlist match before audiosocket.js selects v4_canary handler.
  */
 export function createLiveCanaryRuntime(config, ctx) {
@@ -136,6 +136,21 @@ export function createLiveCanaryRuntime(config, ctx) {
     };
   }
 
+  let vadState;
+  try {
+    vadState = createVadStateFromConfig(config);
+  } catch (err) {
+    return {
+      ok: false,
+      handler: "v3",
+      reason: "vad_state_init_failed",
+      error: String(err?.message ?? err)
+    };
+  }
+  if (!vadState) {
+    return { ok: false, handler: "v3", reason: "vad_state_init_failed" };
+  }
+
   const route = {
     runtime: "v4",
     active: true,
@@ -143,7 +158,7 @@ export function createLiveCanaryRuntime(config, ctx) {
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
     dialogueReady: false,
-    reason: "v4_live_canary_phase10a"
+    reason: "v4_live_canary_phase10b"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -171,9 +186,15 @@ export function createLiveCanaryRuntime(config, ctx) {
   const audioSession = createAudioSession({
     bridgeCallId,
     callSessionId: callSessionId ?? runtimeContext.memory?.call_session_id ?? null,
+    sampleRate: config?.sampleRate ?? 8000,
+    frameMs: config?.frameMs ?? 20,
     memory: runtimeContext.memory,
     stateMachine: runtimeContext.stateMachine
   });
+
+  if (!audioSession) {
+    return { ok: false, handler: "v3", reason: "audio_session_init_failed" };
+  }
 
   return {
     ok: true,
@@ -181,11 +202,15 @@ export function createLiveCanaryRuntime(config, ctx) {
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10a_live_lifecycle",
+    phase: "phase10b_live_vad",
     liveCanary: true,
     config,
     runtimeContext,
     audioSession,
+    vadState,
+    qualityEventsBuffer: [],
+    speechStartCount: 0,
+    endpointCount: 0,
     inboundFrameCount: 0,
     inboundBytes: 0,
     startedAt: null

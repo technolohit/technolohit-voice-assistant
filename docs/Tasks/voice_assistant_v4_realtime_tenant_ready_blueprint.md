@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10A — Live AudioSocket route selection + lifecycle logging** |
+| **Current completed phase** | **Phase 10B — Live AudioSocket VAD endpointing** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) on `voice-bridge-v1.11.0` |
-| **v4 production status** | **Not enabled** — live v4 blocked by default (`VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=false`, empty allowlist) |
+| **v4 production status** | **Not enabled** — live v4 gated; no assistant turns on PSTN yet |
 | **Phase 9 dry run** | **Passed** (2026-06-01) — schema + v1.11.0 deploy with v3 active |
-| **Next step** | **Phase 10B** — inbound frame ingestion + VAD; then Tier 9b-B supervised canary |
+| **Next step** | **Phase 10C — Live STT on VAD endpoint** |
 
 Completed foundation work (do not re-implement):
 
@@ -54,7 +54,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: Phase 10A route selection + lifecycle logging implemented in repo; 10B–10H pending
+- Phase 10 live AudioSocket wiring: Phase 10A route selection + Phase 10B VAD endpointing implemented; 10C–10H pending; **live PSTN does not answer turns yet**
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -78,7 +78,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 — Live AudioSocket → v4 Canary Wiring          [in progress — 10A complete]
+Phase 10 — Live AudioSocket → v4 Canary Wiring          [in progress — 10A–10B complete]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -1108,7 +1108,9 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Sysadmin/live QA needs cross-referenced to Phase 9b + Phase 8 SQL.
 - [x] Successful: Phase 10A implementation prompt prepared.
 - [x] Successful: Phase 10A route selection + lifecycle logging implemented.
-- [ ] Successful: Phase 10B–10G media/dialogue/quality wiring implemented.
+- [x] Successful: Phase 10B inbound PCM + VAD endpointing on live v4_canary path.
+- [ ] Successful: Phase 10C live STT on endpoint implemented.
+- [ ] Successful: Phase 10D–10G dialogue/TTS/barge-in/quality wiring implemented.
 - [ ] Successful: Phase 10H live QA runbook published.
 - [ ] Successful: Tier 9b-B supervised canary executed.
 
@@ -1170,7 +1172,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A implemented in repo** (route gates + `[v4-live]` lifecycle logs); 10B–10H pending; default remains v3.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10B implemented** (route gates + VAD endpointing on `v4_canary`); **no assistant turns on live PSTN yet**; 10C next.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **and** Phase 10 live wiring + Tier 9b-B pass.
 
 ## Acceptance Criteria For v4 Phase 1

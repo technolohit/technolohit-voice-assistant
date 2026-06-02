@@ -1,11 +1,23 @@
 /**
- * Phase 10A — live AudioSocket v4 canary route selection (lifecycle logging only).
+ * Phase 10A/10B — live AudioSocket v4 canary route selection + VAD endpointing.
  * Fail closed to v3 on any gate or init failure; never drop calls.
  */
 
 import { playGreetingAndKeepalive } from "../media-outbound.js";
 import { canPrepareV4CanaryMedia } from "./audiosocket-runtime.js";
 import { createLiveCanaryRuntime } from "./canary-runtime-loop.js";
+import {
+  appendInboundFrame,
+  markSpeechStart,
+  markEndpointDetected,
+  getAudioSessionMetrics
+} from "./audio-session.js";
+import { observeAudioFrame } from "./vad-endpointing.js";
+import { pcmFrameRms } from "./pcm-rms.js";
+import {
+  buildVadSpeechStartEvent,
+  buildVadEndpointDetectedEvent
+} from "./quality-events.js";
 
 /**
  * Parse allowlist entries from config (comma/semicolon/whitespace separated).
@@ -93,6 +105,11 @@ export function selectLiveCallHandler(config, ctx) {
     };
   }
 
+  const mediaGate = validateLiveCanaryMediaRuntime(runtime);
+  if (!mediaGate.ok) {
+    return { handler: "v3", reason: mediaGate.reason, runtime: null };
+  }
+
   return {
     handler: "v4_canary",
     reason: "v4_live_canary_selected",
@@ -108,12 +125,119 @@ function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
 }
 
+export function validateLiveCanaryMediaRuntime(runtime) {
+  if (!runtime?.audioSession) {
+    return { ok: false, reason: "live_canary_audio_session_missing" };
+  }
+  if (!runtime?.vadState) {
+    return { ok: false, reason: "live_canary_vad_state_missing" };
+  }
+  return { ok: true, reason: "live_canary_media_ready" };
+}
+
+function bufferQualityEvent(runtime, event) {
+  if (!runtime || !event) return;
+  if (!Array.isArray(runtime.qualityEventsBuffer)) {
+    runtime.qualityEventsBuffer = [];
+  }
+  runtime.qualityEventsBuffer.push(event);
+}
+
+function buildLiveVadQualityEvent(config, ctx, runtime, builder, metricValue, payload = {}) {
+  return builder({
+    config,
+    agentConfigResult: runtime?.runtimeContext?.agentConfig ?? null,
+    callSessionId: ctx?.callSessionId ?? runtime?.audioSession?.callSessionId ?? null,
+    metricValue,
+    payload: {
+      bridge_call_id: ctx?.bridgeCallId ?? null,
+      live_phase: runtime?.phase ?? "phase10b_live_vad",
+      ...payload
+    }
+  });
+}
+
+/**
+ * Process one inbound PCM frame for v4_canary (Phase 10B — session + VAD only).
+ */
+export function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
+  if (!runtime?.audioSession || !runtime?.vadState) {
+    return { ok: false, reason: "live_canary_media_not_initialized" };
+  }
+
+  const frameBytes = payload?.length ?? 0;
+  runtime.inboundFrameCount = (runtime.inboundFrameCount ?? 0) + 1;
+  runtime.inboundBytes = (runtime.inboundBytes ?? 0) + frameBytes;
+
+  const rms = pcmFrameRms(payload);
+  const prevVad = runtime.vadState;
+  const prevSpeechActive = Boolean(prevVad.speechActive);
+  const prevEndpointAt = prevVad.endpointDetectedAt ?? null;
+  const frameMs = Number(config?.frameMs ?? 20);
+
+  runtime.audioSession = appendInboundFrame(runtime.audioSession, { rms });
+  runtime.vadState = observeAudioFrame(prevVad, payload, frameMs);
+  const vad = runtime.vadState;
+
+  if (!prevSpeechActive && vad.speechActive && vad.speechStartedAt) {
+    runtime.speechStartCount = (runtime.speechStartCount ?? 0) + 1;
+    runtime.audioSession = markSpeechStart(runtime.audioSession, vad.speechStartedAt);
+    const speechStartMs = Math.max(0, vad.speechStartedAt - (runtime.startedAt ?? vad.speechStartedAt));
+
+    console.log(
+      `[v4-live] vad_speech_started speech_start_count=${runtime.speechStartCount} speech_start_ms=${speechStartMs} last_rms=${Math.round(rms)} ${liveLogIds(ctx)}`
+    );
+
+    bufferQualityEvent(
+      runtime,
+      buildLiveVadQualityEvent(config, ctx, runtime, buildVadSpeechStartEvent, speechStartMs, {
+        last_rms: Math.round(rms)
+      })
+    );
+  }
+
+  if (vad.endpointDetectedAt && vad.endpointDetectedAt !== prevEndpointAt) {
+    runtime.endpointCount = (runtime.endpointCount ?? 0) + 1;
+    runtime.audioSession = markEndpointDetected(runtime.audioSession, vad.endpointDetectedAt);
+    const endpointMs =
+      runtime.audioSession?.latency?.speech_to_endpoint_ms ??
+      Math.max(0, vad.endpointDetectedAt - (vad.speechStartedAt ?? vad.endpointDetectedAt));
+
+    console.log(
+      `[v4-live] vad_endpoint_detected endpoint_count=${runtime.endpointCount} endpoint_ms=${endpointMs} last_rms=${Math.round(vad.lastRms ?? rms)} ${liveLogIds(ctx)}`
+    );
+
+    bufferQualityEvent(
+      runtime,
+      buildLiveVadQualityEvent(config, ctx, runtime, buildVadEndpointDetectedEvent, endpointMs, {
+        last_rms: Math.round(vad.lastRms ?? rms)
+      })
+    );
+  }
+
+  const n = runtime.inboundFrameCount;
+  const every = Math.max(1, Number(config?.inboundLogEvery) || 50);
+  if (n === 1 || n % every === 0) {
+    console.log(
+      `[v4-live] inbound_frame_count=${n} inbound_bytes=${runtime.inboundBytes} speech_active=${Boolean(vad.speechActive)} ${liveLogIds(ctx)}`
+    );
+  }
+
+  return {
+    ok: true,
+    inboundFrameCount: runtime.inboundFrameCount,
+    speechStartCount: runtime.speechStartCount ?? 0,
+    endpointCount: runtime.endpointCount ?? 0,
+    speechActive: Boolean(vad.speechActive)
+  };
+}
+
 export async function startLiveCanaryCall(config, ctx, socket, runtime) {
   ctx.callHandler = "v4_canary";
   ctx.v4LiveRuntime = runtime;
   runtime.startedAt = Date.now();
 
-  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10a"} ${liveLogIds(ctx)}`);
+  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10b"} ${liveLogIds(ctx)}`);
 
   try {
     await playGreetingAndKeepalive(config, ctx, socket, { skipAssistant: true });
@@ -131,17 +255,7 @@ export function handleLiveCanaryInboundFrame(config, ctx, _socket, payload) {
   try {
     const runtime = ctx.v4LiveRuntime;
     if (!runtime) return;
-
-    runtime.inboundFrameCount = (runtime.inboundFrameCount ?? 0) + 1;
-    runtime.inboundBytes = (runtime.inboundBytes ?? 0) + (payload?.length ?? 0);
-
-    const n = runtime.inboundFrameCount;
-    const every = Math.max(1, Number(config?.inboundLogEvery) || 50);
-    if (n === 1 || n % every === 0) {
-      console.log(
-        `[v4-live] inbound_frame_count=${n} inbound_bytes=${runtime.inboundBytes} ${liveLogIds(ctx)}`
-      );
-    }
+    processLiveCanaryInboundFrame(config, ctx, runtime, payload);
   } catch (err) {
     console.error(
       `[v4-live] inbound_frame_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
@@ -157,11 +271,20 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
   const runtime = ctx.v4LiveRuntime;
   const frameCount = runtime?.inboundFrameCount ?? 0;
   const durationMs = runtime?.startedAt ? Math.max(0, Date.now() - runtime.startedAt) : null;
+  const sessionMetrics = runtime?.audioSession ? getAudioSessionMetrics(runtime.audioSession) : null;
 
   console.log(
-    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   ctx.v4LiveRuntime = null;
-  return { ok: true, reason, inboundFrameCount: frameCount, durationMs };
+  return {
+    ok: true,
+    reason,
+    inboundFrameCount: frameCount,
+    speechStartCount: runtime?.speechStartCount ?? 0,
+    endpointCount: runtime?.endpointCount ?? 0,
+    durationMs,
+    sessionMetrics
+  };
 }

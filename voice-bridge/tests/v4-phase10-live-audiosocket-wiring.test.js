@@ -9,9 +9,11 @@ import {
   matchLiveCanaryAllowlist,
   shouldCaptureAssistantTurnAudio,
   handleLiveCanaryInboundFrame,
+  processLiveCanaryInboundFrame,
   finishLiveCanaryCall
 } from "../src/v4/live-audiosocket-handler.js";
 import { createLiveCanaryRuntime } from "../src/v4/canary-runtime-loop.js";
+import { validateQualityEventInput } from "../src/v4/quality-events.js";
 
 function withEnv(overrides, fn) {
   const previous = {};
@@ -50,6 +52,20 @@ function makeCtx(overrides = {}) {
   };
   ctx.externalCallId = overrides.externalCallId ?? `bridge:${ctx.bridgeCallId}`;
   return ctx;
+}
+
+function makePcmFrame(amplitude, samples = 160) {
+  const buf = Buffer.alloc(samples * 2);
+  for (let i = 0; i < samples; i += 1) {
+    buf.writeInt16LE(amplitude, i * 2);
+  }
+  return buf;
+}
+
+function feedLiveCanaryFrames(config, ctx, runtime, amplitude, count) {
+  for (let i = 0; i < count; i += 1) {
+    processLiveCanaryInboundFrame(config, ctx, runtime, makePcmFrame(amplitude));
+  }
 }
 
 test("T1: selectLiveCallHandler defaults to v3 with factory config", () => {
@@ -134,7 +150,7 @@ test("T5: all gates pass + allowlist match → v4_canary", () => {
     assert.equal(selected.handler, "v4_canary");
     assert.equal(selected.reason, "v4_live_canary_selected");
     assert.equal(selected.runtime?.ok, true);
-    assert.equal(selected.runtime?.phase, "phase10a_live_lifecycle");
+    assert.equal(selected.runtime?.phase, "phase10b_live_vad");
   });
 });
 
@@ -230,21 +246,118 @@ test("loadConfig accepts comma, semicolon, and whitespace separated live canary 
   );
 });
 
-test("v4 live inbound frame handler increments lifecycle counters", () => {
+test("10B: v3 path does not run v4 VAD processing", () => {
   const config = loadConfig();
-  const ctx = makeCtx({ callHandler: "v4_canary" });
-  ctx.v4LiveRuntime = { inboundFrameCount: 0, inboundBytes: 0 };
-  handleLiveCanaryInboundFrame(config, ctx, null, Buffer.alloc(320));
-  assert.equal(ctx.v4LiveRuntime.inboundFrameCount, 1);
-  assert.equal(ctx.v4LiveRuntime.inboundBytes, 320);
+  const ctx = makeCtx({ callHandler: "v3" });
+  handleLiveCanaryInboundFrame(config, ctx, null, makePcmFrame(900));
+  assert.equal(ctx.v4LiveRuntime, undefined);
+});
+
+test("10B: v4_canary inbound frame increments audio session counters", () => {
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-001", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    assert.equal(runtime.ok, true);
+    ctx.v4LiveRuntime = runtime;
+    processLiveCanaryInboundFrame(config, ctx, runtime, makePcmFrame(0, 160));
+    assert.equal(runtime.inboundFrameCount, 1);
+    assert.equal(runtime.audioSession.inboundFrames, 1);
+    assert.equal(runtime.inboundBytes, 320);
+  });
+});
+
+test("10B: silence frames do not trigger speech start", () => {
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-silence", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    ctx.v4LiveRuntime = runtime;
+    feedLiveCanaryFrames(config, ctx, runtime, 0, 20);
+    assert.equal(runtime.speechStartCount, 0);
+    assert.equal(runtime.endpointCount, 0);
+    assert.equal(runtime.vadState.speechActive, false);
+  });
+});
+
+test("10B: consecutive speech frames trigger vad speech start", () => {
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-speech", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    ctx.v4LiveRuntime = runtime;
+    feedLiveCanaryFrames(config, ctx, runtime, 800, 3);
+    assert.equal(runtime.speechStartCount, 1);
+    assert.equal(runtime.vadState.speechActive, true);
+    assert.ok(runtime.audioSession.speechStartedAt != null);
+    assert.equal(runtime.qualityEventsBuffer.length, 1);
+    assert.equal(runtime.qualityEventsBuffer[0].eventType, "vad_speech_start");
+  });
+});
+
+test("10B: speech followed by silence triggers endpoint detected", () => {
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-endpoint", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    ctx.v4LiveRuntime = runtime;
+    feedLiveCanaryFrames(config, ctx, runtime, 800, 15);
+    feedLiveCanaryFrames(config, ctx, runtime, 0, 30);
+    assert.equal(runtime.speechStartCount, 1);
+    assert.equal(runtime.endpointCount, 1);
+    assert.equal(runtime.vadState.speechActive, false);
+    assert.ok(runtime.audioSession.endpointDetectedAt != null);
+    const endpointEvents = runtime.qualityEventsBuffer.filter(
+      (event) => event.eventType === "vad_endpoint_detected"
+    );
+    assert.equal(endpointEvents.length, 1);
+  });
+});
+
+test("10B: VAD quality events contain no phone-like payload data", () => {
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({
+      bridgeCallId: "qa-canary-vad-privacy",
+      callHandler: "v4_canary",
+      callSessionId: "session-no-phone-001"
+    });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    ctx.v4LiveRuntime = runtime;
+    feedLiveCanaryFrames(config, ctx, runtime, 800, 15);
+    feedLiveCanaryFrames(config, ctx, runtime, 0, 30);
+    for (const event of runtime.qualityEventsBuffer) {
+      const validation = validateQualityEventInput(event);
+      assert.equal(validation.ok, true, validation.errors?.join("; "));
+      assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+    }
+  });
+});
+
+test("v4 live inbound frame handler increments lifecycle counters", () => {
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-frame-count", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    ctx.v4LiveRuntime = runtime;
+    handleLiveCanaryInboundFrame(config, ctx, null, makePcmFrame(0));
+    assert.equal(ctx.v4LiveRuntime.inboundFrameCount, 1);
+    assert.equal(ctx.v4LiveRuntime.inboundBytes, 320);
+    assert.equal(ctx.v4LiveRuntime.audioSession.inboundFrames, 1);
+  });
 });
 
 test("finishLiveCanaryCall clears runtime on v4 handler", () => {
-  const config = loadConfig();
-  const ctx = makeCtx({ callHandler: "v4_canary" });
-  ctx.v4LiveRuntime = { inboundFrameCount: 3, startedAt: Date.now() - 100 };
-  const result = finishLiveCanaryCall(config, ctx, "socket_close");
-  assert.equal(result.ok, true);
-  assert.equal(result.inboundFrameCount, 3);
-  assert.equal(ctx.v4LiveRuntime, null);
+  withEnv(liveCanaryEnv("qa-canary"), () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-finish", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    runtime.inboundFrameCount = 3;
+    runtime.startedAt = Date.now() - 100;
+    ctx.v4LiveRuntime = runtime;
+    const result = finishLiveCanaryCall(config, ctx, "socket_close");
+    assert.equal(result.ok, true);
+    assert.equal(result.inboundFrameCount, 3);
+    assert.equal(ctx.v4LiveRuntime, null);
+  });
 });
