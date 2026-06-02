@@ -75,7 +75,8 @@ export function createSttAdapter({
   enabled = false,
   maxBufferedFrames = 500,
   timeoutMs = 15000,
-  fetchImpl = null
+  fetchImpl = null,
+  endpointTranscribeFn = null
 } = {}) {
   const resolvedProvider = String(provider ?? "mock").trim().toLowerCase();
   const streams = new Map();
@@ -198,6 +199,104 @@ export function createSttAdapter({
       return { ok: true, bufferedFrames: stream.frames.length };
     },
     completeSttTurn(streamId, options = {}) {
+      if (resolvedProvider === "openai") {
+        return {
+          ok: false,
+          error: createSttErrorEvent({
+            streamId,
+            code: "use_complete_async",
+            message: "OpenAI STT requires completeSttTurnAsync",
+            recoverable: false,
+            provider: resolvedProvider
+          })
+        };
+      }
+      return this._finalizeSttTurn(streamId, options);
+    },
+    async completeSttTurnAsync(streamId, options = {}) {
+      const stream = streams.get(String(streamId));
+      if (!stream) {
+        return {
+          ok: false,
+          error: createSttErrorEvent({
+            streamId,
+            code: "stream_not_found",
+            message: "STT stream not found",
+            recoverable: false,
+            provider: resolvedProvider
+          })
+        };
+      }
+      if (stream.status === STREAM_STATUS.ABORTED) {
+        return {
+          ok: false,
+          error: createSttErrorEvent({
+            streamId,
+            code: "stream_aborted",
+            message: "STT stream was aborted",
+            recoverable: false,
+            provider: resolvedProvider
+          })
+        };
+      }
+
+      if (resolvedProvider === "openai") {
+        const transcribe = endpointTranscribeFn;
+        if (typeof transcribe !== "function") {
+          const err = createSttErrorEvent({
+            streamId,
+            code: "openai_not_configured",
+            message: "OpenAI endpoint STT requires endpointTranscribeFn",
+            recoverable: false,
+            provider: "openai"
+          });
+          stream.status = STREAM_STATUS.ERROR;
+          metrics.streams_errored += 1;
+          stream.onError?.(err);
+          return { ok: false, error: err };
+        }
+
+        stream.status = STREAM_STATUS.COMPLETING;
+        const pcm = Buffer.concat(
+          stream.frames.filter((f) => f?.length).map((f) => (Buffer.isBuffer(f) ? f : Buffer.from(f)))
+        );
+        const result = await transcribe(pcm, {
+          language: stream.language,
+          streamId
+        });
+        if (!result?.ok) {
+          const err = createSttErrorEvent({
+            streamId,
+            code: result?.code ?? "stt_failed",
+            message: result?.message ?? "OpenAI STT failed",
+            recoverable: false,
+            provider: "openai"
+          });
+          stream.status = STREAM_STATUS.ERROR;
+          metrics.streams_errored += 1;
+          stream.onError?.(err);
+          streams.delete(String(streamId));
+          return { ok: false, error: err, sttMs: result?.sttMs ?? null };
+        }
+
+        const durationMs = result.sttMs ?? Date.now() - stream.startedAt;
+        const finalEvent = createFinalTranscriptEvent({
+          streamId,
+          text: options.finalText ?? result.text,
+          provider: "openai",
+          durationMs,
+          confidence: options.confidence ?? null
+        });
+        metrics.final_events += 1;
+        metrics.streams_completed += 1;
+        stream.onFinal?.(finalEvent);
+        streams.delete(String(streamId));
+        return { ok: true, event: finalEvent, sttMs: durationMs };
+      }
+
+      return this._finalizeSttTurn(streamId, options);
+    },
+    _finalizeSttTurn(streamId, options = {}) {
       const stream = streams.get(String(streamId));
       if (!stream) {
         return {
@@ -242,7 +341,7 @@ export function createSttAdapter({
       metrics.streams_completed += 1;
       stream.onFinal?.(finalEvent);
       streams.delete(String(streamId));
-      return { ok: true, event: finalEvent };
+      return { ok: true, event: finalEvent, sttMs: durationMs };
     },
     abortSttStream(streamId, reason = "aborted") {
       const stream = streams.get(String(streamId));

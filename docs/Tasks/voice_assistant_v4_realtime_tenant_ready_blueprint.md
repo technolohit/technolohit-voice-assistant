@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10G — Live canary quality DB flush** |
-| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); deploy baseline for live QA: **`voice-bridge-v1.19.0`** |
-| **v4 production status** | **Not enabled** — Phases 10A–10G in repo; **supervised PSTN QA runbook prepared (10H); execution not recorded here** |
+| **Current completed phase** | **Phase 10I — Live canary stabilization (post failed 10H)** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); deploy baseline for live QA retry: **`voice-bridge-v1.20.0`** (10I) |
+| **v4 production status** | **Not enabled** — Phases 10A–10I in repo; **10H failed; retry after 10I image** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | **Execute Phase 10H supervised PSTN QA** (then close production blockers / Phase 9c) |
+| **Next step** | **Re-execute Phase 10H supervised PSTN QA** (see [phase10i report](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md)) |
 
 Completed foundation work (do not re-implement):
 

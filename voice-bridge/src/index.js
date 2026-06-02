@@ -80,7 +80,7 @@ server.listen(config.listenPort, config.listenHost, () => {
 
   const runtimeRoute = describeRuntimeRoute(config);
   console.log(
-    `[voice-runtime] selected=${runtimeRoute.selected_runtime} v4_active=${runtimeRoute.v4_active} reason=${runtimeRoute.reason} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId}`
+    `[voice-runtime] selected_runtime=${runtimeRoute.selected_runtime} selected_runtime_active=${runtimeRoute.selected_runtime_active} v4_requested=${runtimeRoute.v4_requested} v4_runtime_active=${runtimeRoute.v4_runtime_active} reason=${runtimeRoute.reason} stt_provider=${config.v4.sttProvider} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId}`
   );
 
   const agentConfigResult = loadAgentConfig(config);

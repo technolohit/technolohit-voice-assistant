@@ -6,7 +6,11 @@ import { loadAgentConfig } from "./agent-config.js";
 import { createRuntimeContext } from "./runtime-context.js";
 import { createAudioSession } from "./audio-session.js";
 import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, createVadStateFromConfig, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
-import { createLiveSttAdapter, resetUtteranceBuffer } from "./live-stt-endpoint.js";
+import {
+  createLiveSttAdapter,
+  resetUtteranceBuffer,
+  validateLiveCanarySttProvider
+} from "./live-stt-endpoint.js";
 import { createLiveTtsAdapter } from "./live-tts-playback-endpoint.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
 import { createDbQualityEventInsertFn, flushOrchestratorQualityEvents } from "./quality-persistence.js";
@@ -198,7 +202,30 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     return { ok: false, handler: "v3", reason: "audio_session_init_failed" };
   }
 
-  const sttAdapter = options.sttAdapter ?? createLiveSttAdapter(config);
+  const allowMockStt =
+    Boolean(options.allowMockStt) ||
+    Boolean(options.sttAdapter) ||
+    process.env.VOICE_V4_STT_ALLOW_MOCK_FOR_TESTS === "true";
+
+  if (!options.sttAdapter) {
+    const sttGate = validateLiveCanarySttProvider(config, {
+      allowMockStt,
+      endpointTranscribeFn: options.endpointTranscribeFn,
+      apiKey: options.apiKey
+    });
+    if (!sttGate.ok) {
+      return { ok: false, handler: "v3", reason: sttGate.reason };
+    }
+  }
+
+  const sttAdapter =
+    options.sttAdapter ??
+    createLiveSttAdapter(config, {
+      fetchImpl: options.fetchImpl,
+      apiKey: options.apiKey,
+      endpointTranscribeFn: options.endpointTranscribeFn,
+      suppressMockWarning: allowMockStt
+    });
   if (!sttAdapter) {
     return { ok: false, handler: "v3", reason: "stt_adapter_init_failed" };
   }

@@ -98,12 +98,18 @@ export function isV4RuntimeActive(config) {
 
 export function describeRuntimeRoute(config) {
   const route = resolveRuntimeRoute(config);
+  const v4Requested = isV4RuntimeRequested(config);
+  const v4RuntimeActive = route.runtime === "v4" && route.active === true;
   return {
     runtime_version_env: String(config?.v4?.runtimeVersion ?? "v3"),
     v4_realtime_enabled: Boolean(config?.v4?.realtimeEnabled),
     v4_canary_enabled: Boolean(config?.v4?.canaryEnabled),
     v4_barge_in_enabled: Boolean(config?.v4?.bargeInEnabled),
     selected_runtime: route.runtime,
+    selected_runtime_active: route.active,
+    v4_requested: v4Requested,
+    v4_runtime_active: v4RuntimeActive,
+    /** @deprecated use selected_runtime_active — kept for one release of log parsers */
     v4_active: route.active,
     stub: route.stub,
     canary_ready: Boolean(route.canaryReady),

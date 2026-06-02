@@ -220,6 +220,7 @@ test("live canary OpenAI TTS feeds PCM into playback with mock socket", async ()
       VOICE_V4_CANARY_ENABLED: "true",
       VOICE_V4_LIVE_AUDIOSOCKET_ENABLED: "true",
       VOICE_V4_LIVE_CANARY_ALLOWLIST: "qa-openai-tts",
+      VOICE_V4_STT_ALLOW_MOCK_FOR_TESTS: "true",
       VOICE_V4_TTS_PROVIDER: "openai",
       OPENAI_API_KEY: "sk-test"
     },

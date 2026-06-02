@@ -57,7 +57,8 @@ function liveCanaryEnv(allowlist = "qa-canary") {
     VOICE_V4_REALTIME_ENABLED: "true",
     VOICE_V4_CANARY_ENABLED: "true",
     VOICE_V4_LIVE_AUDIOSOCKET_ENABLED: "true",
-    VOICE_V4_LIVE_CANARY_ALLOWLIST: allowlist
+    VOICE_V4_LIVE_CANARY_ALLOWLIST: allowlist,
+    VOICE_V4_STT_ALLOW_MOCK_FOR_TESTS: "true"
   };
 }
 

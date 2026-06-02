@@ -1,8 +1,9 @@
 # v4 Phase 10H — Supervised Live PSTN QA Runbook (AudioSocket Canary)
 
-Date: 2026-06-01  
-Baseline image: **`thnhit/technhvoice:voice-bridge-v1.19.0`** (Phases 10A–10G)  
-Blueprint: [voice_assistant_v4_realtime_tenant_ready_blueprint.md](./voice_assistant_v4_realtime_tenant_ready_blueprint.md)  
+Date: 2026-06-01
+Baseline image: **`thnhit/technhvoice:voice-bridge-v1.20.0`** (Phase 10I — after failed 10H) or later tag that includes 10I
+Prior failed QA: [voice_assistant_v4_phase10h_live_qa_report.md](./voice_assistant_v4_phase10h_live_qa_report.md)
+Stabilization: [voice_assistant_v4_phase10i_live_canary_stabilize_report.md](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md)
 Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md](./voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md)
 
 **Do not execute without written maintenance-window approval.** This runbook does **not** enable production v4 GA. It validates the gated `v4_canary` path on a **supervised** PSTN call only.
@@ -75,7 +76,39 @@ docker exec central_postgres psql -U postgres -d technolohit_growth -P pager=off
 docker exec technolohit-voice-bridge sh -lc 'test -n "$OPENAI_API_KEY" && echo openai_key_set=yes || echo openai_key_set=no'
 ```
 
-**Pass:** `openai_key_set=yes` (required for `VOICE_V4_TTS_PROVIDER=openai`).
+**Pass:** `openai_key_set=yes` (required for `VOICE_V4_TTS_PROVIDER=openai` and **`VOICE_V4_STT_PROVIDER=openai`**).
+
+### A.4b STT provider (Phase 10I — required for live semantic QA)
+
+```bash
+docker exec technolohit-voice-bridge sh -lc \
+  'echo stt_provider=${VOICE_V4_STT_PROVIDER:-unset}'
+```
+
+**Pass:** `stt_provider=openai`.
+**Fail / abort:** `stt_provider=mock` or unset on a supervised PSTN semantic QA run — mock STT invalidates utterance understanding tests.
+
+Startup log (after restart) must **not** show misleading `v4_active=true` on v3 default:
+
+```bash
+docker logs --since=2m technolohit-voice-bridge 2>&1 \
+  | grep '\[voice-runtime\]' | tail -3
+```
+
+**Pass (v3 baseline):** `selected_runtime=v3 selected_runtime_active=true v4_requested=false v4_runtime_active=false reason=default_v3`
+
+### A.4c Stale active call sessions (before and after QA)
+
+```sql
+SELECT id, status, started_at, ended_at, external_call_id
+FROM voice.call_sessions
+WHERE status = 'active' AND ended_at IS NULL
+ORDER BY started_at DESC
+LIMIT 10;
+```
+
+**Pass before QA:** zero rows, or only explained in-flight calls during the window.
+**Pass after QA:** no new stale rows for the canary `call_session_id` (session must be `completed` with `ended_at` set).
 
 ### A.5 RAG health (host-local URL from voice-bridge network)
 
@@ -171,6 +204,7 @@ VOICE_V4_CANARY_ENABLED=false
 VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=false
 VOICE_V4_LIVE_CANARY_ALLOWLIST=
 VOICE_V4_BARGE_IN_ENABLED=false
+VOICE_V4_STT_PROVIDER=mock
 VOICE_V4_TTS_PROVIDER=mock
 VOICE_RAG_ENABLED=false
 VOICE_RAG_SALES_ANSWERER_ENABLED=false
@@ -200,6 +234,7 @@ VOICE_V4_REALTIME_ENABLED=true
 VOICE_V4_CANARY_ENABLED=true
 VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=true
 VOICE_V4_LIVE_CANARY_ALLOWLIST=bridge:
+VOICE_V4_STT_PROVIDER=openai
 VOICE_V4_TTS_PROVIDER=openai
 VOICE_V4_BARGE_IN_ENABLED=true
 VOICE_RAG_ENABLED=false
@@ -218,13 +253,13 @@ export VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-v1.19.0
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
 sleep 3
 docker exec technolohit-voice-bridge sh -lc \
-  'printenv | sort | egrep "^(VOICE_RUNTIME_VERSION|VOICE_V4_|VOICE_RAG_|VOICE_V4_TTS_PROVIDER)=" || true'
+  'printenv | sort | egrep "^(VOICE_RUNTIME_VERSION|VOICE_V4_|VOICE_RAG_|VOICE_V4_TTS_PROVIDER|VOICE_V4_STT_PROVIDER)=" || true'
 ```
 
 Also verify the host source-of-truth file:
 
 ```bash
-grep -E '^(VOICE_RUNTIME_VERSION|VOICE_V4_|VOICE_RAG_|VOICE_V4_TTS_PROVIDER)=' \
+grep -E '^(VOICE_RUNTIME_VERSION|VOICE_V4_|VOICE_RAG_|VOICE_V4_TTS_PROVIDER|VOICE_V4_STT_PROVIDER)=' \
   /opt/technolohit-voice/voice-bridge/.env
 ```
 
@@ -240,9 +275,9 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E2 | v4 route selected | `[voice-bridge] call_handler selected=v4_canary` |
 | E3 | Greeting heard | Caller hears normal greeting audio (v4 uses `skipAssistant` greeting path) |
 | E4 | VAD speech start + endpoint | `[v4-live] vad_speech_started` and `vad_endpoint_detected` |
-| E5 | STT completed | `[v4-live] stt_completed` (no raw transcript in log line) |
+| E5 | STT completed | `[v4-live] stt_started stt_provider=openai` and `stt_completed stt_provider=openai` (no raw transcript in log line unless `VOICE_ASSISTANT_LOG_TRANSCRIPT_PREVIEW=true`) |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
-| E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible |
+| E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
 | E9 | Interruption product switch 1 | Say interest in **Digitale Rezeption** / voice agent → barge-in → say **Smart Website** → product updates |
 | E10 | Interruption product switch 2 | From **Smart Website** context → barge-in → say **AI Voice Assistant** (alias for Digitale Rezeption product) or explicit switch utterance |
@@ -276,7 +311,7 @@ QA_STAMP="$(date -u +%Y%m%dT%H%MZ)"
 docker logs --since=30m technolohit-voice-bridge 2>&1 \
   | grep -vEi 'api[_-]?key|password|secret|Bearer |OPENAI_API_KEY' \
   | grep -vE '\+?[0-9]{8,}' \
-  | egrep '\[v4-live\]|quality_flush|barge_in|stt_|tts_|playback_|dialogue|call_end|call_handler selected=' \
+  | egrep '\[v4-live\]|quality_flush|barge_in|stt_|tts_|playback_|dialogue|call_end|call_handler selected=|silence_writer_|call_finish_persisted|\[voice-runtime\]' \
   > "/tmp/voice-bridge-10h-${QA_STAMP}.log"
 wc -l "/tmp/voice-bridge-10h-${QA_STAMP}.log"
 ```
@@ -290,7 +325,9 @@ Useful single-call checklist in logs:
 | `call_handler selected=v4_canary` | Once per canary call |
 | `[v4-live] call_start handler=v4_canary` | Once |
 | `vad_speech_started` / `vad_endpoint_detected` | Per caller turn |
-| `stt_completed` | After endpoint |
+| `stt_started stt_provider=openai` / `stt_completed stt_provider=openai` | Per caller turn (reject mock) |
+| `silence_writer_paused` / `silence_writer_resumed` | Around assistant playback |
+| `call_finish_persisted` | On hangup/close (session end path) |
 | `dialogue_plan_created` | After STT |
 | `tts_completed` / `playback_started` | Per assistant reply |
 | `barge_in_detected` / `playback_cancelled` | On interruption test |

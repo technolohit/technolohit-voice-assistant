@@ -104,7 +104,7 @@ test("Phase 3 config defaults keep canary and media flags off", () => {
       assert.equal(config.v4.vadRmsThreshold, 450);
       assert.equal(config.v4.endpointSilenceMs, 600);
       assert.equal(config.v4.ttsCacheEnabled, true);
-      assert.equal(config.v4.sttProvider, "openai");
+      assert.equal(config.v4.sttProvider, "mock");
       assert.equal(config.v4.ttsProvider, "mock");
     }
   );

@@ -4,6 +4,7 @@
 
 import { encodeFrame, FrameType } from "../audiosocket-protocol.js";
 import { iteratePcmChunks, pcmChunkBytes } from "../audio-media.js";
+import { startSilenceWriter, stopSilenceWriter } from "../media-outbound.js";
 import { createTtsAdapter } from "./tts-adapter.js";
 import { createOpenAiTtsSynthesizeFn, isLiveOpenAiTtsConfigured } from "./openai-tts-provider.js";
 import { sanitizeResponseText } from "./transcript-intent.js";
@@ -207,6 +208,9 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
   const planKey = playbackPlanKey(planCandidate);
   if (planKey && runtime.lastTtsPlaybackPlanKey === planKey) {
     return { ok: false, reason: "duplicate_playback" };
+  }
+  if (runtime.playbackInFlight) {
+    return { ok: false, reason: "playback_in_flight" };
   }
 
   const orchestrator = runtime?.orchestrator;
@@ -467,6 +471,12 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
   runtime.livePlaybackSession = createLivePlaybackCancelSession();
   runtime.playbackInFlight = true;
 
+  const hadSilenceWriter = Boolean(ctx?.silenceTimer);
+  if (hadSilenceWriter) {
+    stopSilenceWriter(ctx);
+    console.log(`[v4-live] silence_writer_paused reason=assistant_playback ${liveLogIds(ctx)}`);
+  }
+
   const chunkBytes = pcmChunkBytes(config.sampleRate ?? 8000, config.frameMs ?? 20);
   const frameType = FrameType.AUDIO_SLIN16_8K;
   let framesSent = 0;
@@ -544,6 +554,12 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
     runtime.audioSession = markPlaybackCompleted(runtime.audioSession, Date.now());
     runtime.playbackInFlight = false;
     return { ok: false, reason: "playback_exception", error: message, framesSent: 0, bytesSent: 0 };
+  } finally {
+    runtime.playbackInFlight = false;
+    if (hadSilenceWriter && socket?.writable && !ctx?.closed) {
+      startSilenceWriter(config, ctx, socket);
+      console.log(`[v4-live] silence_writer_resumed reason=assistant_playback_done ${liveLogIds(ctx)}`);
+    }
   }
 }
 

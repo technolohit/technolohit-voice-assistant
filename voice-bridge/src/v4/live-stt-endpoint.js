@@ -6,6 +6,10 @@ import { runLiveDialogueOnCallerTranscript } from "./live-dialogue-endpoint.js";
 import { runLiveTtsAndPlayback } from "./live-tts-playback-endpoint.js";
 
 import { createSttAdapter } from "./stt-adapter.js";
+import {
+  createOpenAiEndpointTranscribeFn,
+  isLiveOpenAiSttConfigured
+} from "./openai-stt-provider.js";
 import { redactPhoneLikeText } from "./redaction.js";
 import {
   buildSttStartedEvent,
@@ -16,14 +20,69 @@ import {
 
 const DEFAULT_LIVE_STT_TIMEOUT_MS = 15000;
 
-export function createLiveSttAdapter(config) {
-  // Phase 10C is transcribe-only canary plumbing. Keep the live path on the
-  // mock adapter until the real OpenAI streaming adapter is wired in Phase 10C+.
-  return createSttAdapter({
-    provider: "mock",
+export function resolveLiveSttProvider(config) {
+  const configured = String(config?.v4?.sttProvider ?? "mock").trim().toLowerCase();
+  if (configured !== "openai") {
+    return { provider: "mock", openaiActive: false, reason: "provider_mock" };
+  }
+  if (!isLiveOpenAiSttConfigured(config)) {
+    return { provider: "mock", openaiActive: false, reason: "openai_not_configured" };
+  }
+  return { provider: "openai", openaiActive: true, reason: "openai_live_canary" };
+}
+
+export function validateLiveCanarySttProvider(config, options = {}) {
+  const resolved = resolveLiveSttProvider(config);
+  const provider = resolved.openaiActive ? "openai" : "mock";
+
+  if (provider === "mock" && !options.allowMockStt) {
+    return { ok: false, reason: "live_stt_mock_not_allowed", provider };
+  }
+  if (provider === "openai" && !options.endpointTranscribeFn && !isLiveOpenAiSttConfigured(config, options)) {
+    return { ok: false, reason: "openai_stt_not_configured", provider };
+  }
+  return { ok: true, provider, reason: resolved.reason };
+}
+
+export function createLiveSttAdapter(config, options = {}) {
+  const resolved = resolveLiveSttProvider(config);
+  const provider = resolved.openaiActive ? "openai" : "mock";
+
+  if (provider === "mock" && !options.suppressMockWarning) {
+    console.warn(
+      "[v4-live] stt_provider=mock live PSTN semantic QA is invalid; set VOICE_V4_STT_PROVIDER=openai for supervised QA"
+    );
+  } else if (provider === "openai") {
+    console.log("[v4-live] stt_provider=openai endpoint_transcription=enabled");
+  }
+
+  const adapterOptions = {
+    provider,
     enabled: true,
-    timeoutMs: DEFAULT_LIVE_STT_TIMEOUT_MS
-  });
+    timeoutMs: DEFAULT_LIVE_STT_TIMEOUT_MS,
+    fetchImpl: options.fetchImpl ?? null
+  };
+
+  if (provider === "openai") {
+    adapterOptions.endpointTranscribeFn =
+      options.endpointTranscribeFn ??
+      createOpenAiEndpointTranscribeFn(config, {
+        fetchImpl: options.fetchImpl,
+        apiKey: options.apiKey
+      });
+  }
+
+  return createSttAdapter(adapterOptions);
+}
+
+async function completeLiveSttTurn(sttAdapter, streamId, options = {}) {
+  if (
+    sttAdapter.provider === "openai" &&
+    typeof sttAdapter.completeSttTurnAsync === "function"
+  ) {
+    return sttAdapter.completeSttTurnAsync(streamId, options);
+  }
+  return sttAdapter.completeSttTurn(streamId, options);
 }
 
 export function beginUtteranceCapture(runtime, ctx) {
@@ -124,20 +183,23 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     return { ok: false, reason: "no_utterance_audio" };
   }
 
+  const sttProvider = runtime.sttAdapter.provider ?? "mock";
+
   bufferQualityEvent(
     runtime,
     buildLiveSttQualityEvent(config, ctx, runtime, buildSttStartedEvent, null, {
-      utterance_frames: frameCount
+      utterance_frames: frameCount,
+      stt_provider: sttProvider
     })
   );
 
   console.log(
-    `[v4-live] stt_started utterance_frames=${frameCount} ${liveLogIds(ctx)}`
+    `[v4-live] stt_started stt_provider=${sttProvider} utterance_frames=${frameCount} ${liveLogIds(ctx)}`
   );
 
   let completed;
   try {
-    completed = runtime.sttAdapter.completeSttTurn(streamId, {
+    completed = await completeLiveSttTurn(runtime.sttAdapter, streamId, {
       finalText: undefined
     });
   } catch (err) {
@@ -147,7 +209,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     };
   }
 
-  const sttMs = Math.max(0, Date.now() - sttStartedAt);
+  const sttMs = Math.max(0, completed?.sttMs ?? Date.now() - sttStartedAt);
 
   if (!completed?.ok || !completed?.event) {
     const code = completed?.error?.code ?? "stt_failed";
@@ -176,19 +238,26 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     runtime,
     buildLiveSttQualityEvent(config, ctx, runtime, buildSttCompletedEvent, sttMs, {
       transcript_chars: transcriptChars,
-      utterance_frames: frameCount
+      utterance_frames: frameCount,
+      stt_provider: completed.event.provider ?? sttProvider,
+      stt_ok: true
     })
   );
+  const transcriptPreview =
+    config?.assistant?.logTranscriptPreview === true
+      ? { transcript_preview: safeTranscriptPreview(redacted) }
+      : {};
   bufferQualityEvent(
     runtime,
     buildLiveSttQualityEvent(config, ctx, runtime, buildSttFinalEvent, sttMs, {
       transcript_chars: transcriptChars,
-      transcript_preview: safeTranscriptPreview(redacted)
+      stt_provider: completed.event.provider ?? sttProvider,
+      ...transcriptPreview
     })
   );
 
   console.log(
-    `[v4-live] stt_completed stt_ms=${sttMs} transcript_chars=${transcriptChars} utterance_frames=${frameCount} ${liveLogIds(ctx)}`
+    `[v4-live] stt_completed stt_provider=${completed.event.provider ?? sttProvider} stt_ms=${sttMs} transcript_chars=${transcriptChars} utterance_frames=${frameCount} ${liveLogIds(ctx)}`
   );
 
   resetUtteranceBuffer(runtime);
@@ -252,7 +321,10 @@ function bufferSttErrorEvent(config, ctx, runtime, reason, sttMs) {
     buildLiveSttQualityEvent(config, ctx, runtime, buildRuntimeErrorEvent, sttMs, {
       error_class: "stt_failed",
       message: String(reason).slice(0, 120),
-      event_subtype: "stt_error"
+      event_subtype: "stt_error",
+      stt_provider: runtime?.sttAdapter?.provider ?? "unknown",
+      stt_ok: false,
+      transcript_chars: 0
     })
   );
 }

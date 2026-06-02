@@ -45,21 +45,22 @@ VOICE_V4_VAD_RMS_THRESHOLD=450
 VOICE_V4_VAD_SPEECH_FRAMES=3
 VOICE_V4_ENDPOINT_SILENCE_MS=600
 VOICE_V4_ENDPOINT_MIN_SPEECH_MS=240
-VOICE_V4_STT_PROVIDER=openai
+VOICE_V4_STT_PROVIDER=mock
 VOICE_V4_TTS_PROVIDER=mock
 VOICE_V4_TTS_CACHE_ENABLED=true
 ```
 
 `VOICE_V4_CANARY_ENABLED=true` plus `VOICE_RUNTIME_VERSION=v4` and `VOICE_V4_REALTIME_ENABLED=true` prepares v4 stub/harness contexts in tests. **Live PSTN routing** requires Phase 10A gates below (all default off).
 
-Phase 10E2 real TTS is opt-in for supervised live-canary QA only:
+Phase 10E2/10I real STT/TTS is opt-in for supervised live-canary QA only:
 
 ```env
+VOICE_V4_STT_PROVIDER=openai
 VOICE_V4_TTS_PROVIDER=openai
 OPENAI_API_KEY=<secret>
 ```
 
-Keep `VOICE_V4_TTS_PROVIDER=mock` unless a supervised QA window explicitly needs intelligible v4 live-canary speech.
+Keep `VOICE_V4_STT_PROVIDER=mock` and `VOICE_V4_TTS_PROVIDER=mock` unless a supervised QA window explicitly needs real v4 live-canary speech understanding/playback. Live PSTN semantic QA is invalid with mock STT.
 
 Phase 10A live AudioSocket canary gates (default off; production remains v3):
 

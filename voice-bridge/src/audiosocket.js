@@ -13,6 +13,7 @@ import {
   stopSilenceWriter
 } from "./media-outbound.js";
 import { runPostCallProcessing } from "./post-call.js";
+import { finalizeAudioSocketCall } from "./call-finish.js";
 import { captureInboundAudio } from "./recording.js";
 import { captureAssistantTurnAudio } from "./turn-assistant.js";
 import * as persist from "./persist.js";
@@ -25,7 +26,6 @@ import {
   selectLiveCallHandler,
   startLiveCanaryCall,
   handleLiveCanaryInboundFrame,
-  finishLiveCanaryCall,
   shouldCaptureAssistantTurnAudio
 } from "./v4/live-audiosocket-handler.js";
 
@@ -106,6 +106,8 @@ export function createAudioSocketServer(config) {
       inboundAudioFrames: 0,
       greetingHandled: false,
       closed: false,
+      finishInProgress: false,
+      callEndedPersisted: false,
       silenceTimer: null,
       recording: null,
       assistantTurn: null,
@@ -121,33 +123,14 @@ export function createAudioSocketServer(config) {
     );
 
     const finish = async (reason) => {
-      if (ctx.closed) return;
-      ctx.closed = true;
-      stopSilenceWriter(ctx);
-      if (ctx.callHandler === "v4_canary") {
-        try {
-          await finishLiveCanaryCall(config, ctx, reason);
-        } catch (err) {
-          console.error(`[v4-live] call_end_error error=${err?.message ?? String(err)}`);
-        }
-      }
-      await persist.onCallEnded(config, ctx, {
-        closeReason: reason,
-        framesReceived: ctx.framesReceived,
-        bytesReceived: ctx.bytesReceived
-      });
-      if (ctx.postCallTriggered) return;
-      ctx.postCallTriggered = true;
-      console.log(
-        `[post-call] trigger start call_session_id=${ctx.callSessionId ?? ""} external_call_id=${ctx.externalCallId ?? ""} reason=${reason}`
-      );
-      void runPostCallProcessing(config, ctx).catch((err) => {
-        console.error(`[post-call] trigger failed: ${err?.message ?? String(err)}`);
-      });
+      await finalizeAudioSocketCall(config, ctx, reason);
     };
+
+    ctx.finishCall = finish;
 
     socket.on("error", (err) => {
       void persist.onError(config, ctx, err, { phase: "socket" });
+      void finish("socket_error");
     });
 
     socket.on("close", () => {
@@ -184,6 +167,7 @@ export function createAudioSocketServer(config) {
 function handleFrame(config, ctx, socket, type, payload) {
   if (type === FrameType.HANGUP) {
     console.log(`[voice-bridge] hangup frame received ${persist.callLogLabel(ctx)}`);
+    void ctx.finishCall?.("hangup");
     socket.end();
     return;
   }

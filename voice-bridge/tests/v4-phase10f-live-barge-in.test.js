@@ -63,6 +63,7 @@ function liveCanaryEnv(allowlist = "qa-canary", extra = {}) {
     VOICE_V4_CANARY_ENABLED: "true",
     VOICE_V4_LIVE_AUDIOSOCKET_ENABLED: "true",
     VOICE_V4_LIVE_CANARY_ALLOWLIST: allowlist,
+    VOICE_V4_STT_ALLOW_MOCK_FOR_TESTS: "true",
     VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED: "false",
     VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED: "false",
     ...extra
