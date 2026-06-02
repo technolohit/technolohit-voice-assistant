@@ -18,6 +18,12 @@ import {
   buildVadSpeechStartEvent,
   buildVadEndpointDetectedEvent
 } from "./quality-events.js";
+import {
+  beginUtteranceCapture,
+  appendUtteranceFrame,
+  runLiveSttOnEndpoint,
+  resetUtteranceBuffer
+} from "./live-stt-endpoint.js";
 
 /**
  * Parse allowlist entries from config (comma/semicolon/whitespace separated).
@@ -132,6 +138,9 @@ export function validateLiveCanaryMediaRuntime(runtime) {
   if (!runtime?.vadState) {
     return { ok: false, reason: "live_canary_vad_state_missing" };
   }
+  if (!runtime?.sttAdapter) {
+    return { ok: false, reason: "live_canary_stt_adapter_missing" };
+  }
   return { ok: true, reason: "live_canary_media_ready" };
 }
 
@@ -158,9 +167,9 @@ function buildLiveVadQualityEvent(config, ctx, runtime, builder, metricValue, pa
 }
 
 /**
- * Process one inbound PCM frame for v4_canary (Phase 10B — session + VAD only).
+ * Process one inbound PCM frame for v4_canary (Phase 10B VAD + Phase 10C STT on endpoint).
  */
-export function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
+export async function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
   if (!runtime?.audioSession || !runtime?.vadState) {
     return { ok: false, reason: "live_canary_media_not_initialized" };
   }
@@ -174,6 +183,7 @@ export function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
   const prevSpeechActive = Boolean(prevVad.speechActive);
   const prevEndpointAt = prevVad.endpointDetectedAt ?? null;
   const frameMs = Number(config?.frameMs ?? 20);
+  let endpointTriggered = false;
 
   runtime.audioSession = appendInboundFrame(runtime.audioSession, { rms });
   runtime.vadState = observeAudioFrame(prevVad, payload, frameMs);
@@ -194,9 +204,15 @@ export function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
         last_rms: Math.round(rms)
       })
     );
+
+    beginUtteranceCapture(runtime, ctx);
+    appendUtteranceFrame(runtime, payload);
+  } else if (runtime.utterance?.capturing) {
+    appendUtteranceFrame(runtime, payload);
   }
 
   if (vad.endpointDetectedAt && vad.endpointDetectedAt !== prevEndpointAt) {
+    endpointTriggered = true;
     runtime.endpointCount = (runtime.endpointCount ?? 0) + 1;
     runtime.audioSession = markEndpointDetected(runtime.audioSession, vad.endpointDetectedAt);
     const endpointMs =
@@ -213,13 +229,22 @@ export function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
         last_rms: Math.round(vad.lastRms ?? rms)
       })
     );
+
+    try {
+      await runLiveSttOnEndpoint(config, ctx, runtime);
+    } catch (err) {
+      console.error(
+        `[v4-live] stt_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+      );
+      resetUtteranceBuffer(runtime);
+    }
   }
 
   const n = runtime.inboundFrameCount;
   const every = Math.max(1, Number(config?.inboundLogEvery) || 50);
   if (n === 1 || n % every === 0) {
     console.log(
-      `[v4-live] inbound_frame_count=${n} inbound_bytes=${runtime.inboundBytes} speech_active=${Boolean(vad.speechActive)} ${liveLogIds(ctx)}`
+      `[v4-live] inbound_frame_count=${n} inbound_bytes=${runtime.inboundBytes} speech_active=${Boolean(vad.speechActive)} capturing_utterance=${Boolean(runtime.utterance?.capturing)} ${liveLogIds(ctx)}`
     );
   }
 
@@ -228,7 +253,9 @@ export function processLiveCanaryInboundFrame(config, ctx, runtime, payload) {
     inboundFrameCount: runtime.inboundFrameCount,
     speechStartCount: runtime.speechStartCount ?? 0,
     endpointCount: runtime.endpointCount ?? 0,
-    speechActive: Boolean(vad.speechActive)
+    speechActive: Boolean(vad.speechActive),
+    endpointTriggered,
+    sttCompletedCount: runtime.sttCompletedCount ?? 0
   };
 }
 
@@ -237,7 +264,7 @@ export async function startLiveCanaryCall(config, ctx, socket, runtime) {
   ctx.v4LiveRuntime = runtime;
   runtime.startedAt = Date.now();
 
-  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10b"} ${liveLogIds(ctx)}`);
+  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10c"} ${liveLogIds(ctx)}`);
 
   try {
     await playGreetingAndKeepalive(config, ctx, socket, { skipAssistant: true });
@@ -252,15 +279,14 @@ export async function startLiveCanaryCall(config, ctx, socket, runtime) {
 export function handleLiveCanaryInboundFrame(config, ctx, _socket, payload) {
   if (ctx?.callHandler !== "v4_canary") return;
 
-  try {
-    const runtime = ctx.v4LiveRuntime;
-    if (!runtime) return;
-    processLiveCanaryInboundFrame(config, ctx, runtime, payload);
-  } catch (err) {
+  const runtime = ctx.v4LiveRuntime;
+  if (!runtime) return;
+
+  void processLiveCanaryInboundFrame(config, ctx, runtime, payload).catch((err) => {
     console.error(
       `[v4-live] inbound_frame_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
     );
-  }
+  });
 }
 
 export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
@@ -274,7 +300,7 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
   const sessionMetrics = runtime?.audioSession ? getAudioSessionMetrics(runtime.audioSession) : null;
 
   console.log(
-    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   ctx.v4LiveRuntime = null;
@@ -284,6 +310,7 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
     inboundFrameCount: frameCount,
     speechStartCount: runtime?.speechStartCount ?? 0,
     endpointCount: runtime?.endpointCount ?? 0,
+    sttCompletedCount: runtime?.sttCompletedCount ?? 0,
     durationMs,
     sessionMetrics
   };

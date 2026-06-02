@@ -6,6 +6,7 @@ import { loadAgentConfig } from "./agent-config.js";
 import { createRuntimeContext } from "./runtime-context.js";
 import { createAudioSession } from "./audio-session.js";
 import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, createVadStateFromConfig, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
+import { createLiveSttAdapter, resetUtteranceBuffer } from "./live-stt-endpoint.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
 import { createDbQualityEventInsertFn, flushOrchestratorQualityEvents } from "./quality-persistence.js";
 import {
@@ -114,10 +115,10 @@ export function createCanaryDialogueRuntime(config, input = {}) {
 }
 
 /**
- * Live AudioSocket canary runtime — Phase 10B VAD endpointing (no STT/TTS/dialogue yet).
+ * Live AudioSocket canary runtime — Phase 10C STT on VAD endpoint (no TTS/dialogue yet).
  * Requires env gates + allowlist match before audiosocket.js selects v4_canary handler.
  */
-export function createLiveCanaryRuntime(config, ctx) {
+export function createLiveCanaryRuntime(config, ctx, options = {}) {
   if (!canPrepareV4CanaryMedia(config)) {
     return {
       ok: false,
@@ -158,7 +159,7 @@ export function createLiveCanaryRuntime(config, ctx) {
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
     dialogueReady: false,
-    reason: "v4_live_canary_phase10b"
+    reason: "v4_live_canary_phase10c"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -196,25 +197,36 @@ export function createLiveCanaryRuntime(config, ctx) {
     return { ok: false, handler: "v3", reason: "audio_session_init_failed" };
   }
 
-  return {
+  const sttAdapter = options.sttAdapter ?? createLiveSttAdapter(config);
+  if (!sttAdapter) {
+    return { ok: false, handler: "v3", reason: "stt_adapter_init_failed" };
+  }
+
+  const runtime = {
     ok: true,
     handler: "v4_canary",
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10b_live_vad",
+    phase: "phase10c_live_stt",
     liveCanary: true,
     config,
     runtimeContext,
     audioSession,
     vadState,
+    sttAdapter,
+    utterance: { capturing: false, frames: [], streamId: null, startedAt: null },
+    lastCallerTurnCandidate: null,
     qualityEventsBuffer: [],
     speechStartCount: 0,
     endpointCount: 0,
+    sttCompletedCount: 0,
     inboundFrameCount: 0,
     inboundBytes: 0,
     startedAt: null
   };
+  resetUtteranceBuffer(runtime);
+  return runtime;
 }
 
 export async function simulateInboundTranscriptTurn(runtime, transcript = "") {
