@@ -7,6 +7,7 @@ import { createRuntimeContext } from "./runtime-context.js";
 import { createAudioSession } from "./audio-session.js";
 import { createMediaAdaptersFromConfig, canPrepareV4CanaryMedia, createVadStateFromConfig, observeOutboundFrameForPlayback } from "./audiosocket-runtime.js";
 import { createLiveSttAdapter, resetUtteranceBuffer } from "./live-stt-endpoint.js";
+import { createLiveTtsAdapter } from "./live-tts-playback-endpoint.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
 import { createDbQualityEventInsertFn, flushOrchestratorQualityEvents } from "./quality-persistence.js";
 import {
@@ -115,7 +116,7 @@ export function createCanaryDialogueRuntime(config, input = {}) {
 }
 
 /**
- * Live AudioSocket canary runtime — Phase 10D dialogue on STT transcript (no TTS/playback yet).
+ * Live AudioSocket canary runtime — Phase 10E TTS/playback on dialogue plan (no barge-in yet).
  * Requires env gates + allowlist match before audiosocket.js selects v4_canary handler.
  */
 export function createLiveCanaryRuntime(config, ctx, options = {}) {
@@ -159,7 +160,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
     dialogueReady: true,
-    reason: "v4_live_canary_phase10d"
+    reason: "v4_live_canary_phase10e"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -202,28 +203,39 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     return { ok: false, handler: "v3", reason: "stt_adapter_init_failed" };
   }
 
+  const ttsAdapter = options.ttsAdapter ?? createLiveTtsAdapter(config);
+  if (!ttsAdapter) {
+    return { ok: false, handler: "v3", reason: "tts_adapter_init_failed" };
+  }
+
   const runtime = {
     ok: true,
     handler: "v4_canary",
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10d_live_dialogue",
+    phase: "phase10e_live_tts_playback",
     liveCanary: true,
     config,
     runtimeContext,
     audioSession,
     vadState,
     sttAdapter,
+    ttsAdapter,
     orchestrator: null,
     utterance: { capturing: false, frames: [], streamId: null, startedAt: null },
     lastCallerTurnCandidate: null,
     lastAssistantPlanCandidate: null,
+    lastAssistantPlaybackCandidate: null,
     qualityEventsBuffer: [],
     speechStartCount: 0,
     endpointCount: 0,
     sttCompletedCount: 0,
     dialogueCompletedCount: 0,
+    ttsCompletedCount: 0,
+    ttsFailedCount: 0,
+    playbackCompletedCount: 0,
+    lastTtsPlaybackPlanKey: null,
     inboundFrameCount: 0,
     inboundBytes: 0,
     startedAt: null

@@ -1,8 +1,9 @@
 /**
- * Phase 10C/10D — live v4 STT on VAD endpoint; Phase 10D runs dialogue on success (no TTS).
+ * Phase 10C–10E — live v4 STT on VAD endpoint; dialogue + TTS/playback on success.
  */
 
 import { runLiveDialogueOnCallerTranscript } from "./live-dialogue-endpoint.js";
+import { runLiveTtsAndPlayback } from "./live-tts-playback-endpoint.js";
 
 import { createSttAdapter } from "./stt-adapter.js";
 import { redactPhoneLikeText } from "./redaction.js";
@@ -207,12 +208,25 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     dialogue = { ok: false, reason: "dialogue_exception" };
   }
 
+  let playback = { ok: false, reason: "not_run" };
+  if (dialogue?.ok) {
+    try {
+      playback = await runLiveTtsAndPlayback(config, ctx, runtime, dialogue);
+    } catch (err) {
+      console.warn(
+        `[v4-live] tts_playback_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+      );
+      playback = { ok: false, reason: "tts_playback_exception" };
+    }
+  }
+
   return {
     ok: true,
     sttMs,
     transcriptChars,
     candidate: runtime.lastCallerTurnCandidate,
-    dialogue
+    dialogue,
+    playback
   };
 }
 

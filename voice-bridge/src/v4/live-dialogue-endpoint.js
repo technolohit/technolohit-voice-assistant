@@ -1,5 +1,5 @@
 /**
- * Phase 10D — live v4 dialogue on STT transcript (plan in memory only; no TTS/playback).
+ * Phase 10D — live v4 dialogue on STT transcript (plan in memory; TTS/playback in Phase 10E).
  */
 
 import { createMediaAdaptersFromConfig } from "./audiosocket-runtime.js";

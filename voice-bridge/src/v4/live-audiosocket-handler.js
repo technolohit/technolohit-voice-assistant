@@ -262,9 +262,11 @@ export async function processLiveCanaryInboundFrame(config, ctx, runtime, payloa
 export async function startLiveCanaryCall(config, ctx, socket, runtime) {
   ctx.callHandler = "v4_canary";
   ctx.v4LiveRuntime = runtime;
+  ctx.v4LiveSocket = socket;
+  runtime.liveSocket = socket;
   runtime.startedAt = Date.now();
 
-  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10d"} ${liveLogIds(ctx)}`);
+  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10e"} ${liveLogIds(ctx)}`);
 
   try {
     await playGreetingAndKeepalive(config, ctx, socket, { skipAssistant: true });
@@ -300,7 +302,7 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
   const sessionMetrics = runtime?.audioSession ? getAudioSessionMetrics(runtime.audioSession) : null;
 
   console.log(
-    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} tts_completed_count=${runtime?.ttsCompletedCount ?? 0} playback_completed_count=${runtime?.playbackCompletedCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   ctx.v4LiveRuntime = null;
@@ -312,6 +314,8 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
     endpointCount: runtime?.endpointCount ?? 0,
     sttCompletedCount: runtime?.sttCompletedCount ?? 0,
     dialogueCompletedCount: runtime?.dialogueCompletedCount ?? 0,
+    ttsCompletedCount: runtime?.ttsCompletedCount ?? 0,
+    playbackCompletedCount: runtime?.playbackCompletedCount ?? 0,
     durationMs,
     sessionMetrics
   };
