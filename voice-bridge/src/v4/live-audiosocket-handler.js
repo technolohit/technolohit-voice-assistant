@@ -264,7 +264,7 @@ export async function startLiveCanaryCall(config, ctx, socket, runtime) {
   ctx.v4LiveRuntime = runtime;
   runtime.startedAt = Date.now();
 
-  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10c"} ${liveLogIds(ctx)}`);
+  console.log(`[v4-live] call_start handler=v4_canary phase=${runtime.phase ?? "phase10d"} ${liveLogIds(ctx)}`);
 
   try {
     await playGreetingAndKeepalive(config, ctx, socket, { skipAssistant: true });
@@ -300,7 +300,7 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
   const sessionMetrics = runtime?.audioSession ? getAudioSessionMetrics(runtime.audioSession) : null;
 
   console.log(
-    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   ctx.v4LiveRuntime = null;
@@ -311,6 +311,7 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
     speechStartCount: runtime?.speechStartCount ?? 0,
     endpointCount: runtime?.endpointCount ?? 0,
     sttCompletedCount: runtime?.sttCompletedCount ?? 0,
+    dialogueCompletedCount: runtime?.dialogueCompletedCount ?? 0,
     durationMs,
     sessionMetrics
   };

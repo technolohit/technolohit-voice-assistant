@@ -115,7 +115,7 @@ export function createCanaryDialogueRuntime(config, input = {}) {
 }
 
 /**
- * Live AudioSocket canary runtime — Phase 10C STT on VAD endpoint (no TTS/dialogue yet).
+ * Live AudioSocket canary runtime — Phase 10D dialogue on STT transcript (no TTS/playback yet).
  * Requires env gates + allowlist match before audiosocket.js selects v4_canary handler.
  */
 export function createLiveCanaryRuntime(config, ctx, options = {}) {
@@ -158,8 +158,8 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     stub: false,
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
-    dialogueReady: false,
-    reason: "v4_live_canary_phase10c"
+    dialogueReady: true,
+    reason: "v4_live_canary_phase10d"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -208,19 +208,22 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10c_live_stt",
+    phase: "phase10d_live_dialogue",
     liveCanary: true,
     config,
     runtimeContext,
     audioSession,
     vadState,
     sttAdapter,
+    orchestrator: null,
     utterance: { capturing: false, frames: [], streamId: null, startedAt: null },
     lastCallerTurnCandidate: null,
+    lastAssistantPlanCandidate: null,
     qualityEventsBuffer: [],
     speechStartCount: 0,
     endpointCount: 0,
     sttCompletedCount: 0,
+    dialogueCompletedCount: 0,
     inboundFrameCount: 0,
     inboundBytes: 0,
     startedAt: null

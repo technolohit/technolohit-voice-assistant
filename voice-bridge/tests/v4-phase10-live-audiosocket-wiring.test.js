@@ -15,6 +15,14 @@ import {
 import { createLiveCanaryRuntime } from "../src/v4/canary-runtime-loop.js";
 import { createSttAdapter } from "../src/v4/stt-adapter.js";
 import { validateQualityEventInput } from "../src/v4/quality-events.js";
+import { RESPONSE_TYPES } from "../src/v4/response-planner.js";
+
+function restoreEnv(previous) {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
 
 function withEnv(overrides, fn) {
   const previous = {};
@@ -24,12 +32,15 @@ function withEnv(overrides, fn) {
     else process.env[key] = value;
   }
   try {
-    return fn();
-  } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+    const result = fn();
+    if (result && typeof result.then === "function") {
+      return result.finally(() => restoreEnv(previous));
     }
+    restoreEnv(previous);
+    return result;
+  } catch (err) {
+    restoreEnv(previous);
+    throw err;
   }
 }
 
@@ -156,7 +167,7 @@ test("T5: all gates pass + allowlist match → v4_canary", () => {
     assert.equal(selected.handler, "v4_canary");
     assert.equal(selected.reason, "v4_live_canary_selected");
     assert.equal(selected.runtime?.ok, true);
-    assert.equal(selected.runtime?.phase, "phase10c_live_stt");
+    assert.equal(selected.runtime?.phase, "phase10d_live_dialogue");
   });
 });
 
@@ -260,7 +271,7 @@ test("10B: v3 path does not run v4 VAD processing", () => {
 });
 
 test("10B: v4_canary inbound frame increments audio session counters", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-001", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -274,7 +285,7 @@ test("10B: v4_canary inbound frame increments audio session counters", async () 
 });
 
 test("10B: silence frames do not trigger speech start", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-silence", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -288,7 +299,7 @@ test("10B: silence frames do not trigger speech start", async () => {
 });
 
 test("10B: consecutive speech frames trigger vad speech start", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-speech", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -303,7 +314,7 @@ test("10B: consecutive speech frames trigger vad speech start", async () => {
 });
 
 test("10B: speech followed by silence triggers endpoint detected", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-vad-endpoint", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -321,7 +332,7 @@ test("10B: speech followed by silence triggers endpoint detected", async () => {
 });
 
 test("10B: VAD quality events contain no phone-like payload data", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({
       bridgeCallId: "qa-canary-vad-privacy",
@@ -340,7 +351,7 @@ test("10B: VAD quality events contain no phone-like payload data", async () => {
 });
 
 test("10C: silence does not invoke STT completion", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-stt-silence", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -356,7 +367,7 @@ test("10C: silence does not invoke STT completion", async () => {
 });
 
 test("10C: speech + endpoint invokes STT adapter once", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-stt-once", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -365,14 +376,16 @@ test("10C: speech + endpoint invokes STT adapter once", async () => {
     assert.equal(runtime.sttCompletedCount, 1);
     assert.equal(runtime.lastCallerTurnCandidate?.ok, true);
     const started = runtime.qualityEventsBuffer.filter((e) => e.eventType === "stt_started");
-    const completed = runtime.qualityEventsBuffer.filter((e) => e.eventType === "stt_completed");
+    const completed = runtime.qualityEventsBuffer.filter(
+      (e) => e.eventType === "stt_completed" && e.eventStage === "stt"
+    );
     assert.equal(started.length, 1);
     assert.equal(completed.length, 1);
   });
 });
 
 test("10C: default live STT adapter stays mock-safe even when env provider is openai", async () => {
-  withEnv({ ...liveCanaryEnv("qa-canary"), VOICE_V4_STT_PROVIDER: "openai" }, async () => {
+  return withEnv({ ...liveCanaryEnv("qa-canary"), VOICE_V4_STT_PROVIDER: "openai" }, async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-stt-mock-safe", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -385,7 +398,7 @@ test("10C: default live STT adapter stays mock-safe even when env provider is op
 });
 
 test("10C: STT success stores redacted caller turn candidate", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-stt-store", callHandler: "v4_canary" });
     const adapter = createSttAdapter({ provider: "mock", enabled: true });
@@ -404,7 +417,7 @@ test("10C: STT success stores redacted caller turn candidate", async () => {
 });
 
 test("10C: STT failure buffers error and does not throw", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-stt-fail", callHandler: "v4_canary" });
     const adapter = createSttAdapter({ provider: "mock", enabled: true });
@@ -424,7 +437,7 @@ test("10C: STT failure buffers error and does not throw", async () => {
 });
 
 test("10C: phone-like transcript is redacted in candidate and quality events", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-stt-phone", callHandler: "v4_canary" });
     const adapter = createSttAdapter({ provider: "mock", enabled: true });
@@ -456,7 +469,7 @@ test("10C: v3 path does not run live STT", async () => {
 });
 
 test("v4 live inbound frame handler increments lifecycle counters", async () => {
-  withEnv(liveCanaryEnv("qa-canary"), async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-frame-count", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
@@ -466,6 +479,163 @@ test("v4 live inbound frame handler increments lifecycle counters", async () => 
     assert.equal(runtime.inboundBytes, 320);
     assert.equal(runtime.audioSession.inboundFrames, 1);
   });
+});
+
+test("10D: STT candidate triggers dialogue orchestrator exactly once per endpoint", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-dialogue-once", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    assert.equal(runtime.dialogueCompletedCount, 1);
+    assert.equal(runtime.lastCallerTurnCandidate?.dialogueProcessed, true);
+    const turnStarted = runtime.qualityEventsBuffer.filter((e) => e.eventType === "turn_started");
+    assert.equal(turnStarted.length, 1);
+  });
+});
+
+test("10D: response plan stored without TTS or playback", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-dialogue-no-tts", callHandler: "v4_canary" });
+    const adapter = createSttAdapter({ provider: "mock", enabled: true });
+    const baseComplete = adapter.completeSttTurn.bind(adapter);
+    adapter.completeSttTurn = (streamId, options = {}) =>
+      baseComplete(streamId, {
+        ...options,
+        finalText: "Erzaehlen Sie mir bitte ueber Smart Website"
+      });
+    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    assert.equal(runtime.lastAssistantPlanCandidate?.ok, true);
+    assert.ok(runtime.lastAssistantPlanCandidate.response_chars > 0);
+    assert.equal(runtime.orchestrator?.playback, null);
+    const ttsEvents = runtime.qualityEventsBuffer.filter((e) => e.eventType === "tts_started");
+    assert.equal(ttsEvents.length, 0);
+    const planEvents = runtime.qualityEventsBuffer.filter(
+      (e) => e.eventType === "response_plan_created"
+    );
+    assert.equal(planEvents.length, 1);
+  });
+});
+
+test("10D: memory selected product updates from caller transcript", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-dialogue-product", callHandler: "v4_canary" });
+    const adapter = createSttAdapter({ provider: "mock", enabled: true });
+    const baseComplete = adapter.completeSttTurn.bind(adapter);
+    adapter.completeSttTurn = (streamId, options = {}) =>
+      baseComplete(streamId, {
+        ...options,
+        finalText: "Ich interessiere mich fuer Smart Website"
+      });
+    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    assert.equal(runtime.runtimeContext.memory.selected_product_id, "smart_website");
+  });
+});
+
+test("10D: product question creates product Q&A response plan", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-dialogue-pqa", callHandler: "v4_canary" });
+    const adapter = createSttAdapter({ provider: "mock", enabled: true });
+    const baseComplete = adapter.completeSttTurn.bind(adapter);
+    adapter.completeSttTurn = (streamId, options = {}) =>
+      baseComplete(streamId, {
+        ...options,
+        finalText: "Was kostet Smart Website?"
+      });
+    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    assert.equal(
+      runtime.lastAssistantPlanCandidate?.response_type,
+      RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER
+    );
+  });
+});
+
+test("10D: phone contact intent does not create callback-ready lead without validator", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-dialogue-phone-intent", callHandler: "v4_canary" });
+    const adapter = createSttAdapter({ provider: "mock", enabled: true });
+    const baseComplete = adapter.completeSttTurn.bind(adapter);
+    adapter.completeSttTurn = (streamId, options = {}) =>
+      baseComplete(streamId, {
+        ...options,
+        finalText: "Bitte Rueckruf unter +4917012345678"
+      });
+    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    assert.equal(runtime.runtimeContext.memory.lead_ready, false);
+    assert.notEqual(runtime.lastAssistantPlanCandidate?.response_type, RESPONSE_TYPES.LEAD_READY_ACK);
+  });
+});
+
+test("10D: phone-like transcript is redacted in memory and quality events", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({
+      bridgeCallId: "qa-canary-dialogue-phone-redact",
+      callHandler: "v4_canary",
+      callSessionId: "sess-nophone-01"
+    });
+    const adapter = createSttAdapter({ provider: "mock", enabled: true });
+    const baseComplete = adapter.completeSttTurn.bind(adapter);
+    adapter.completeSttTurn = (streamId, options = {}) =>
+      baseComplete(streamId, {
+        ...options,
+        finalText: "Meine Nummer ist +491709998877 fuer Rueckruf"
+      });
+    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    const memoryJson = JSON.stringify({
+      last_user_utterance: runtime.runtimeContext.memory.last_user_utterance,
+      last_assistant_text: runtime.runtimeContext.memory.last_assistant_text
+    });
+    assert.doesNotMatch(memoryJson, /\+?\d{8,}/);
+    assert.match(memoryJson, /\[phone_redacted\]/);
+    for (const event of runtime.qualityEventsBuffer) {
+      assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+    }
+  });
+});
+
+test("10D: dialogue failure buffers runtime_error and call continues", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({ bridgeCallId: "qa-canary-dialogue-fail", callHandler: "v4_canary" });
+    const runtime = createLiveCanaryRuntime(config, ctx);
+    runtime.liveDialogueHooks = {
+      decideNextAction: async () => {
+        throw new Error("simulated_dialogue_failure");
+      }
+    };
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    assert.equal(runtime.sttCompletedCount, 1);
+    assert.equal(runtime.lastAssistantPlanCandidate?.ok, false);
+    const errors = runtime.qualityEventsBuffer.filter((e) => e.eventType === "runtime_error");
+    assert.ok(errors.some((e) => e.payload?.event_subtype === "dialogue_error"));
+    await feedLiveCanaryFrames(config, ctx, runtime, 800, 5);
+    assert.ok(runtime.inboundFrameCount > 45);
+  });
+});
+
+test("10D: v3 path does not run v4 dialogue", async () => {
+  const config = loadConfig();
+  const ctx = makeCtx({ callHandler: "v3" });
+  handleLiveCanaryInboundFrame(config, ctx, null, makePcmFrame(800));
+  assert.equal(ctx.v4LiveRuntime, undefined);
+  assert.equal(ctx.lastAssistantPlanCandidate, undefined);
 });
 
 test("finishLiveCanaryCall clears runtime on v4 handler", () => {

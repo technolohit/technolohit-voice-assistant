@@ -367,6 +367,69 @@ export function recordAssistantResponse(orchestrator, text = null, plan = null) 
   return { ok: true, memory, stateMachine, text: responseText, playback: orchestrator.playback };
 }
 
+/**
+ * Apply assistant plan to memory/state without TTS or playback (Phase 10D live canary).
+ */
+export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, plan = null) {
+  const resolvedPlan = plan ?? orchestrator.lastPlan;
+  const responseText = sanitizeResponseText(text ?? resolvedPlan?.text ?? orchestrator.lastAssistantText ?? "");
+  const fromState = orchestrator.stateMachine?.state ?? orchestrator.memory?.current_state ?? null;
+
+  let memory = applyMemoryPatch(orchestrator.memory, resolvedPlan?.memory_patch ?? {});
+  memory = updateMemoryFromAssistantTurn(memory, responseText);
+
+  let stateMachine = orchestrator.stateMachine;
+  if (resolvedPlan?.next_state) {
+    const leadPolicy = resolvedPlan.lead_transition_allowed
+      ? validateLeadReadyTransition(memory, {
+          source: "dialogue_orchestrator",
+          callerPhoneNormalized: orchestrator.callerPhoneNormalized,
+          callerPhoneRaw: orchestrator.callerPhoneRaw,
+          explicitUserPermission: true
+        })
+      : { allowed: false, reason: "lead_transition_not_requested" };
+
+    if (resolvedPlan.next_state === V4_STATES.LEAD_READY) {
+      if (!leadPolicy.allowed) {
+        memory = { ...memory, lead_ready: false };
+        stateMachine = transitionState(stateMachine, V4_STATES.VALIDATING_CONTACT, leadPolicy.reason);
+      } else {
+        memory = { ...memory, lead_ready: true, phone_present: true };
+        stateMachine = transitionState(stateMachine, V4_STATES.LEAD_READY, "lead_ready", { leadPolicy });
+      }
+    } else {
+      stateMachine = transitionState(stateMachine, resolvedPlan.next_state, "assistant_plan", {
+        createsLead: false,
+        leadPolicy
+      });
+    }
+    memory = { ...memory, current_state: stateMachine.state };
+  }
+
+  const toState = stateMachine.state;
+  if (fromState && toState && fromState !== toState) {
+    bufferEvent(orchestrator, "dialogue_state_transition", {
+      from_state: fromState,
+      to_state: toState,
+      response_type: resolvedPlan?.response_type ?? null
+    });
+  }
+
+  bufferEvent(orchestrator, "response_plan_created", {
+    response_type: resolvedPlan?.response_type ?? null,
+    response_chars: responseText.length,
+    intent: resolvedPlan?.intent ?? null,
+    next_state: toState
+  });
+
+  orchestrator.memory = memory;
+  orchestrator.stateMachine = stateMachine;
+  orchestrator.lastAssistantText = responseText;
+  orchestrator.playback = null;
+
+  return { ok: true, memory, stateMachine, text: responseText, playback: null };
+}
+
 export async function handleInterruption(orchestrator, { callerText = "", playback = null, atMs = Date.now() } = {}) {
   const activePlayback = playback ?? orchestrator.playback;
   const cancelled = requestPlaybackCancel(activePlayback, "barge_in", atMs);

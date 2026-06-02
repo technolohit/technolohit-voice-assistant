@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10C — Live STT on VAD endpoint** |
+| **Current completed phase** | **Phase 10D — Live dialogue on STT transcript** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) on `voice-bridge-v1.11.0` |
-| **v4 production status** | **Not enabled** — live v4 gated; transcribes only, **no assistant turns** |
+| **v4 production status** | **Not enabled** — live v4 gated; plans in memory only, **no PSTN assistant audio** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | **Phase 10D — Live dialogue orchestrator on transcript** |
+| **Next step** | **Phase 10E — Live TTS synthesis/playback** |
 
 Completed foundation work (do not re-implement):
 
@@ -1110,7 +1110,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10A route selection + lifecycle logging implemented.
 - [x] Successful: Phase 10B inbound PCM + VAD endpointing on live v4_canary path.
 - [x] Successful: Phase 10C live STT on VAD endpoint implemented.
-- [ ] Successful: Phase 10D live dialogue orchestrator on transcript implemented.
+- [x] Successful: Phase 10D live dialogue orchestrator on transcript implemented.
 - [ ] Successful: Phase 10H live QA runbook published.
 - [ ] Successful: Tier 9b-B supervised canary executed.
 
@@ -1172,7 +1172,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A–10C implemented** (route gates, VAD, STT on endpoint); **no assistant turns on live PSTN yet**; 10D next.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10D implemented** (route gates, VAD, STT, dialogue plan in memory); **live PSTN does not speak answers until Phase 10E**; 10E next.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **and** Phase 10 live wiring + Tier 9b-B pass.
 
 ## Acceptance Criteria For v4 Phase 1

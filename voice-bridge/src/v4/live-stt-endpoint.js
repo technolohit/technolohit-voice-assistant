@@ -1,6 +1,8 @@
 /**
- * Phase 10C — live v4 STT on VAD endpoint (transcribe only; no dialogue/TTS).
+ * Phase 10C/10D — live v4 STT on VAD endpoint; Phase 10D runs dialogue on success (no TTS).
  */
+
+import { runLiveDialogueOnCallerTranscript } from "./live-dialogue-endpoint.js";
 
 import { createSttAdapter } from "./stt-adapter.js";
 import { redactPhoneLikeText } from "./redaction.js";
@@ -189,7 +191,29 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
   );
 
   resetUtteranceBuffer(runtime);
-  return { ok: true, sttMs, transcriptChars, candidate: runtime.lastCallerTurnCandidate };
+
+  let dialogue = { ok: false, reason: "not_run" };
+  try {
+    dialogue = await runLiveDialogueOnCallerTranscript(
+      config,
+      ctx,
+      runtime,
+      runtime.lastCallerTurnCandidate
+    );
+  } catch (err) {
+    console.warn(
+      `[v4-live] dialogue_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+    );
+    dialogue = { ok: false, reason: "dialogue_exception" };
+  }
+
+  return {
+    ok: true,
+    sttMs,
+    transcriptChars,
+    candidate: runtime.lastCallerTurnCandidate,
+    dialogue
+  };
 }
 
 export function resetUtteranceBuffer(runtime) {

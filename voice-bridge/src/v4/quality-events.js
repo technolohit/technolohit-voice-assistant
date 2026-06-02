@@ -98,6 +98,12 @@ function typedBuilder(eventType, defaults = {}) {
 
 export const buildCallStartedEvent = typedBuilder("call_started", { eventStage: "session" });
 export const buildTurnStartedEvent = typedBuilder("turn_started", { eventStage: "dialogue" });
+export const buildDialogueStateTransitionEvent = typedBuilder("dialogue_state_transition", {
+  eventStage: "dialogue"
+});
+export const buildResponsePlanCreatedEvent = typedBuilder("response_plan_created", {
+  eventStage: "dialogue"
+});
 export const buildSttStartedEvent = typedBuilder("stt_started", { eventStage: "stt" });
 export const buildSttCompletedEvent = typedBuilder("stt_completed", {
   eventStage: "stt",
