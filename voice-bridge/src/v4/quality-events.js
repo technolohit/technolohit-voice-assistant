@@ -17,12 +17,23 @@ const SENSITIVE_KEYS = new Set([
   "user_utterance"
 ]);
 
+const VERSION_METADATA_KEYS = new Set([
+  "runtime_version",
+  "agent_config_version",
+  "prompt_playbook_version",
+  "knowledge_version"
+]);
+
 export function redactQualityPayload(payload = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
   const out = {};
   for (const [key, value] of Object.entries(payload)) {
     if (SENSITIVE_KEYS.has(key)) {
       out[key] = "[redacted]";
+      continue;
+    }
+    if (VERSION_METADATA_KEYS.has(key) && typeof value === "string") {
+      out[key] = value;
       continue;
     }
     if (typeof value === "string") {
@@ -75,7 +86,14 @@ export function validateQualityEventInput(input) {
   if (!String(input?.eventType ?? "").trim()) errors.push("eventType required");
   if (!String(input?.tenantId ?? "").trim()) errors.push("tenantId required");
   if (!String(input?.agentId ?? "").trim()) errors.push("agentId required");
-  const serialized = JSON.stringify(input?.payload ?? {});
+  const payload = input?.payload ?? {};
+  const payloadForPhoneScan =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? Object.fromEntries(
+          Object.entries(payload).filter(([key]) => !VERSION_METADATA_KEYS.has(key))
+        )
+      : payload;
+  const serialized = JSON.stringify(payloadForPhoneScan);
   if (/\b\+?\d{8,}\b/.test(serialized)) {
     errors.push("payload must not contain raw phone numbers");
   }

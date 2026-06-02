@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10F — Live barge-in / playback cancel** |
+| **Current completed phase** | **Phase 10G — Live canary quality DB flush** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`) on `voice-bridge-v1.11.0` |
 | **v4 production status** | **Not enabled** — intelligible live TTS only when gates + allowlist + `VOICE_V4_TTS_PROVIDER=openai` + `OPENAI_API_KEY`; **production v4 not approved** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | **Phase 10G — Quality DB flush** (then 10H before supervised human QA) |
+| **Next step** | **Phase 10H — Live QA runbook** (then supervised human PSTN QA) |
 
 Completed foundation work (do not re-implement):
 
@@ -1114,7 +1114,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10E live TTS/playback plumbing implemented with mock-safe adapter.
 - [x] Successful: Phase 10E2 real provider-backed TTS implemented for intelligible live-call answers.
 - [x] Successful: Phase 10F live barge-in / playback cancel on gated AudioSocket canary (`VOICE_V4_BARGE_IN_ENABLED`).
-- [ ] Successful: Phase 10G quality DB flush on live canary path.
+- [x] Successful: Phase 10G live canary quality DB flush on call end (fail-safe, v4-only).
 - [ ] Successful: Phase 10H live QA runbook published.
 - [ ] Successful: Tier 9b-B supervised canary executed.
 
@@ -1176,7 +1176,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A–10F implemented** (route gates, VAD, STT, dialogue, TTS/playback, barge-in cancel); **supervised human PSTN QA** after **10G–10H**; production v4 still disabled.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10G implemented** (route gates, VAD, STT, dialogue, TTS/playback, barge-in cancel, quality DB flush); **supervised human PSTN QA** after **10H**; production v4 still disabled.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **and** Phase 10 live wiring + Tier 9b-B pass.
 
 ## Acceptance Criteria For v4 Phase 1

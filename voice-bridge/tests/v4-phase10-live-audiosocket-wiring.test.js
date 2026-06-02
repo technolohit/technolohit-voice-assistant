@@ -194,7 +194,7 @@ test("T5: all gates pass + allowlist match → v4_canary", () => {
     assert.equal(selected.handler, "v4_canary");
     assert.equal(selected.reason, "v4_live_canary_selected");
     assert.equal(selected.runtime?.ok, true);
-    assert.equal(selected.runtime?.phase, "phase10f_live_barge_in");
+    assert.equal(selected.runtime?.phase, "phase10g_live_quality_flush");
   });
 });
 
@@ -822,17 +822,18 @@ test("10E: TTS and playback quality events contain no raw phone", async () => {
   });
 });
 
-test("finishLiveCanaryCall clears runtime on v4 handler", () => {
-  withEnv(liveCanaryEnv("qa-canary"), () => {
+test("finishLiveCanaryCall clears runtime on v4 handler", async () => {
+  return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-finish", callHandler: "v4_canary" });
     const runtime = createLiveCanaryRuntime(config, ctx);
     runtime.inboundFrameCount = 3;
     runtime.startedAt = Date.now() - 100;
     ctx.v4LiveRuntime = runtime;
-    const result = finishLiveCanaryCall(config, ctx, "socket_close");
+    const result = await finishLiveCanaryCall(config, ctx, "socket_close");
     assert.equal(result.ok, true);
     assert.equal(result.inboundFrameCount, 3);
     assert.equal(ctx.v4LiveRuntime, null);
+    assert.equal(result.qualityFlush?.memory_only, true);
   });
 });

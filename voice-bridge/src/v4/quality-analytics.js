@@ -162,6 +162,57 @@ export function buildCallQualitySummary(events = [], options = {}) {
   return summary;
 }
 
+export function buildLiveCanaryCallQualitySummary(runtime = {}, ctx = {}, events = [], options = {}) {
+  const persistMetadata =
+    options.persistMetadata ?? runtime?.runtimeContext?.persistMetadata ?? {};
+  const base = buildCallQualitySummary(events, { persistMetadata });
+
+  const sttEvents = events.filter((e) =>
+    ["stt_started", "stt_completed", "stt_final"].includes(String(e.eventType ?? ""))
+  );
+  const ttsEvents = events.filter((e) =>
+    ["tts_started", "tts_completed", "tts_first_chunk"].includes(String(e.eventType ?? ""))
+  );
+  const playbackEvents = events.filter((e) =>
+    ["playback_started", "playback_completed", "playback_cancelled"].includes(String(e.eventType ?? ""))
+  );
+
+  const live_counters = {
+    endpoint_count: Number(runtime?.endpointCount ?? 0),
+    speech_start_count: Number(runtime?.speechStartCount ?? 0),
+    stt_completed_count: Number(runtime?.sttCompletedCount ?? 0),
+    dialogue_completed_count: Number(runtime?.dialogueCompletedCount ?? 0),
+    tts_completed_count: Number(runtime?.ttsCompletedCount ?? 0),
+    tts_failed_count: Number(runtime?.ttsFailedCount ?? 0),
+    playback_completed_count: Number(runtime?.playbackCompletedCount ?? 0),
+    barge_in_count: Number(runtime?.bargeInCount ?? 0),
+    inbound_frame_count: Number(runtime?.inboundFrameCount ?? 0),
+    duration_ms: runtime?.startedAt ? Math.max(0, Date.now() - runtime.startedAt) : null,
+    stt_event_count: sttEvents.length,
+    tts_event_count: ttsEvents.length,
+    playback_event_count: playbackEvents.length
+  };
+
+  const counters = {
+    ...base.counters,
+    ...live_counters
+  };
+
+  const summary = {
+    ...base,
+    counters,
+    live_counters,
+    privacy_ok: assertNoRawPhoneInPayload({
+      counters,
+      latencies: base.latencies,
+      errors: base.errors,
+      live_counters
+    })
+  };
+
+  return summary;
+}
+
 export function summarizeCanaryCloseQuality(runtime = {}, flushResult = {}) {
   const events = flushResult.events ?? runtime.qualitySink?.getBufferedQualityEvents?.() ?? [];
   return buildCallQualitySummary(events, {

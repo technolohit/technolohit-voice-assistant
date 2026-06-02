@@ -131,3 +131,22 @@ LEFT JOIN closed c ON c.call_session_id = t.call_session_id
 WHERE c.call_session_id IS NULL
 ORDER BY t.turn_events DESC
 LIMIT 50;
+
+-- Live AudioSocket canary sessions (Phase 10G): summary events from gated v4_canary path
+SELECT
+  cqe.call_session_id,
+  cqe.tenant_id,
+  cqe.agent_id,
+  cqe.payload->>'live_phase' AS live_phase,
+  cqe.payload->'live_counters'->>'endpoint_count' AS endpoint_count,
+  cqe.payload->'live_counters'->>'stt_completed_count' AS stt_completed_count,
+  cqe.payload->'live_counters'->>'tts_completed_count' AS tts_completed_count,
+  cqe.payload->'live_counters'->>'barge_in_count' AS barge_in_count,
+  cqe.payload->>'close_reason' AS close_reason,
+  cqe.created_at
+FROM voice.call_quality_events cqe
+WHERE cqe.event_type = 'live_call_quality_summary'
+  AND cqe.created_at >= now() - interval '7 days'
+  AND cqe.tenant_id = 'technolohit'
+ORDER BY cqe.created_at DESC
+LIMIT 100;

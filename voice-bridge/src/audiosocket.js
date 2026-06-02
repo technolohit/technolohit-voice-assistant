@@ -126,7 +126,7 @@ export function createAudioSocketServer(config) {
       stopSilenceWriter(ctx);
       if (ctx.callHandler === "v4_canary") {
         try {
-          finishLiveCanaryCall(config, ctx, reason);
+          await finishLiveCanaryCall(config, ctx, reason);
         } catch (err) {
           console.error(`[v4-live] call_end_error error=${err?.message ?? String(err)}`);
         }

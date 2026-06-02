@@ -232,7 +232,7 @@ test("live canary OpenAI TTS feeds PCM into playback with mock socket", async ()
           synthesizeImplAsync: async () => pcm
         })
       });
-      assert.equal(runtime.phase, "phase10f_live_barge_in");
+      assert.equal(runtime.phase, "phase10g_live_quality_flush");
       assert.equal(runtime.ttsAdapter.provider, "openai");
 
       ctx.v4LiveRuntime = runtime;

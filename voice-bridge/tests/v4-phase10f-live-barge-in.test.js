@@ -213,7 +213,7 @@ test("10F: live barge-in uses VOICE_V4_BARGE_IN_ENABLED not spike flags", () => 
       assert.equal(isPlaybackCancelSpikeEnabled(config), true);
       assert.equal(isInterruptionContextSpikeEnabled(config), true);
       const runtime = createLiveCanaryRuntime(config, makeCtx({ bridgeCallId: "qa-canary-barge-flag" }));
-      assert.equal(runtime.phase, "phase10f_live_barge_in");
+      assert.equal(runtime.phase, "phase10g_live_quality_flush");
     }
   );
 });

@@ -25,6 +25,7 @@ import {
   resetUtteranceBuffer
 } from "./live-stt-endpoint.js";
 import { observeLiveCanaryBargeIn } from "./live-barge-in-endpoint.js";
+import { flushLiveCanaryQualityEvents } from "./live-quality-flush-endpoint.js";
 
 /**
  * Parse allowlist entries from config (comma/semicolon/whitespace separated).
@@ -300,7 +301,7 @@ export function handleLiveCanaryInboundFrame(config, ctx, _socket, payload) {
   });
 }
 
-export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
+export async function finishLiveCanaryCall(config, ctx, reason = "unknown", options = {}) {
   if (ctx?.callHandler !== "v4_canary") {
     return { ok: false, reason: "not_v4_canary_handler" };
   }
@@ -310,8 +311,31 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
   const durationMs = runtime?.startedAt ? Math.max(0, Date.now() - runtime.startedAt) : null;
   const sessionMetrics = runtime?.audioSession ? getAudioSessionMetrics(runtime.audioSession) : null;
 
+  let qualityFlush = { ok: false, reason: "not_run", inserted_count: 0, memory_only: true };
+  if (runtime) {
+    try {
+      qualityFlush = await flushLiveCanaryQualityEvents(config, ctx, runtime, {
+        insertFn: options.insertFn,
+        persistQualityToDb: options.persistQualityToDb,
+        closeReason: reason
+      });
+    } catch (err) {
+      const message = String(err?.message ?? err).slice(0, 120);
+      console.warn(
+        `[v4-live] quality_flush_failed reason=finish_exception error=${message} ${liveLogIds(ctx)}`
+      );
+      qualityFlush = {
+        ok: false,
+        reason: "finish_exception",
+        error: message,
+        inserted_count: 0,
+        memory_only: false
+      };
+    }
+  }
+
   console.log(
-    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} tts_completed_count=${runtime?.ttsCompletedCount ?? 0} playback_completed_count=${runtime?.playbackCompletedCount ?? 0} barge_in_count=${runtime?.bargeInCount ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] call_end reason=${reason} inbound_frame_count=${frameCount} speech_start_count=${runtime?.speechStartCount ?? 0} endpoint_count=${runtime?.endpointCount ?? 0} stt_completed_count=${runtime?.sttCompletedCount ?? 0} dialogue_completed_count=${runtime?.dialogueCompletedCount ?? 0} tts_completed_count=${runtime?.ttsCompletedCount ?? 0} playback_completed_count=${runtime?.playbackCompletedCount ?? 0} barge_in_count=${runtime?.bargeInCount ?? 0} quality_inserted=${qualityFlush.inserted_count ?? 0} duration_ms=${durationMs ?? "unknown"} ${liveLogIds(ctx)}`
   );
 
   ctx.v4LiveRuntime = null;
@@ -325,7 +349,9 @@ export function finishLiveCanaryCall(config, ctx, reason = "unknown") {
     dialogueCompletedCount: runtime?.dialogueCompletedCount ?? 0,
     ttsCompletedCount: runtime?.ttsCompletedCount ?? 0,
     playbackCompletedCount: runtime?.playbackCompletedCount ?? 0,
+    bargeInCount: runtime?.bargeInCount ?? 0,
     durationMs,
-    sessionMetrics
+    sessionMetrics,
+    qualityFlush
   };
 }

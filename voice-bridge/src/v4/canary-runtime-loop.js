@@ -160,7 +160,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     canaryReady: true,
     bargeInReady: Boolean(config?.v4?.bargeInEnabled),
     dialogueReady: true,
-    reason: "v4_live_canary_phase10f"
+    reason: "v4_live_canary_phase10g"
   };
 
   const bridgeCallId = ctx?.bridgeCallId ?? ctx?.bridge_call_id ?? "live-pending";
@@ -214,7 +214,7 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     active: true,
     dropCall: false,
     reason: route.reason,
-    phase: "phase10f_live_barge_in",
+    phase: "phase10g_live_quality_flush",
     liveCanary: true,
     config,
     runtimeContext,
@@ -228,6 +228,9 @@ export function createLiveCanaryRuntime(config, ctx, options = {}) {
     lastAssistantPlanCandidate: null,
     lastAssistantPlaybackCandidate: null,
     qualityEventsBuffer: [],
+    qualitySink: null,
+    qualityInsertFn: null,
+    lastQualityFlush: null,
     speechStartCount: 0,
     endpointCount: 0,
     sttCompletedCount: 0,
