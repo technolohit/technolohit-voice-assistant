@@ -100,8 +100,13 @@ export function updateMemoryFromAssistantTurn(memory, assistantText = "") {
 export function setSelectedProduct(memory, productId) {
   const next = touch(cloneMemory(memory));
   const id = productId ? normalizeText(productId) : null;
+  const prev = next.selected_product_id ?? next.current_product_context ?? null;
   next.selected_product_id = id;
   next.product_interest = id;
+  if (id) {
+    next.current_product_context = id;
+    if (prev && prev !== id) next.previous_product_context = prev;
+  }
   return next;
 }
 

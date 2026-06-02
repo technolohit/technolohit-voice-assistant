@@ -511,7 +511,27 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
 ORDER BY created_at;
 ```
 
-**Pass:** Every isolated “Stopp” has `single_stop_detected=true` on started/waiting events; product context stays on `smart_website` after switch; no generic “nicht verstanden” on scoped pricing questions.
+**Pass:** After switch to `smart_website`, `response_plan_created.response_type=product_question_answer` for generic follow-ups; `current_product_context=smart_website` on `turn_started` / `response_plan_created`; stable `interrupt_sequence_id` across follow-up events.
+
+### G.3f Post-interruption product context (Phase 10S)
+
+After interrupt switch to Smart Website, ask **“Was kostet das?”** and **“Wie funktioniert das?”** without naming the product again.
+
+```sql
+SELECT event_type,
+       payload->>'interrupt_sequence_id',
+       payload->>'current_product_context',
+       payload->>'previous_product_context',
+       payload->>'response_type',
+       payload->>'plan_reason'
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN ('response_plan_created', 'turn_started', 'interrupt_followup_continuation_received')
+ORDER BY created_at DESC
+LIMIT 15;
+```
+
+**Pass:** `current_product_context=smart_website`; no `fallback_clarification` / `collect_sales_context` for generic product questions unless caller starts sales/contact flow.
 
 ### G.4 Session close + privacy-oriented payload scan
 
@@ -566,6 +586,12 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
       - 'followup_endpoint_to_stt_completed_ms'
       - 'barge_in_detected_to_playback_cancelled_ms'
       - 'barge_in_detected_to_followup_speech_start_ms'
+      - 'interrupt_sequence_id'
+      - 'parent_single_stop_detected'
+      - 'plan_reason'
+      - 'current_product_context'
+      - 'previous_product_context'
+      - 'matched_product'
       - 'bridge_call_id'
       - 'call_session_id'
       - 'external_call_id'

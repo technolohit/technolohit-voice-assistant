@@ -5,6 +5,11 @@
 import { normalizeText } from "./redaction.js";
 import { matchProductAlias, getProductById } from "./agent-config.js";
 import { detectShortFollowUpCategory } from "./playbook-short-answer.js";
+import {
+  isGenericScopedProductQuestion,
+  resolveCurrentProductContext,
+  resolvePreviousProductContext,
+} from "./product-context-persistence.js";
 import { isDefiniteCallerGoodbye, isInterruptionFollowUpPhrase } from "./transcript-intent.js";
 
 const PRODUCT_SYNONYMS = [
@@ -103,11 +108,22 @@ export function resolveClosedDomainIntent({
 
   const aliasProduct = agentConfig ? matchProductAlias(agentConfig, transcript) : null;
   const synonymProduct = scoreProductFromSynonyms(lower);
-  let matched_product = aliasProduct?.id ?? synonymProduct.id ?? memory?.selected_product_id ?? null;
+  const currentContext = resolveCurrentProductContext(memory);
+  let matched_product =
+    aliasProduct?.id ?? synonymProduct.id ?? currentContext ?? memory?.selected_product_id ?? null;
   let product_confidence = aliasProduct ? 0.92 : synonymProduct.confidence;
+  if (!matched_product && currentContext) {
+    matched_product = currentContext;
+    product_confidence = Math.max(product_confidence, 0.72);
+  }
   if (!matched_product && memory?.selected_product_id) {
     matched_product = memory.selected_product_id;
     product_confidence = Math.max(product_confidence, 0.55);
+  }
+
+  if (currentContext && isGenericScopedProductQuestion(transcript)) {
+    matched_product = currentContext;
+    product_confidence = Math.max(product_confidence, 0.85);
   }
 
   let intent = "product_question";
@@ -142,8 +158,11 @@ export function resolveClosedDomainIntent({
     intent_confidence < 0.55 &&
     !matched_product &&
     !(
-      memory?.selected_product_id &&
-      (intent === "pricing" || intent === "capability" || intent === "contact")
+      currentContext &&
+      (isGenericScopedProductQuestion(transcript) ||
+        intent === "pricing" ||
+        intent === "capability" ||
+        intent === "contact")
     );
   let clarification_type = null;
   if (is_low_confidence) {
@@ -183,13 +202,14 @@ export function buildLowConfidenceClarificationText(domain, agentConfig) {
 
 export function closedDomainQualityPayload(domain, memory = {}) {
   if (!domain) return {};
+  const current = resolveCurrentProductContext(memory);
   return {
     intent_confidence: domain.intent_confidence ?? null,
     product_confidence: domain.product_confidence ?? null,
-    matched_product: domain.matched_product ?? null,
-    previous_product_context: memory?.interruption_context?.interrupted_product_id ?? memory?.product_interest ?? null,
-    current_product_context: memory?.selected_product_id ?? domain.matched_product ?? null,
+    matched_product: domain.matched_product ?? current ?? null,
+    previous_product_context: resolvePreviousProductContext(memory),
+    current_product_context: current,
     low_confidence_clarification: domain.is_low_confidence ? domain.clarification_type ?? true : null,
-    closed_domain_intent: domain.intent ?? null
+    closed_domain_intent: domain.intent ?? null,
   };
 }

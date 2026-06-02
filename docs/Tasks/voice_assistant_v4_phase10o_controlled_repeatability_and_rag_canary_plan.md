@@ -3,9 +3,9 @@
 Date: 2026-06-02  
 Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md) — **v1.25.0 supervised canary PASS** (`call_session_id=9061f2db-713f-4d89-84d0-146e2571eb5f`).
 
-**Phase 10O-A status: FAILED (stopped).** Repeatability failed on v1.25.0–v1.27.0 (premature “Gerne…”, double Stop/Stopp, repeated-interrupt degradation). **v1.27.0 / 10Q:** PARTIAL — first stop improved. See [10P](./voice_assistant_v4_phase10p_turn_taking_interruption_wait_report.md), [10Q](./voice_assistant_v4_phase10q_single_stop_reliability_report.md), [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md).
+**Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): BLOCKED** until Phase 10O-A passes on **v1.28.0+** (10R repeated-interrupt fix).
+**Phase 10O-B (RAG-on): BLOCKED** until Phase 10O-A passes on **v1.29.0+**.
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 

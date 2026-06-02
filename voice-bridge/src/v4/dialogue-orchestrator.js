@@ -34,6 +34,7 @@ import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
 } from "./closed-domain-intent.js";
+import { planContextQualityPayload } from "./product-context-persistence.js";
 import {
   resolveInterruptionRecovery,
   captureInterruptedAssistantState
@@ -220,10 +221,12 @@ export async function decideNextAction(orchestrator, input = {}) {
   bufferEvent(orchestrator, "turn_started", {
     turn_index: orchestrator.turnIndex,
     ...closedDomainQualityPayload(closedDomain, orchestrator.memory),
+    interrupt_sequence_id:
+      input.interrupt_sequence_id ?? orchestrator.activeInterruptSequenceId ?? null,
     effective_transcript_chars: String(transcript ?? "").length,
     waiting_for_interruption_followup: Boolean(input.waitingForInterruptionFollowup),
     interrupt_marker_detected: Boolean(input.interruptMarkerDetected),
-    interrupt_followup_timeout: Boolean(input.interruptFollowupTimeout)
+    interrupt_followup_timeout: Boolean(input.interruptFollowupTimeout),
   });
 
   const intent =
@@ -448,8 +451,16 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
     response_type: resolvedPlan?.response_type ?? null,
     response_chars: responseText.length,
     intent: resolvedPlan?.intent ?? null,
-    next_state: toState
+    next_state: toState,
+    ...planContextQualityPayload(
+      orchestrator.memory,
+      orchestrator.lastClosedDomain,
+      resolvedPlan,
+      { activeInterruptSequenceId: orchestrator.activeInterruptSequenceId },
+    ),
   });
+
+  orchestrator.activeInterruptSequenceId = null;
 
   orchestrator.memory = memory;
   orchestrator.stateMachine = stateMachine;

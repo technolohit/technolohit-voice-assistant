@@ -35,12 +35,12 @@ Last updated: 2026-06-02
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10R — repeated/nested interruption stability (post 10Q partial canary)** |
-| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); canary baseline **`voice-bridge-v1.25.0`**; fix target **`voice-bridge-v1.28.0`** |
-| **v4 live canary** | **v1.27.0 PARTIAL** (single stop improved); **10R** addresses repeated/nested interrupts |
+| **Current completed phase** | **Phase 10S — post-interruption product context persistence (post 10R partial canary)** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); canary baseline **`voice-bridge-v1.25.0`**; fix target **`voice-bridge-v1.29.0`** |
+| **v4 live canary** | **v1.28.0 PARTIAL/STRONG** (interrupts); **10S** fixes scoped Q&A after product switch |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Re-run **10O-A** on v1.28.0+; **10O-B RAG-on blocked** — [10R report](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md) |
+| **Next step** | Re-run **10O-A** on v1.29.0+; **10O-B RAG-on blocked** — [10S report](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md) |
 
 Completed foundation work (do not re-implement):
 
@@ -1099,7 +1099,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 10: Live AudioSocket → v4 Canary Wiring
 
-**Status: Phases 10A–10R implemented; v1.25.0 single canary PASS; 10O-A failed on v1.26.0/v1.27.0; 10Q partial; 10R repeated-interrupt fix pending re-validation; production v4 NOT globally enabled.**
+**Status: Phases 10A–10S implemented; v1.25.0 single canary PASS; 10O-A failed through v1.28.0; 10S product-context fix pending 10O-A re-validation; production v4 NOT globally enabled.**
 
 - [x] Successful: Current blocker documented (live PSTN v3 vs v4 harness).
 - [x] Successful: Target flag-gated canary architecture defined.
@@ -1127,9 +1127,9 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10M short canary on v1.24.0+ proves `live_call_quality_summary` + infra (STT/TTS/barge-in) — conversational interruption follow-up failed.
 - [x] Successful: Phase 10N interruption follow-up intent, product context preserve/switch, playbook short answers, latency stash, barge-in quality validation — report [phase10n](./voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md).
 - [x] Successful: Phase 10N short canary on **v1.25.0** proves follow-up acknowledgement, pricing answer, warm goodbye, non-NULL latency, `barge_in_detected` in SQL — `call_session_id=9061f2db-713f-4d89-84d0-146e2571eb5f` — report [phase10n](./voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md).
-- [x] Successful: Phase 10Q hard single-stop reliability — [report](./voice_assistant_v4_phase10q_single_stop_reliability_report.md). **v1.27.0 canary PARTIAL** (first stop improved; repeated interrupts still weak).
-- [x] Successful: Phase 10R repeated/nested interruption stability — cycle reset, stale recovery clear, timing privacy exempt — [report](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md).
-- [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.28.0+ — **failed on v1.25.0–v1.27.0; retry after 10R**.
+- [x] Successful: Phase 10R repeated/nested interruption stability — [report](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md). **v1.28.0 canary PARTIAL/STRONG**.
+- [x] Successful: Phase 10S post-interruption product context persistence — scoped generic Q&A, `interrupt_sequence_id` — [report](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
+- [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.29.0+ — **failed through v1.28.0; retry after 10S**.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary — **blocked until 10O-A passes** — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).
 
@@ -1191,7 +1191,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **10R repeated-interrupt stability** shipped in repo; **10O-A failed** through v1.27.0; re-validate on v1.28.0+; **10O-B RAG blocked**; production v4 **not globally enabled**.
+- Phase 10 live AudioSocket wiring: **10S product-context persistence** shipped in repo; **10O-A failed** through v1.28.0; re-validate on v1.29.0+; **10O-B RAG blocked**; production v4 **not globally enabled**.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **Phase 10H supervised PSTN QA pass**, and explicit production approval.
 
 ### Phase 10H — Supervised live PSTN QA (documentation)

@@ -4,6 +4,7 @@
 
 import { clearInterruptionAfterRecovery } from "./interruption-context.js";
 import { V4_STATES } from "./state-machine.js";
+import { resolveInterruptSequenceId } from "./product-context-persistence.js";
 
 /**
  * Clear pending follow-up wait state before starting a new barge-in cycle.
@@ -19,6 +20,11 @@ export function resetInterruptFollowupForNewBargeIn(runtime) {
  */
 export function finalizeInterruptFollowupAfterContinuation(runtime) {
   if (!runtime) return;
+  const seqId = resolveInterruptSequenceId(runtime);
+  if (seqId) runtime.activeInterruptSequenceId = seqId;
+  if (runtime.interruptFollowup?.singleStopDetected) {
+    runtime.parentSingleStopDetected = true;
+  }
   runtime.waitingForInterruptionFollowup = false;
   runtime.interruptFollowup = null;
   runtime.interruptFollowupLatency = null;

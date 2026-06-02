@@ -4,6 +4,7 @@
 
 import { normalizeText } from "./redaction.js";
 import { matchProductAlias } from "./agent-config.js";
+import { isGenericScopedProductQuestion } from "./product-context-persistence.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -106,6 +107,9 @@ export function detectTranscriptIntent(transcript = "", memory = {}, agentConfig
   if (/\b(telefon|telefonisch|anruf|anrufen)\b/i.test(lower)) return "contact_phone";
   if (/\b(ja|einverstanden|gerne|ok)\b/i.test(lower) && memory?.contact_preference) {
     return "callback_permission_granted";
+  }
+  if (memory?.selected_product_id && isGenericScopedProductQuestion(transcript)) {
+    return "product_question";
   }
   return "unclear";
 }

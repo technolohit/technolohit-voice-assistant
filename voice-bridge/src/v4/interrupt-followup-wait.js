@@ -30,6 +30,9 @@ import {
   markInterruptFollowupLatency,
 } from "./interrupt-followup-latency.js";
 import {
+  resolveInterruptSequenceId,
+} from "./product-context-persistence.js";
+import {
   buildInterruptFollowupStartedEvent,
   buildInterruptFollowupWaitingEvent,
   buildInterruptFollowupContinuationReceivedEvent,
@@ -106,9 +109,11 @@ function bufferQualityEvent(runtime, event) {
 function buildFollowupEventPayload(runtime, extra = {}) {
   const followup = runtime?.interruptFollowup ?? {};
   const latency = runtime?.interruptFollowupLatency ?? {};
+  const interruptSequenceId = resolveInterruptSequenceId(runtime);
   return {
     bridge_call_id: runtime?.runtimeContext?.memory?.bridge_call_id ?? null,
-    live_phase: "phase10r_interrupt_followup",
+    live_phase: "phase10s_interrupt_followup",
+    interrupt_sequence_id: interruptSequenceId,
     single_stop_detected: Boolean(followup.singleStopDetected),
     marker_only: Boolean(followup.markerOnly ?? extra.marker_only),
     marker_chars: followup.markerChars ?? extra.marker_chars ?? null,
@@ -170,6 +175,7 @@ export function beginInterruptFollowupWaitOnBargeIn(
     interruptCycle: (runtime.interruptFollowupCycleCount ?? 0) + 1,
   };
   runtime.interruptFollowupCycleCount = runtime.interruptFollowup.interruptCycle;
+  runtime.activeInterruptSequenceId = `interrupt-${runtime.interruptFollowup.interruptCycle}`;
   beginInterruptFollowupLatency(runtime, atMs);
   markInterruptFollowupLatency(runtime, "playback_cancelled", atMs);
   markInterruptFollowupLatency(runtime, "stop_detected", atMs);
@@ -196,6 +202,7 @@ export function beginInterruptFollowupWaitOnBargeIn(
     stop_detected_ms: atMs,
     single_stop_detected: true,
     marker_only: false,
+    interrupt_sequence_id: runtime.activeInterruptSequenceId,
   });
 }
 
@@ -230,6 +237,8 @@ function applyContinuationResult(
   followup.continuationChars = continuationCharCount(effective);
   runtime.interruptFollowup = followup;
 
+  const parentSingleStop = Boolean(followup.singleStopDetected);
+
   bufferFollowupQualityEvent(
     config,
     ctx,
@@ -241,6 +250,8 @@ function applyContinuationResult(
       effective_transcript_chars: effective.length,
       marker_only: false,
       single_stop_detected: split.single_stop_detected,
+      parent_single_stop_detected: parentSingleStop,
+      interrupt_sequence_id: resolveInterruptSequenceId(runtime),
     },
   );
 
@@ -325,6 +336,7 @@ export function processInterruptFollowupAfterStt(
         continuation_chars: 0,
         effective_transcript_chars: transcript.length,
         wait_window_started_ms: atMs,
+        interrupt_sequence_id: resolveInterruptSequenceId(runtime),
       },
     );
 
@@ -403,6 +415,7 @@ export function bufferInterruptFollowupTimeoutEvent(config, ctx, runtime) {
       marker_only: true,
       single_stop_detected: Boolean(runtime?.interruptFollowup?.singleStopDetected),
       wait_window_started_ms: runtime?.interruptFollowup?.waitWindowStartedMs ?? null,
+      interrupt_sequence_id: resolveInterruptSequenceId(runtime),
     },
   );
 }

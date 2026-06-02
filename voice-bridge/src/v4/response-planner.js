@@ -16,8 +16,14 @@ import {
   hasSubstantiveFollowUpContent
 } from "./playbook-short-answer.js";
 import {
-  buildLowConfidenceClarificationText
+  buildLowConfidenceClarificationText,
+  resolveClosedDomainIntent,
 } from "./closed-domain-intent.js";
+import {
+  isScopedProductQaTurn,
+  resolveCurrentProductContext,
+  shouldEnterSalesQualification,
+} from "./product-context-persistence.js";
 import { shouldUseRagForTurn, fallbackToPlaybook } from "./rag-orchestrator.js";
 import { V4_STATES } from "./state-machine.js";
 
@@ -53,8 +59,75 @@ function planBase(type, overrides = {}) {
     allowed_tools: [],
     rag_allowed: false,
     lead_transition_allowed: false,
-    ...overrides
+    plan_reason: null,
+    ...overrides,
   };
+}
+
+function productContextMemoryPatch(memory, productId, extra = {}) {
+  const id = productId ?? resolveCurrentProductContext(memory);
+  return {
+    selected_product_id: id,
+    product_interest: id,
+    current_product_context: id,
+    previous_product_context:
+      memory?.previous_product_context ??
+      memory?.interruption_context?.interrupted_product_id ??
+      null,
+    interruption_context: null,
+    current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+    ...extra,
+  };
+}
+
+function planScopedProductAnswer({
+  agentConfig,
+  memory,
+  transcript,
+  ragAnswer = null,
+  ragGate = null,
+  planReason = "scoped_product_qa",
+}) {
+  const productId = resolveCurrentProductContext(memory);
+  const category = detectShortFollowUpCategory(transcript);
+  const product = productId ? getProductById(agentConfig, productId) : null;
+
+  if (category) {
+    const answer = sanitizeResponseText(
+      buildPlaybookShortAnswer(agentConfig, productId, category),
+    );
+    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+      text: answer,
+      next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+      memory_patch: productContextMemoryPatch(memory, productId),
+      quality_event_type: "turn_started",
+      rag_allowed: false,
+      plan_reason: planReason,
+    });
+  }
+
+  const playbookAnswer = productId
+    ? buildPlaybookShortAnswer(agentConfig, productId, "how_it_works")
+    : null;
+  const answer =
+    ragAnswer ??
+    (playbookAnswer
+      ? sanitizeResponseText(playbookAnswer)
+      : sanitizeResponseText(
+          product
+            ? `${product.display_name} wird individuell nach Bedarf kalkuliert. Möchten Sie mehr Details?`
+            : "Gerne. Was möchten Sie dazu wissen?",
+        ));
+
+  return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+    text: answer,
+    next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+    memory_patch: productContextMemoryPatch(memory, productId),
+    quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
+    allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
+    rag_allowed: gateUsesRag(ragGate),
+    plan_reason: planReason,
+  });
 }
 
 function productDisplayName(agentConfig, productId) {
@@ -190,6 +263,25 @@ export function buildResponsePlan({
     shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
   const postContactProductQa = isPostContactProductQuestion(memory, transcript, resolvedIntent);
 
+  const closedDomainResolved =
+    closedDomain ??
+    resolveClosedDomainIntent({ agentConfig, transcript, memory });
+
+  if (
+    isScopedProductQaTurn(memory, transcript, closedDomainResolved) &&
+    !interruptFollowupTimeout &&
+    !shouldEnterSalesQualification(transcript, resolvedIntent)
+  ) {
+    return planScopedProductAnswer({
+      agentConfig,
+      memory,
+      transcript,
+      ragAnswer,
+      ragGate: gate,
+      planReason: interruptionRecovery ? "interrupt_scoped_product_qa" : "scoped_product_qa",
+    });
+  }
+
   if (resolvedIntent === "closing") {
     return planBase(RESPONSE_TYPES.CLOSING, {
       text: sanitizeResponseText(getWarmGoodbyeResponseText()),
@@ -266,14 +358,18 @@ export function buildResponsePlan({
 
   if (interruptionRecovery?.recoveryAction === "product_switch") {
     const product = getProductById(agentConfig, memory.selected_product_id);
+    const productId = memory.selected_product_id;
     return planBase(RESPONSE_TYPES.INTERRUPTION_RECOVERY, {
       text: sanitizeResponseText(
-        `Alles klar, wir wechseln zu ${product?.display_name ?? "Ihrem Thema"}. Wie kann ich Ihnen helfen?`
+        `Alles klar, wir wechseln zu ${product?.display_name ?? "Ihrem Thema"}. Wie kann ich Ihnen helfen?`,
       ),
-      next_state: V4_STATES.COLLECTING_SALES_CONTEXT,
-      memory_patch: { current_state: V4_STATES.COLLECTING_SALES_CONTEXT },
+      next_state: V4_STATES.LISTENING,
+      memory_patch: productContextMemoryPatch(memory, productId, {
+        current_state: V4_STATES.LISTENING,
+      }),
       quality_event_type: "interruption_recovered",
-      rag_allowed: false
+      rag_allowed: false,
+      plan_reason: "product_switch_ack",
     });
   }
 
@@ -297,30 +393,36 @@ export function buildResponsePlan({
 
   if (
     resolvedIntent === "unclear" &&
-    closedDomain?.is_low_confidence &&
-    closedDomain?.clarification_type
+    closedDomainResolved?.is_low_confidence &&
+    closedDomainResolved?.clarification_type &&
+    !isScopedProductQaTurn(memory, transcript, closedDomainResolved)
   ) {
     return planBase(RESPONSE_TYPES.FALLBACK_CLARIFICATION, {
-      text: sanitizeResponseText(buildLowConfidenceClarificationText(closedDomain, agentConfig)),
+      text: sanitizeResponseText(buildLowConfidenceClarificationText(closedDomainResolved, agentConfig)),
       next_state: V4_STATES.LISTENING,
       memory_patch: {
         current_state: V4_STATES.LISTENING,
         selected_product_id:
-          closedDomain.matched_product && closedDomain.product_confidence >= 0.7
-            ? closedDomain.matched_product
-            : memory.selected_product_id
+          closedDomainResolved.matched_product && closedDomainResolved.product_confidence >= 0.7
+            ? closedDomainResolved.matched_product
+            : memory.selected_product_id,
+        current_product_context:
+          resolveCurrentProductContext(memory) ??
+          closedDomainResolved.matched_product ??
+          null,
       },
       quality_event_type: "turn_started",
-      rag_allowed: false
+      rag_allowed: false,
+      plan_reason: "low_confidence_clarification",
     });
   }
 
   if (
-    closedDomain?.matched_product &&
-    closedDomain.product_confidence >= 0.75 &&
+    closedDomainResolved?.matched_product &&
+    closedDomainResolved.product_confidence >= 0.75 &&
     !memory.selected_product_id
   ) {
-    memory = { ...memory, selected_product_id: closedDomain.matched_product };
+    memory = { ...memory, selected_product_id: closedDomainResolved.matched_product };
   }
 
   if (resolvedIntent === "greeting" || state === V4_STATES.GREETING) {

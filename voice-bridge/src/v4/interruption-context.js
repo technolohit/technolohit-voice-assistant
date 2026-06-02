@@ -14,8 +14,9 @@ import {
   attachInterruptionContext,
   clearInterruptionContext,
   setSelectedProduct,
-  updateMemoryFromUserTurn
+  updateMemoryFromUserTurn,
 } from "./call-session-memory.js";
+import { persistProductContextSwitch } from "./product-context-persistence.js";
 import { V4_STATES, transitionState } from "./state-machine.js";
 import { getPlaybackMetrics } from "./playback-controller.js";
 
@@ -175,7 +176,11 @@ export function resolveInterruptionRecovery({
   let recoveryAction = switchInfo.recoveryAction;
 
   if (switchInfo.recoveryAction === "product_switch" && switchInfo.detectedProductId) {
-    nextMemory = applyProductSwitchToMemory(nextMemory, switchInfo.detectedProductId);
+    nextMemory = persistProductContextSwitch(
+      applyProductSwitchToMemory(nextMemory, switchInfo.detectedProductId),
+      switchInfo.detectedProductId,
+      withUtterance.interrupted_product_id ?? memory?.selected_product_id,
+    );
     nextMemory = updateMemoryFromUserTurn(nextMemory, callerText);
     nextStateMachine = transitionState(nextStateMachine, V4_STATES.THINKING, "interruption_product_switch");
     recoveryAction = "product_switch";

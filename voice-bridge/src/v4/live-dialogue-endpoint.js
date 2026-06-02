@@ -169,12 +169,14 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     }
 
     const decideFn = runtime?.liveDialogueHooks?.decideNextAction ?? decideNextAction;
+    orchestrator.activeInterruptSequenceId = runtime.activeInterruptSequenceId ?? null;
     const action = await decideFn(orchestrator, {
       transcript,
       interruptionRecovery,
       interruptFollowupTimeout: Boolean(callerCandidate.interruptFollowupTimeout),
       waitingForInterruptionFollowup: Boolean(runtime.waitingForInterruptionFollowup),
-      interruptMarkerDetected: Boolean(runtime.interruptFollowup?.markerTranscript)
+      interruptMarkerDetected: Boolean(runtime.interruptFollowup?.markerTranscript),
+      interrupt_sequence_id: runtime.activeInterruptSequenceId ?? null,
     });
     const prepared = prepareAssistantResponse(orchestrator, action.plan);
     if (!prepared?.ok) {
@@ -230,6 +232,8 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     if (interruptionRecovery) {
       clearStaleInterruptionRecovery(runtime);
     }
+    runtime.activeInterruptSequenceId = null;
+    runtime.parentSingleStopDetected = null;
 
     return {
       ok: true,
