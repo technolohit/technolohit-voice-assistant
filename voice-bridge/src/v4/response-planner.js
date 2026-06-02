@@ -80,7 +80,8 @@ function planInterruptionFollowUp({
   resolvedIntent,
   interruptionRecovery,
   ragAnswer,
-  ragGate
+  ragGate,
+  closedDomain = null,
 }) {
   const interruptedId =
     interruptionRecovery?.context?.interrupted_product_id ??
@@ -88,6 +89,7 @@ function planInterruptionFollowUp({
     null;
   const productId =
     memory.selected_product_id ??
+    closedDomain?.matched_product ??
     interruptionRecovery?.context?.detected_product_id ??
     interruptedId ??
     matchProductAlias(agentConfig, transcript)?.id;
@@ -202,13 +204,65 @@ export function buildResponsePlan({
   }
 
   const interruptionFollowUp =
-    resolvedIntent === "interruption_followup" ||
-    resolvedIntent === "topic_repair" ||
-    resolvedIntent === "interruption_recovery" ||
-    interruptionRecovery?.recoveryAction === "interruption_followup" ||
-    interruptionRecovery?.recoveryAction === "continue_same_topic" ||
-    interruptionRecovery?.recoveryAction === "product_question" ||
-    Boolean(memory?.interruption_context);
+    Boolean(interruptionRecovery) &&
+    (resolvedIntent === "interruption_followup" ||
+      resolvedIntent === "topic_repair" ||
+      resolvedIntent === "interruption_recovery" ||
+      interruptionRecovery?.recoveryAction === "interruption_followup" ||
+      interruptionRecovery?.recoveryAction === "continue_same_topic" ||
+      interruptionRecovery?.recoveryAction === "product_question");
+
+  const knownProductScopedQuestion =
+    Boolean(memory?.selected_product_id) &&
+    (closedDomain?.intent === "pricing" ||
+      closedDomain?.intent === "capability" ||
+      closedDomain?.intent === "contact" ||
+      detectShortFollowUpCategory(transcript));
+
+  if (
+    Boolean(interruptionRecovery) &&
+    knownProductScopedQuestion &&
+    !interruptFollowupTimeout
+  ) {
+    const productId = memory.selected_product_id;
+    const category = detectShortFollowUpCategory(transcript);
+    if (category) {
+      const answer = sanitizeResponseText(
+        buildPlaybookShortAnswer(agentConfig, productId, category),
+      );
+      return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+        text: answer,
+        next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+        memory_patch: interruptionMemoryPatch(memory, productId),
+        quality_event_type: "turn_started",
+        rag_allowed: false,
+      });
+    }
+    if (resolvedIntent === "product_question" || closedDomain?.intent === "pricing") {
+      const product = getProductById(agentConfig, productId);
+      const playbookAnswer =
+        category && productId
+          ? buildPlaybookShortAnswer(agentConfig, productId, category)
+          : null;
+      const answer =
+        ragAnswer ??
+        (playbookAnswer
+          ? sanitizeResponseText(playbookAnswer)
+          : sanitizeResponseText(
+              product
+                ? `${product.display_name} wird individuell nach Bedarf kalkuliert. Möchten Sie mehr Details?`
+                : "Gerne. Was möchten Sie dazu wissen?",
+            ));
+      return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+        text: answer,
+        next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+        memory_patch: interruptionMemoryPatch(memory, productId),
+        quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
+        allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
+        rag_allowed: gateUsesRag(ragGate),
+      });
+    }
+  }
 
   if (interruptionRecovery?.recoveryAction === "product_switch") {
     const product = getProductById(agentConfig, memory.selected_product_id);
@@ -236,7 +290,8 @@ export function buildResponsePlan({
       resolvedIntent,
       interruptionRecovery,
       ragAnswer,
-      ragGate: gate
+      ragGate: gate,
+      closedDomain,
     });
   }
 

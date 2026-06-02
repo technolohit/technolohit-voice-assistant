@@ -186,14 +186,15 @@ export function resolveInterruptionRecovery({
     if (
       withUtterance.interrupted_product_id &&
       !switchInfo.detectedProductId &&
+      !nextMemory.selected_product_id &&
       (switchInfo.recoveryAction === "interruption_followup" ||
         switchInfo.recoveryAction === "continue_same_topic" ||
         switchInfo.recoveryAction === "product_question")
     ) {
       nextMemory = {
         ...nextMemory,
-        selected_product_id: nextMemory.selected_product_id ?? withUtterance.interrupted_product_id,
-        product_interest: nextMemory.product_interest ?? withUtterance.interrupted_product_id
+        selected_product_id: withUtterance.interrupted_product_id,
+        product_interest: withUtterance.interrupted_product_id,
       };
     }
     nextMemory = updateMemoryFromUserTurn(nextMemory, callerText);

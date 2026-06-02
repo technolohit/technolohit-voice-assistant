@@ -485,6 +485,34 @@ LIMIT 10;
 
 **Pass:** After a single “Stopp” during assistant speech: `interrupt_followup_started` + `interrupt_followup_waiting` with `single_stop_detected=true`; no immediate TTS; continuation or timeout event follows. **Fail:** Caller must repeat Stop/Stopp (pre-10Q) or no follow-up events after barge-in.
 
+### G.3e Repeated / nested interruption (Phase 10R)
+
+During one canary call, run this sequence on **v1.28.0+**:
+
+1. Let assistant explain **Digitale Rezeption** → say **“Stopp”** once → wait → ask **“Was kostet das?”** → confirm pricing answer (no second stop).
+2. Say **“Stopp, ich meine Smart Website”** → confirm product switch → ask **“Was kostet das?”** again → confirm pricing scoped to **Smart Website** (not voice_agent).
+3. Interrupt again mid-explanation with **“Stopp”** only → confirm playback cancels and assistant stays silent until you continue or timeout.
+
+```sql
+SELECT event_type,
+       payload->>'single_stop_detected',
+       payload->>'marker_only',
+       payload->>'matched_product',
+       payload->>'current_product_context'
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN (
+    'interrupt_followup_started',
+    'interrupt_followup_waiting',
+    'interrupt_followup_continuation_received',
+    'interrupt_followup_timeout',
+    'turn_started'
+  )
+ORDER BY created_at;
+```
+
+**Pass:** Every isolated “Stopp” has `single_stop_detected=true` on started/waiting events; product context stays on `smart_website` after switch; no generic “nicht verstanden” on scoped pricing questions.
+
 ### G.4 Session close + privacy-oriented payload scan
 
 ```sql
@@ -494,7 +522,7 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
   AND event_type IN ('audio_session_closed', 'live_call_quality_summary');
 ```
 
-**Privacy scan note (Phase 10N / v1.25.0):** A naive `payload::text ~ '\+?\d{8,}'` scan can **false-positive** on telemetry-only numeric fields (e.g. `last_rms`, `playback_ms_at_trigger`, `triggered_at` epoch ms, frame/byte counters). Those are not caller phone numbers. Use the corrected query below: exclude known telemetry keys for `barge_in_detected` (and version metadata), but still fail on phone-like patterns in **string** transcript/email/phone fields.
+**Privacy scan note (Phase 10N / v1.25.0, updated 10R):** A naive `payload::text ~ '\+?\d{8,}'` scan can **false-positive** on telemetry-only numeric fields (RMS, frame counters, **interrupt timing epoch-ms fields**). Those are not caller phone numbers. Use the corrected query below: exclude known telemetry keys for `barge_in_detected` and interrupt-followup events (and version metadata), but still fail on phone-like patterns in **string** transcript/email/phone fields.
 
 ```sql
 -- Legacy broad scan (may false-positive on telemetry numerics — do not use alone after v1.25.0).
@@ -505,7 +533,7 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
 ```
 
 ```sql
--- Corrected privacy scan: exclude version metadata + barge-in telemetry numerics.
+-- Corrected privacy scan: exclude version metadata + barge-in / interrupt timing telemetry.
 -- Still scans all remaining payload text (transcript/email/phone/string fields remain strict).
 SELECT id, event_type, created_at
 FROM voice.call_quality_events
@@ -525,6 +553,19 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
       - 'frames_sent_before_cancel'
       - 'trigger_count'
       - 'triggered_at'
+      - 'stop_detected_ms'
+      - 'playback_cancelled_ms'
+      - 'wait_window_started_ms'
+      - 'continuation_endpoint_ms'
+      - 'continuation_speech_started_ms'
+      - 'stop_to_cancel_ms'
+      - 'stop_to_wait_window_ms'
+      - 'wait_window_to_continuation_ms'
+      - 'followup_stt_completed_to_plan_ms'
+      - 'followup_plan_to_first_playback_ms'
+      - 'followup_endpoint_to_stt_completed_ms'
+      - 'barge_in_detected_to_playback_cancelled_ms'
+      - 'barge_in_detected_to_followup_speech_start_ms'
       - 'bridge_call_id'
       - 'call_session_id'
       - 'external_call_id'

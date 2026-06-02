@@ -138,7 +138,13 @@ export function resolveClosedDomainIntent({
     intent_confidence = 0.72;
   }
 
-  const is_low_confidence = intent_confidence < 0.55 && !matched_product;
+  const is_low_confidence =
+    intent_confidence < 0.55 &&
+    !matched_product &&
+    !(
+      memory?.selected_product_id &&
+      (intent === "pricing" || intent === "capability" || intent === "contact")
+    );
   let clarification_type = null;
   if (is_low_confidence) {
     clarification_type = "domain_clarification";

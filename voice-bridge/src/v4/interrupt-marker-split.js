@@ -14,6 +14,15 @@ const EXACT_MARKER =
 const LEADING_MARKER =
   /^\s*(stopp|stop|halt|moment|warte)(\s*,?\s*(stopp|stop))?(\s+bitte)?\s*([.!?,:]\s*|\s+)/i;
 
+export function resolveSingleStopDetected(transcript = "", split = null) {
+  const s =
+    split ?? splitInterruptMarkerAndContinuation(transcript);
+  if (s.single_stop_detected) return true;
+  if (s.marker && (EXACT_MARKER.test(s.marker.trim()) || isHardStopMarkerText(s.marker)))
+    return true;
+  return isHardStopMarkerText(transcript);
+}
+
 export function isHardStopMarkerText(transcript = "") {
   const text = normalizeText(transcript);
   if (!text) return false;
@@ -61,9 +70,12 @@ export function splitInterruptMarkerAndContinuation(transcript = "") {
     (!continuation || !continuationSubstantive) &&
     (EXACT_MARKER.test(marker) || isHardStopMarkerText(marker));
 
-  const single_stop_detected =
-    Boolean(marker) &&
-    (marker_only || isHardStopMarkerText(marker) || isHardStopMarkerText(text));
+  const single_stop_detected = resolveSingleStopDetected(text, {
+    marker,
+    continuation: continuationSubstantive ? continuation : marker_only ? "" : text,
+    marker_only,
+    single_stop_detected: false,
+  });
 
   return {
     marker,

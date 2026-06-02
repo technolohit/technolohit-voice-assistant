@@ -24,13 +24,56 @@ const VERSION_METADATA_KEYS = new Set([
   "knowledge_version",
 ]);
 
+/** Epoch-ms / latency telemetry — excluded from digit-based phone heuristics (Phase 10R). */
+export const TIMING_TELEMETRY_PAYLOAD_KEYS = [
+  "stop_detected_ms",
+  "playback_cancelled_ms",
+  "wait_window_started_ms",
+  "continuation_endpoint_ms",
+  "continuation_speech_started_ms",
+  "stop_to_cancel_ms",
+  "stop_to_wait_window_ms",
+  "wait_window_to_continuation_ms",
+  "followup_stt_completed_to_plan_ms",
+  "followup_plan_to_first_playback_ms",
+  "followup_endpoint_to_stt_completed_ms",
+  "barge_in_detected_to_playback_cancelled_ms",
+  "barge_in_detected_to_followup_speech_start_ms",
+  "barge_in_detected_at",
+  "stop_detected_at",
+  "playback_cancelled_at",
+  "wait_window_started_at",
+  "followup_speech_start_at",
+  "continuation_speech_start_at",
+  "followup_endpoint_at",
+  "continuation_endpoint_at",
+  "followup_stt_completed_at",
+  "followup_dialogue_plan_at",
+  "followup_playback_started_at",
+  "followup_timeout_at",
+];
+
 /** UUID / correlation ids — excluded from digit-based phone heuristics (Phase 10M). */
 const PHONE_SCAN_EXEMPT_KEYS = new Set([
   ...VERSION_METADATA_KEYS,
+  ...TIMING_TELEMETRY_PAYLOAD_KEYS,
   "bridge_call_id",
   "call_session_id",
   "external_call_id",
   "audiosocket_uuid",
+  "last_rms",
+  "rms_threshold",
+  "playback_ms_at_trigger",
+  "min_playback_ms",
+  "speech_frames_required",
+  "consecutive_speech_frames",
+  "frames_sent_before_cancel",
+  "trigger_count",
+  "triggered_at",
+  "interrupt_cycle",
+  "marker_chars",
+  "continuation_chars",
+  "effective_transcript_chars",
 ]);
 
 export function redactQualityPayload(payload = {}) {

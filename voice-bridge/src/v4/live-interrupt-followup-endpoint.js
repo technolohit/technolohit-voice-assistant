@@ -8,6 +8,7 @@ import {
   clearInterruptFollowupWait,
   markInterruptFollowupTimeoutStarted,
   bufferInterruptFollowupTimeoutEvent,
+  clearStaleInterruptionRecovery,
 } from "./interrupt-followup-wait.js";
 import {
   finalizeInterruptFollowupLatencyMetrics,
@@ -103,8 +104,7 @@ export async function runInterruptFollowupTimeoutClarification(
   }
 
   clearInterruptFollowupWait(runtime);
-  runtime.pendingInterruptionRecovery = false;
-  runtime.highPriorityInterruptionTurn = false;
+  clearStaleInterruptionRecovery(runtime);
 
   return { ok: dialogue?.ok ?? false, dialogue, playback, interruptMetrics };
 }

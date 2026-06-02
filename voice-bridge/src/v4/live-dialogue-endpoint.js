@@ -23,6 +23,7 @@ import {
   markInterruptFollowupLatency
 } from "./interrupt-followup-latency.js";
 import { buildInterruptFollowupLatencyMetricsEvent } from "./quality-events.js";
+import { clearStaleInterruptionRecovery } from "./interrupt-followup-wait.js";
 
 function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
@@ -225,6 +226,10 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     console.log(
       `[v4-live] dialogue_plan_created state=${orchestrator.stateMachine?.state ?? "unknown"} intent=${action.intent ?? "unknown"} plan_type=${action.plan?.response_type ?? "unknown"} response_chars=${responseChars} ${liveLogIds(ctx)}`
     );
+
+    if (interruptionRecovery) {
+      clearStaleInterruptionRecovery(runtime);
+    }
 
     return {
       ok: true,
