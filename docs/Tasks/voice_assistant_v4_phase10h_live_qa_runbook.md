@@ -304,6 +304,8 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E5b | STT failure fallback (10J) | If STT fails: `[v4-live] stt_failed … http_status=…` then `stt_fallback_started` / `stt_fallback_completed`; caller hears short retry prompt — **not** long silence |
 | E5c | Goodbye / closing (10M) | After product Q&A, say **Auf Wiederhören** → warm goodbye (no open-ended “anything else?”) |
 | E5d | Summary + latency SQL (10M) | G.3 returns `live_call_quality_summary`; G.3b shows `turn_latency_metrics` |
+| E5e | Interruption follow-up (10N) | During playback: **Stopp, ich habe eine kurze Frage** → acknowledgement (not “nicht verstanden”); then **Was kostet das?** → bounded playbook answer |
+| E5f | Barge-in quality (10N) | G.3c: `barge_in_detected` row present; logs must not show `quality_flush_skip_event` for that type |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -411,12 +413,16 @@ SELECT
   payload->'live_counters'->>'stt_completed_count' AS stt_completed_count,
   payload->'live_counters'->>'tts_completed_count' AS tts_completed_count,
   payload->'live_counters'->>'barge_in_count' AS barge_in_count,
+  payload->'turn_latency'->>'dialogue_plan_to_tts_started_ms' AS dialogue_plan_to_tts_started_ms,
+  payload->'turn_latency'->>'tts_started_to_first_chunk_ms' AS tts_started_to_first_chunk_ms,
   payload->'turn_latency'->>'endpoint_to_first_playback_ms' AS endpoint_to_first_playback_ms,
   payload->'turn_latency'->>'total_turn_response_ms' AS total_turn_response_ms
 FROM voice.call_quality_events
 WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
   AND event_type = 'live_call_quality_summary';
 ```
+
+**Pass (10N):** On a successful STT→dialogue→TTS→playback turn, `dialogue_plan_to_tts_started_ms`, `tts_started_to_first_chunk_ms`, and `endpoint_to_first_playback_ms` should be **non-NULL**.
 
 ### G.3b Turn latency metrics (Phase 10M)
 
@@ -435,6 +441,18 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
 ORDER BY created_at DESC
 LIMIT 5;
 ```
+
+### G.3c Barge-in detected (Phase 10N)
+
+```sql
+SELECT created_at, event_type, metric_value AS cancel_latency_ms
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'barge_in_detected'
+ORDER BY created_at;
+```
+
+**Pass:** ≥ 1 row when caller interrupted assistant playback. **Fail:** 0 rows but logs show `barge_in_detected` or `quality_flush_skip_event event_type=barge_in_detected` (upgrade to v1.25.0+).
 
 ### G.4 Session close + privacy-oriented payload scan
 

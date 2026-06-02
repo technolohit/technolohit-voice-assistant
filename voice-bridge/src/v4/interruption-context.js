@@ -6,6 +6,11 @@
 import { normalizeText, redactPhoneLikeText } from "./redaction.js";
 import { matchProductAlias } from "./agent-config.js";
 import {
+  isInterruptionFollowUpPhrase,
+  isTopicRepairPhrase,
+  isExplicitTopicResetPhrase
+} from "./transcript-intent.js";
+import {
   attachInterruptionContext,
   clearInterruptionContext,
   setSelectedProduct,
@@ -15,7 +20,7 @@ import { V4_STATES, transitionState } from "./state-machine.js";
 import { getPlaybackMetrics } from "./playback-controller.js";
 
 const STOP_SIGNAL =
-  /\b(stopp|stop|abbrechen|neues thema|anderes produkt|falsch|nicht das|ich meine|ich meinte|ich wollte|meinte ich)\b/i;
+  /\b(stopp|stop|abbrechen|nein[, ]+ich meine|ich meine|ich meinte|ich wollte|meinte ich)\b/i;
 
 export function createInterruptionContext(input = {}) {
   return {
@@ -74,8 +79,11 @@ export function detectInterruptionSignals(callerText = "") {
   const lower = normalizeText(callerText).toLowerCase();
   return {
     stopSignal: STOP_SIGNAL.test(lower),
+    followUpSignal: isInterruptionFollowUpPhrase(callerText),
+    topicRepairSignal: isTopicRepairPhrase(callerText),
+    explicitReset: isExplicitTopicResetPhrase(callerText),
     productQuestion:
-      /\b(was ist|was sind|erklar|erklaer|erklaren|erzaehl|erzahlen|kurz erkl|mehr uber|mehr ueber|details zu|wie funktioniert)\b/i.test(
+      /\b(was ist|was sind|erklar|erklaer|erklaren|erzaehl|erzahlen|kurz erkl|mehr uber|mehr ueber|details zu|wie funktioniert|was kostet|kosten|preis|kann das)\b/i.test(
         lower
       )
   };
@@ -95,10 +103,15 @@ export function detectTopicOrProductSwitch(agentConfig, callerText = "", interru
     detectedProductId !== interruptedProductId;
 
   let recoveryAction = "continue_same_topic";
-  if (topicSwitch || (signals.stopSignal && detectedProductId)) {
+
+  if (topicSwitch || (signals.stopSignal && detectedProductId) || (signals.topicRepairSignal && detectedProductId)) {
     recoveryAction = "product_switch";
-  } else if (signals.stopSignal) {
+  } else if (signals.explicitReset) {
     recoveryAction = "topic_reset";
+  } else if (signals.followUpSignal || signals.productQuestion) {
+    recoveryAction = "interruption_followup";
+  } else if (signals.stopSignal || signals.topicRepairSignal) {
+    recoveryAction = "interruption_followup";
   } else if (signals.productQuestion) {
     recoveryAction = "product_question";
   }
@@ -170,9 +183,24 @@ export function resolveInterruptionRecovery({
     nextMemory = updateMemoryFromUserTurn(nextMemory, callerText);
     nextStateMachine = transitionState(nextStateMachine, V4_STATES.LISTENING, "interruption_topic_reset");
   } else {
+    if (
+      withUtterance.interrupted_product_id &&
+      !switchInfo.detectedProductId &&
+      (switchInfo.recoveryAction === "interruption_followup" ||
+        switchInfo.recoveryAction === "continue_same_topic" ||
+        switchInfo.recoveryAction === "product_question")
+    ) {
+      nextMemory = {
+        ...nextMemory,
+        selected_product_id: nextMemory.selected_product_id ?? withUtterance.interrupted_product_id,
+        product_interest: nextMemory.product_interest ?? withUtterance.interrupted_product_id
+      };
+    }
     nextMemory = updateMemoryFromUserTurn(nextMemory, callerText);
     nextStateMachine = transitionState(nextStateMachine, V4_STATES.LISTENING, "interruption_continue");
-    recoveryAction = "continue_same_topic";
+    if (recoveryAction === "continue_same_topic" && switchInfo.signals.followUpSignal) {
+      recoveryAction = "interruption_followup";
+    }
   }
 
   const resolvedContext = {

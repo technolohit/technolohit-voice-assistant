@@ -90,20 +90,33 @@ export function buildQualityEventInput({
   };
 }
 
+function payloadContainsPhoneLikeString(value) {
+  if (value == null) return false;
+  if (typeof value === "string") {
+    return /\b\+?\d{8,}\b/.test(value);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(payloadContainsPhoneLikeString);
+  }
+  if (typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      if (PHONE_SCAN_EXEMPT_KEYS.has(key)) continue;
+      if (payloadContainsPhoneLikeString(nested)) return true;
+    }
+  }
+  return false;
+}
+
 export function validateQualityEventInput(input) {
   const errors = [];
   if (!String(input?.eventType ?? "").trim()) errors.push("eventType required");
   if (!String(input?.tenantId ?? "").trim()) errors.push("tenantId required");
   if (!String(input?.agentId ?? "").trim()) errors.push("agentId required");
   const payload = input?.payload ?? {};
-  const payloadForPhoneScan =
-    payload && typeof payload === "object" && !Array.isArray(payload)
-      ? Object.fromEntries(
-          Object.entries(payload).filter(([key]) => !PHONE_SCAN_EXEMPT_KEYS.has(key))
-        )
-      : payload;
-  const serialized = JSON.stringify(payloadForPhoneScan);
-  if (/\b\+?\d{8,}\b/.test(serialized)) {
+  if (payloadContainsPhoneLikeString(payload)) {
     errors.push("payload must not contain raw phone numbers");
   }
   return { ok: errors.length === 0, errors };

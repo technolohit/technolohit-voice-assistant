@@ -3,15 +3,19 @@
  */
 
 import { normalizeText } from "./redaction.js";
-import { matchProductAlias, getProductById, getClosingQuestion } from "./agent-config.js";
+import { matchProductAlias, getProductById } from "./agent-config.js";
 import {
   detectTranscriptIntent,
   sanitizeResponseText,
   isPostContactProductQuestion,
-  isDefiniteCallerGoodbye,
   getWarmGoodbyeResponseText
 } from "./transcript-intent.js";
-import { shouldUseRagForTurn } from "./rag-orchestrator.js";
+import {
+  detectShortFollowUpCategory,
+  buildPlaybookShortAnswer,
+  hasSubstantiveFollowUpContent
+} from "./playbook-short-answer.js";
+import { shouldUseRagForTurn, fallbackToPlaybook } from "./rag-orchestrator.js";
 import { V4_STATES } from "./state-machine.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
@@ -50,6 +54,96 @@ function planBase(type, overrides = {}) {
   };
 }
 
+function productDisplayName(agentConfig, productId) {
+  const product = productId ? getProductById(agentConfig, productId) : null;
+  return product?.display_name ?? "Ihrem Thema";
+}
+
+function interruptionMemoryPatch(memory, productId, extra = {}) {
+  return {
+    selected_product_id: productId ?? memory.selected_product_id,
+    product_interest: productId ?? memory.product_interest,
+    interruption_context: null,
+    current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+    ...extra
+  };
+}
+
+function planInterruptionFollowUp({
+  agentConfig,
+  memory,
+  stateMachine,
+  transcript,
+  resolvedIntent,
+  interruptionRecovery,
+  ragAnswer,
+  ragGate
+}) {
+  const interruptedId =
+    interruptionRecovery?.context?.interrupted_product_id ??
+    memory?.interruption_context?.interrupted_product_id ??
+    null;
+  const productId =
+    memory.selected_product_id ??
+    interruptionRecovery?.context?.detected_product_id ??
+    interruptedId ??
+    matchProductAlias(agentConfig, transcript)?.id;
+  const productName = productDisplayName(agentConfig, productId);
+  const category = detectShortFollowUpCategory(transcript);
+  const substantive =
+    hasSubstantiveFollowUpContent(transcript) ||
+    resolvedIntent === "product_question" ||
+    interruptionRecovery?.recoveryAction === "product_question";
+
+  if (category) {
+    const answer = sanitizeResponseText(
+      buildPlaybookShortAnswer(agentConfig, productId, category)
+    );
+    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+      text: answer,
+      next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+      memory_patch: interruptionMemoryPatch(memory, productId),
+      quality_event_type: "turn_started",
+      rag_allowed: false
+    });
+  }
+
+  if (substantive && productId) {
+    const playbook =
+      ragAnswer ??
+      fallbackToPlaybook({ productId, transcript, agentConfig }).answer ??
+      sanitizeResponseText(
+        `${productName} unterstützt Sichtbarkeit und Anfragen. Was möchten Sie genau wissen?`
+      );
+    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+      text: sanitizeResponseText(playbook),
+      next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+      memory_patch: interruptionMemoryPatch(memory, productId),
+      quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
+      rag_allowed: gateUsesRag(ragGate)
+    });
+  }
+
+  const ack = productId
+    ? `Gerne. Zur ${productName}: Was möchten Sie genau wissen?`
+    : "Gerne. Was möchten Sie dazu wissen?";
+
+  return planBase(RESPONSE_TYPES.INTERRUPTION_RECOVERY, {
+    text: sanitizeResponseText(ack),
+    next_state: V4_STATES.LISTENING,
+    memory_patch: interruptionMemoryPatch(memory, productId, {
+      current_state: V4_STATES.LISTENING
+    }),
+    quality_event_type: "interruption_recovered",
+    rag_allowed: false
+  });
+}
+
+function gateUsesRag(ragGate) {
+  return Boolean(ragGate?.allowed);
+}
+
 export function buildResponsePlan({
   agentConfig,
   memory = {},
@@ -60,13 +154,35 @@ export function buildResponsePlan({
   ragGate = null,
   interruptionRecovery = null
 } = {}) {
-  const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory);
+  const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory, agentConfig);
   const agent = agentConfig?.config ?? agentConfig ?? {};
   const state = stateMachine?.state ?? memory?.current_state ?? V4_STATES.LISTENING;
   const gate =
     ragGate ??
     shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
   const postContactProductQa = isPostContactProductQuestion(memory, transcript, resolvedIntent);
+
+  if (resolvedIntent === "closing") {
+    return planBase(RESPONSE_TYPES.CLOSING, {
+      text: sanitizeResponseText(getWarmGoodbyeResponseText()),
+      next_state: V4_STATES.COMPLETED,
+      memory_patch: {
+        current_state: V4_STATES.COMPLETED,
+        call_closing: true,
+        interruption_context: null
+      },
+      quality_event_type: "turn_started"
+    });
+  }
+
+  const interruptionFollowUp =
+    resolvedIntent === "interruption_followup" ||
+    resolvedIntent === "topic_repair" ||
+    resolvedIntent === "interruption_recovery" ||
+    interruptionRecovery?.recoveryAction === "interruption_followup" ||
+    interruptionRecovery?.recoveryAction === "continue_same_topic" ||
+    interruptionRecovery?.recoveryAction === "product_question" ||
+    Boolean(memory?.interruption_context);
 
   if (interruptionRecovery?.recoveryAction === "product_switch") {
     const product = getProductById(agentConfig, memory.selected_product_id);
@@ -78,6 +194,23 @@ export function buildResponsePlan({
       memory_patch: { current_state: V4_STATES.COLLECTING_SALES_CONTEXT },
       quality_event_type: "interruption_recovered",
       rag_allowed: false
+    });
+  }
+
+  if (
+    interruptionFollowUp &&
+    interruptionRecovery?.recoveryAction !== "product_switch" &&
+    interruptionRecovery?.recoveryAction !== "topic_reset"
+  ) {
+    return planInterruptionFollowUp({
+      agentConfig,
+      memory,
+      stateMachine,
+      transcript,
+      resolvedIntent,
+      interruptionRecovery,
+      ragAnswer,
+      ragGate: gate
     });
   }
 
@@ -125,13 +258,20 @@ export function buildResponsePlan({
   if (resolvedIntent === "product_question") {
     const productId = memory.selected_product_id ?? matchProductAlias(agentConfig, transcript)?.id;
     const product = productId ? getProductById(agentConfig, productId) : null;
+    const category = detectShortFollowUpCategory(transcript);
+    const playbookAnswer =
+      category && productId
+        ? buildPlaybookShortAnswer(agentConfig, productId, category)
+        : null;
     const answer =
       ragAnswer ??
-      sanitizeResponseText(
-        product
-          ? `${product.display_name} unterstützt Sichtbarkeit und Anfragen. Möchten Sie mehr Details?`
-          : "Gerne erkläre ich Ihnen unsere Lösungen. Welches Produkt interessiert Sie?"
-      );
+      (playbookAnswer
+        ? sanitizeResponseText(playbookAnswer)
+        : sanitizeResponseText(
+            product
+              ? `${product.display_name} unterstützt Sichtbarkeit und Anfragen. Möchten Sie mehr Details?`
+              : "Gerne erkläre ich Ihnen unsere Lösungen. Welches Produkt interessiert Sie?"
+          ));
     return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
       text: answer,
       next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
@@ -232,14 +372,11 @@ export function buildResponsePlan({
     });
   }
 
-  if (resolvedIntent === "closing") {
-    const goodbyeText = isDefiniteCallerGoodbye(transcript)
-      ? getWarmGoodbyeResponseText()
-      : getClosingQuestion(agentConfig);
-    return planBase(RESPONSE_TYPES.CLOSING, {
-      text: sanitizeResponseText(goodbyeText),
-      next_state: V4_STATES.COMPLETED,
-      memory_patch: { current_state: V4_STATES.COMPLETED, call_closing: true },
+  if (memory?.interruption_context && !normalizeText(transcript)) {
+    return planBase(RESPONSE_TYPES.FALLBACK_CLARIFICATION, {
+      text: sanitizeResponseText("Gerne. Was möchten Sie dazu wissen?"),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: { current_state: V4_STATES.LISTENING },
       quality_event_type: "turn_started"
     });
   }

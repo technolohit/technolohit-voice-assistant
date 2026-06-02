@@ -196,12 +196,19 @@ export function acceptUserTranscript(orchestrator, transcript = "") {
 
   bufferEvent(orchestrator, "stt_completed", { chars: String(transcript).length });
 
-  return { ok: true, memory, stateMachine, intent: detectTranscriptIntent(transcript, memory) };
+  return {
+    ok: true,
+    memory,
+    stateMachine,
+    intent: detectTranscriptIntent(transcript, memory, orchestrator.agentConfig)
+  };
 }
 
 export async function decideNextAction(orchestrator, input = {}) {
   const transcript = input.transcript ?? orchestrator.currentTurn?.transcript ?? "";
-  const intent = input.intent ?? detectTranscriptIntent(transcript, orchestrator.memory);
+  const intent =
+    input.intent ??
+    detectTranscriptIntent(transcript, orchestrator.memory, orchestrator.agentConfig);
   const interruptionRecovery = input.interruptionRecovery ?? null;
 
   const ragGate = shouldUseRagForTurn({

@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10M — live summary persistence, latency metrics, goodbye handling** |
-| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); evidence baseline **`voice-bridge-v1.23.0`**; next fix image **`voice-bridge-v1.24.0`** |
-| **v4 production status** | **Not enabled** — v1.23.0 STT buffer PASS/PARTIAL; summary row missing in SQL fixed in 10M |
+| **Current completed phase** | **Phase 10N — interruption semantic recovery after v1.24.0 canary** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); evidence **`voice-bridge-v1.24.0`**; next fix image **`voice-bridge-v1.25.0`** |
+| **v4 production status** | **Not enabled** — v1.24.0 infra PASS; conversational interruption follow-up failed; fixed in 10N |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Ship **v1.24.0**, short canary: verify `live_call_quality_summary` + latency SQL + warm goodbye |
+| **Next step** | Ship **v1.25.0**, short canary: interruption follow-up + latency non-NULL + `barge_in_detected` in SQL |
 
 Completed foundation work (do not re-implement):
 
@@ -1098,7 +1098,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 10: Live AudioSocket → v4 Canary Wiring
 
-**Status: Phases 10A–10M implemented in repo; v1.23.0 STT buffer PASS/PARTIAL; v1.24.0 fixes summary SQL + latency + goodbye; production v4 NOT enabled.**
+**Status: Phases 10A–10N implemented in repo; v1.24.0 infra canary PASS; v1.25.0 targets interruption semantics + barge-in quality + latency; production v4 NOT enabled.**
 
 - [x] Successful: Current blocker documented (live PSTN v3 vs v4 harness).
 - [x] Successful: Target flag-gated canary architecture defined.
@@ -1123,7 +1123,9 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10L successful STT buffer-size metrics added to quality payload for SQL proof.
 - [x] Successful: Phase 10M `live_call_quality_summary` persistence fix (UUID validation), turn latency metrics, German goodbye handling — report [phase10m](./voice_assistant_v4_phase10m_live_summary_latency_closing_report.md).
 - [x] Successful: Phase 10H supervised PSTN evidence retry proves `pcm_bytes`, `wav_bytes`, and `wav_bytes_minus_pcm_bytes` on v1.23.0+ (PASS/PARTIAL).
-- [ ] Successful: Phase 10M short canary on v1.24.0+ proves `live_call_quality_summary` + `turn_latency_metrics` in SQL and warm goodbye UX.
+- [x] Successful: Phase 10M short canary on v1.24.0+ proves `live_call_quality_summary` + infra (STT/TTS/barge-in) — conversational interruption follow-up failed.
+- [x] Successful: Phase 10N interruption follow-up intent, product context preserve/switch, playbook short answers, latency stash, barge-in quality validation — report [phase10n](./voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md).
+- [ ] Successful: Phase 10N short canary on v1.25.0+ proves follow-up acknowledgement, pricing answer, warm goodbye, non-NULL latency, `barge_in_detected` in SQL.
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN.
 
 ## Sysadmin Preparation Checklist
@@ -1184,7 +1186,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A–10M implemented**; **Phase 10H runbook** [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md); **10M report** [voice_assistant_v4_phase10m_live_summary_latency_closing_report.md](./voice_assistant_v4_phase10m_live_summary_latency_closing_report.md); **v1.24.0 canary verification pending**; production v4 still disabled.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10N implemented**; **10H runbook** [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md); **10N report** [voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md](./voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md); **v1.25.0 canary verification pending**; production v4 still disabled.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **Phase 10H supervised PSTN QA pass**, and explicit production approval.
 
 ### Phase 10H — Supervised live PSTN QA (documentation)

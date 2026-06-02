@@ -283,7 +283,7 @@ test("caller continues same topic without stale product switch", () => {
     const memory = setSelectedProduct(createCallSessionMemory({ bridgeCallId: "i4" }), "smart_website");
     const switchInfo = detectTopicOrProductSwitch(agent, "Was kostet das ungefähr?", "smart_website");
     assert.equal(switchInfo.topicSwitchDetected, false);
-    assert.equal(switchInfo.recoveryAction, "continue_same_topic");
+    assert.equal(switchInfo.recoveryAction, "interruption_followup");
     const recovery = resolveInterruptionRecovery({
       agentConfig: agent,
       memory,

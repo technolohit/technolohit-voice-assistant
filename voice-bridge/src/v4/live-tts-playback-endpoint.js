@@ -306,7 +306,9 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
   }
 
   const firstChunkMs = synthResult.firstChunkMs ?? ttsMs;
-  markLiveTurnLatency(runtime, "tts_first_chunk");
+  const firstChunkAt = ttsStartedAt + Math.max(0, Number(firstChunkMs) || 0);
+  markLiveTurnLatency(runtime, "tts_first_chunk", firstChunkAt);
+  markLiveTurnLatency(runtime, "tts_completed", ttsStartedAt + Math.max(0, Number(ttsMs) || 0));
   bufferQualityEvent(
     runtime,
     buildLiveTtsQualityEvent(config, ctx, runtime, buildTtsFirstChunkEvent, firstChunkMs, {

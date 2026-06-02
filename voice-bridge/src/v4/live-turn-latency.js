@@ -9,6 +9,16 @@ function deltaMs(fromMs, toMs) {
 
 export function beginLiveTurnLatency(runtime, endpointIndex = null) {
   if (!runtime) return null;
+  if (runtime.currentTurnLatency?.endpoint_detected_at) {
+    const partial = finalizeLiveTurnLatencyMetrics(runtime);
+    if (partial) {
+      if (!Array.isArray(runtime.turnLatencyHistory)) {
+        runtime.turnLatencyHistory = [];
+      }
+      runtime.turnLatencyHistory.push({ ...partial, incomplete: true });
+      runtime.lastTurnLatencyMetrics = partial;
+    }
+  }
   const now = Date.now();
   runtime.currentTurnLatency = {
     endpoint_index: endpointIndex,
@@ -17,6 +27,7 @@ export function beginLiveTurnLatency(runtime, endpointIndex = null) {
     dialogue_plan_at: null,
     tts_started_at: null,
     tts_first_chunk_at: null,
+    tts_completed_at: null,
     playback_started_at: null,
     playback_completed_at: null
   };
@@ -39,7 +50,7 @@ export function finalizeLiveTurnLatencyMetrics(runtime) {
   const sttAt = t.stt_completed_at;
   const dialogueAt = t.dialogue_plan_at;
   const ttsStartAt = t.tts_started_at;
-  const firstChunkAt = t.tts_first_chunk_at;
+  const firstChunkAt = t.tts_first_chunk_at ?? t.tts_completed_at;
   const playbackStartAt = t.playback_started_at;
   const playbackDoneAt = t.playback_completed_at;
 
@@ -50,7 +61,7 @@ export function finalizeLiveTurnLatencyMetrics(runtime) {
     dialogue_plan_to_tts_started_ms: deltaMs(dialogueAt, ttsStartAt),
     tts_started_to_first_chunk_ms: deltaMs(ttsStartAt, firstChunkAt),
     tts_completed_to_playback_started_ms: deltaMs(firstChunkAt, playbackStartAt),
-    endpoint_to_first_playback_ms: deltaMs(endpointAt, playbackStartAt),
+    endpoint_to_first_playback_ms: deltaMs(endpointAt, playbackStartAt ?? firstChunkAt),
     total_turn_response_ms: deltaMs(endpointAt, playbackDoneAt ?? playbackStartAt)
   };
 
