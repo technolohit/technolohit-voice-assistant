@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10I — Live canary stabilization (post failed 10H)** |
-| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); deploy baseline for live QA retry: **`voice-bridge-v1.20.0`** (10I) |
-| **v4 production status** | **Not enabled** — Phases 10A–10I in repo; **10H failed; retry after 10I image** |
+| **Current completed phase** | **Phase 10J — STT failure diagnostics, fallback prompt, session hardening** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); next canary image target: **`voice-bridge-v1.21.0`** (10J) |
+| **v4 production status** | **Not enabled** — **10H / v1.20.0 retry failed and not accepted** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | **Re-execute Phase 10H supervised PSTN QA** (see [phase10i report](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md)) |
+| **Next step** | Ship **v1.21.0**, run STT preflight + supervised QA per updated runbook (no acceptance until human pass) |
 
 Completed foundation work (do not re-implement):
 

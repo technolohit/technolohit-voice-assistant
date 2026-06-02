@@ -7,6 +7,7 @@ import { loadVoiceBridgeEnv } from "./load-env.js";
 import * as persist from "./persist.js";
 import { describeRuntimeRoute } from "./v4/runtime-router.js";
 import { loadAgentConfig } from "./v4/agent-config.js";
+import { finalizeAllActiveCallsOnShutdown } from "./call-finish.js";
 
 loadVoiceBridgeEnv();
 
@@ -21,12 +22,21 @@ function readPackageVersion() {
   }
 }
 
-function shutdown(signal) {
+async function shutdown(signal) {
   console.log(`[voice-bridge] shutting down (${signal})`);
-  persist
-    .shutdownDb(config)
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+  try {
+    await finalizeAllActiveCallsOnShutdown(config, "process_shutdown");
+  } catch (err) {
+    console.error(
+      `[voice-bridge] active_call_shutdown_error error=${err?.message ?? String(err)}`
+    );
+  }
+  try {
+    await persist.shutdownDb(config);
+    process.exit(0);
+  } catch {
+    process.exit(1);
+  }
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));

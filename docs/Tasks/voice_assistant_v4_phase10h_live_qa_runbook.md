@@ -1,9 +1,9 @@
 # v4 Phase 10H — Supervised Live PSTN QA Runbook (AudioSocket Canary)
 
 Date: 2026-06-01
-Baseline image: **`thnhit/technhvoice:voice-bridge-v1.20.0`** (Phase 10I — after failed 10H) or later tag that includes 10I
-Prior failed QA: [voice_assistant_v4_phase10h_live_qa_report.md](./voice_assistant_v4_phase10h_live_qa_report.md)
-Stabilization: [voice_assistant_v4_phase10i_live_canary_stabilize_report.md](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md)
+Baseline image: **`thnhit/technhvoice:voice-bridge-v1.21.0`** (Phase 10J) or later tag that includes 10J
+Prior failed QA: [voice_assistant_v4_phase10h_live_qa_report.md](./voice_assistant_v4_phase10h_live_qa_report.md) (includes failed **v1.20.0** retry)
+Stabilization: [voice_assistant_v4_phase10i_live_canary_stabilize_report.md](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md), [voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md](./voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md)
 Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md](./voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md)
 
 **Do not execute without written maintenance-window approval.** This runbook does **not** enable production v4 GA. It validates the gated `v4_canary` path on a **supervised** PSTN call only.
@@ -109,6 +109,30 @@ LIMIT 10;
 
 **Pass before QA:** zero rows, or only explained in-flight calls during the window.
 **Pass after QA:** no new stale rows for the canary `call_session_id` (session must be `completed` with `ended_at` set).
+
+**Read-only only** — do not bulk-update or auto-complete unrelated stale sessions from SQL.
+
+### A.4d OpenAI STT preflight (Phase 10J — mandatory before canary)
+
+Run **inside** the voice-bridge container after restart and **before** enabling canary env:
+
+```bash
+docker exec technolohit-voice-bridge npm run stt:preflight
+```
+
+**Pass (exit 0):** output includes `openai_stt_preflight=pass` and `http_status=200` (or another 2xx). `error_code=none` is ideal; `error_code=empty_transcript_on_tone` is also acceptable because the preflight uses a synthetic tone, not spoken German.
+
+**Abort canary if fail:** `openai_stt_preflight=fail` — fix API key, model, or outbound connectivity first. Do **not** place a supervised PSTN call until preflight passes.
+
+Expected safe output shape (no secrets, no transcript text):
+
+```text
+openai_stt_preflight=pass
+model=gpt-4o-mini-transcribe
+http_status=200
+error_code=none
+latency_ms=<number>
+```
 
 ### A.5 RAG health (host-local URL from voice-bridge network)
 
@@ -276,6 +300,7 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E3 | Greeting heard | Caller hears normal greeting audio (v4 uses `skipAssistant` greeting path) |
 | E4 | VAD speech start + endpoint | `[v4-live] vad_speech_started` and `vad_endpoint_detected` |
 | E5 | STT completed | `[v4-live] stt_started stt_provider=openai` and `stt_completed stt_provider=openai` (no raw transcript in log line unless `VOICE_ASSISTANT_LOG_TRANSCRIPT_PREVIEW=true`) |
+| E5b | STT failure fallback (10J) | If STT fails: `[v4-live] stt_failed … http_status=…` then `stt_fallback_started` / `stt_fallback_completed`; caller hears short retry prompt — **not** long silence |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -420,6 +445,31 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
 ORDER BY created_at;
 ```
 
+### G.6 STT failure diagnostics (Phase 10J)
+
+```sql
+SELECT
+  created_at,
+  metric_value AS stt_ms,
+  payload->>'stt_provider' AS stt_provider,
+  payload->>'stt_error_code' AS stt_error_code,
+  payload->>'stt_http_status' AS stt_http_status,
+  payload->>'stt_error_type' AS stt_error_type,
+  payload->>'pcm_bytes' AS pcm_bytes,
+  payload->>'wav_bytes' AS wav_bytes,
+  payload->>'utterance_frames' AS utterance_frames,
+  payload->>'utterance_duration_ms' AS utterance_duration_ms,
+  payload->>'stt_failed_fallback_prompted' AS fallback_prompted,
+  payload->>'event_subtype' AS event_subtype
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'runtime_error'
+  AND payload->>'error_class' = 'stt_failed'
+ORDER BY created_at;
+```
+
+**Pass:** rows explain failure (HTTP status / error code / byte counts). **No** transcript or API key in payload text.
+
 See also [voice_assistant_v4_phase8_quality_analytics_queries.sql](./voice_assistant_v4_phase8_quality_analytics_queries.sql) (live summary query at end).
 
 ---
@@ -433,7 +483,7 @@ Stop the window and run section I if **any** occur:
 | H1 | Call drops / silent line / no greeting |
 | H2 | Garbled or unusable assistant audio |
 | H3 | Assistant does not stop speaking after caller interruption (barge-in) |
-| H4 | Repeated `[v4-live] stt_failed` without recovery |
+| H4 | Repeated `[v4-live] stt_failed` without `stt_fallback_completed` (caller hears long silence) |
 | H5 | Repeated `[v4-live] tts_failed` / no playback |
 | H6 | `quality_flush_failed` with `relation` / missing table **after** migration 009 was verified |
 | H7 | Raw phone pattern in `[v4-live]` logs or SQL payload scan (G.4) |
@@ -444,6 +494,22 @@ Stop the window and run section I if **any** occur:
 ---
 
 ## I. Rollback commands (restore v3)
+
+### I.0 Collect v4 logs before rollback (when possible)
+
+Before reverting env, capture privacy-safe canary logs for post-mortem:
+
+```bash
+QA_STAMP="$(date -u +%Y%m%dT%H%MZ)"
+docker logs --since=45m technolohit-voice-bridge 2>&1 \
+  | grep -vEi 'api[_-]?key|password|secret|Bearer |OPENAI_API_KEY' \
+  | grep -vE '\+?[0-9]{8,}' \
+  | egrep '\[v4-live\]|stt_|tts_|call_finish_|active_call_|openai_stt_preflight' \
+  > "/tmp/voice-bridge-10h-${QA_STAMP}-pre-rollback.log"
+wc -l "/tmp/voice-bridge-10h-${QA_STAMP}-pre-rollback.log"
+```
+
+Then run section I.1–I.3.
 
 ### I.1 Restore env from backup
 

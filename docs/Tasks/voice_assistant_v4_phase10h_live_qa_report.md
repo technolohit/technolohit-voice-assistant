@@ -5,7 +5,24 @@ Operator: Cursor agent (execution attempt) + **human operator required on produc
 Maintenance window (UTC): Not started from agent environment
 Runbook: [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md)
 
-**Status:** **Live PSTN QA not completed** from the Cursor workspace. Production stack (`technolohit-voice-bridge`, `/opt/technolohit-voice/`, `central_postgres`, PSTN) is not reachable here. **Do not treat this as a v4 code pass or fail** until a human runs E1–E14 on the server during an approved window.
+**Status:** **Live PSTN QA not accepted.** Initial run incomplete from agent host; **v1.20.0 (Phase 10I) supervised retry failed** on production (STT started, no completion, caller silence, stale session). See Phase 10J report for next engineering gates — **not** a live QA pass.
+
+---
+
+## v1.20.0 retry outcome (human-supervised, failed)
+
+| Item | Result |
+|------|--------|
+| Image | `voice-bridge-v1.20.0` (10I) |
+| v4 route | Reached VAD endpoint |
+| STT | `stt_started` / OpenAI provider; **no** `stt_completed` |
+| SQL | `runtime_error` `stt_failed`, `stt_provider=openai`, ~530 ms |
+| Caller UX | Long silence (no dialogue/TTS/barge-in) |
+| Stale session | `ba1d2062-02ce-4b0b-9bb8-991e36481679` active after abort/restart |
+| v3 rollback | OK |
+| **Classification** | **fail — not accepted** |
+
+Follow-up engineering: [voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md](./voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md)
 
 ---
 

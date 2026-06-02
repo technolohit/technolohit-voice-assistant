@@ -453,14 +453,25 @@ test("10C: STT failure buffers error and does not throw", async () => {
       ok: false,
       error: { code: "stt_timeout", message: "timeout", recoverable: true }
     });
-    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    const runtime = createLiveCanaryRuntime(config, ctx, {
+      sttAdapter: adapter,
+      ttsAdapter: createTtsAdapter({ provider: "mock", enabled: true })
+    });
     ctx.v4LiveRuntime = runtime;
-    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
+    const socket = createMockLiveSocket();
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime, socket);
     assert.equal(runtime.sttCompletedCount, 0);
     assert.equal(runtime.lastCallerTurnCandidate, null);
-    const errors = runtime.qualityEventsBuffer.filter((e) => e.eventType === "runtime_error");
+    const errors = runtime.qualityEventsBuffer.filter(
+      (e) => e.eventType === "runtime_error" && e.payload?.event_subtype === "stt_error"
+    );
     assert.equal(errors.length, 1);
     assert.equal(errors[0].payload?.event_subtype, "stt_error");
+    const fallback = runtime.qualityEventsBuffer.filter(
+      (e) => e.payload?.event_subtype === "stt_failure_fallback"
+    );
+    assert.equal(fallback.length, 1);
+    assert.equal(fallback[0].payload?.stt_failed_fallback_prompted, true);
   });
 });
 
@@ -681,7 +692,7 @@ test("10E: response plan and playback candidate stored, state returns LISTENING"
   });
 });
 
-test("10E: no TTS or playback when STT fails", async () => {
+test("10E: STT failure runs acoustic fallback without dialogue", async () => {
   return withEnv(liveCanaryEnv("qa-canary"), async () => {
     const config = loadConfig();
     const ctx = makeCtx({ bridgeCallId: "qa-canary-tts-no-stt", callHandler: "v4_canary" });
@@ -690,13 +701,21 @@ test("10E: no TTS or playback when STT fails", async () => {
       ok: false,
       error: { code: "stt_timeout", message: "timeout", recoverable: true }
     });
-    const runtime = createLiveCanaryRuntime(config, ctx, { sttAdapter: adapter });
+    const runtime = createLiveCanaryRuntime(config, ctx, {
+      sttAdapter: adapter,
+      ttsAdapter: createTtsAdapter({ provider: "mock", enabled: true })
+    });
     ctx.v4LiveRuntime = runtime;
-    attachLiveSocket(ctx, runtime);
+    const socket = attachLiveSocket(ctx, runtime);
     await feedSpeechUtteranceWithEndpoint(config, ctx, runtime);
-    assert.equal(runtime.ttsCompletedCount, 0);
-    assert.equal(runtime.playbackCompletedCount, 0);
-    assert.equal(runtime.lastAssistantPlaybackCandidate, null);
+    assert.equal(runtime.sttCompletedCount, 0);
+    assert.equal(runtime.lastCallerTurnCandidate, null);
+    assert.equal(runtime.dialogueCompletedCount ?? 0, 0);
+    assert.ok(runtime.ttsCompletedCount >= 1 || socket.writes.length > 0);
+    const fallback = runtime.qualityEventsBuffer.filter(
+      (e) => e.payload?.stt_failed_fallback_prompted === true
+    );
+    assert.ok(fallback.length >= 1);
   });
 });
 

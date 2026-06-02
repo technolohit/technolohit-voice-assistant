@@ -14,6 +14,7 @@ import {
 } from "./media-outbound.js";
 import { runPostCallProcessing } from "./post-call.js";
 import { finalizeAudioSocketCall } from "./call-finish.js";
+import { registerActiveCall } from "./active-call-registry.js";
 import { captureInboundAudio } from "./recording.js";
 import { captureAssistantTurnAudio } from "./turn-assistant.js";
 import * as persist from "./persist.js";
@@ -127,6 +128,7 @@ export function createAudioSocketServer(config) {
     };
 
     ctx.finishCall = finish;
+    registerActiveCall(ctx, finish);
 
     socket.on("error", (err) => {
       void persist.onError(config, ctx, err, { phase: "socket" });

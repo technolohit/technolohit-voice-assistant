@@ -4,6 +4,7 @@
 
 import { runLiveDialogueOnCallerTranscript } from "./live-dialogue-endpoint.js";
 import { runLiveTtsAndPlayback } from "./live-tts-playback-endpoint.js";
+import { runLiveSttFailureFallback } from "./live-stt-fallback-endpoint.js";
 
 import { createSttAdapter } from "./stt-adapter.js";
 import {
@@ -205,7 +206,11 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
   } catch (err) {
     completed = {
       ok: false,
-      error: { code: "stt_exception", message: String(err?.message ?? err) }
+      error: { code: "stt_exception", message: String(err?.message ?? err) },
+      diagnostics: {
+        stt_provider: sttProvider,
+        utterance_frames: frameCount
+      }
     };
   }
 
@@ -213,10 +218,30 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
 
   if (!completed?.ok || !completed?.event) {
     const code = completed?.error?.code ?? "stt_failed";
-    logSttFailed(ctx, code, sttMs, frameCount);
-    bufferSttErrorEvent(config, ctx, runtime, code, sttMs);
+    const diagnostics = buildSttFailureDiagnostics(
+      completed,
+      frameCount,
+      utterance,
+      sttProvider,
+      sttMs
+    );
+    logSttFailed(ctx, code, sttMs, frameCount, diagnostics);
+    bufferSttErrorEvent(config, ctx, runtime, code, sttMs, diagnostics);
     resetUtteranceBuffer(runtime);
-    return { ok: false, reason: code, sttMs };
+
+    const fallback = await runLiveSttFailureFallback(config, ctx, runtime, {
+      sttReason: code,
+      sttMs,
+      diagnostics
+    });
+
+    return {
+      ok: false,
+      reason: code,
+      sttMs,
+      diagnostics,
+      fallback
+    };
   }
 
   const rawText = String(completed.event.text ?? "");
@@ -309,22 +334,47 @@ export function resetUtteranceBuffer(runtime) {
   };
 }
 
-function logSttFailed(ctx, reason, sttMs, frameCount) {
+function buildSttFailureDiagnostics(completed, frameCount, utterance, sttProvider, sttMs) {
+  const diag = completed?.diagnostics ?? {};
+  const utteranceDurationMs =
+    diag.utterance_duration_ms ??
+    (utterance?.startedAt ? Math.max(0, Date.now() - utterance.startedAt) : null);
+
+  return {
+    stt_provider: sttProvider,
+    stt_error_code: diag.stt_error_code ?? completed?.error?.code ?? null,
+    stt_http_status: diag.stt_http_status ?? completed?.httpStatus ?? null,
+    stt_error_type: diag.stt_error_type ?? null,
+    stt_error_message: diag.stt_error_message ?? null,
+    pcm_bytes: diag.pcm_bytes ?? null,
+    wav_bytes: diag.wav_bytes ?? null,
+    sample_rate: diag.sample_rate ?? null,
+    model: diag.model ?? null,
+    language: diag.language ?? null,
+    utterance_frames: frameCount,
+    utterance_duration_ms: utteranceDurationMs,
+    duration_ms: diag.duration_ms ?? sttMs
+  };
+}
+
+function logSttFailed(ctx, reason, sttMs, frameCount, diagnostics = {}) {
   console.warn(
-    `[v4-live] stt_failed reason=${reason} stt_ms=${sttMs} utterance_frames=${frameCount} ${liveLogIds(ctx)}`
+    `[v4-live] stt_failed stt_provider=${diagnostics.stt_provider ?? "unknown"} reason=${reason} http_status=${diagnostics.stt_http_status ?? "none"} stt_error_code=${diagnostics.stt_error_code ?? "none"} stt_ms=${sttMs} utterance_frames=${frameCount} pcm_bytes=${diagnostics.pcm_bytes ?? 0} wav_bytes=${diagnostics.wav_bytes ?? 0} ${liveLogIds(ctx)}`
   );
 }
 
-function bufferSttErrorEvent(config, ctx, runtime, reason, sttMs) {
+function bufferSttErrorEvent(config, ctx, runtime, reason, sttMs, diagnostics = {}) {
   bufferQualityEvent(
     runtime,
     buildLiveSttQualityEvent(config, ctx, runtime, buildRuntimeErrorEvent, sttMs, {
       error_class: "stt_failed",
       message: String(reason).slice(0, 120),
       event_subtype: "stt_error",
-      stt_provider: runtime?.sttAdapter?.provider ?? "unknown",
+      stt_provider: diagnostics.stt_provider ?? runtime?.sttAdapter?.provider ?? "unknown",
       stt_ok: false,
-      transcript_chars: 0
+      transcript_chars: 0,
+      stt_failed_fallback_prompted: false,
+      ...diagnostics
     })
   );
 }

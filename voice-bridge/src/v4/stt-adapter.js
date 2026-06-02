@@ -260,9 +260,12 @@ export function createSttAdapter({
         const pcm = Buffer.concat(
           stream.frames.filter((f) => f?.length).map((f) => (Buffer.isBuffer(f) ? f : Buffer.from(f)))
         );
+        const frameCount = stream.frames.length;
         const result = await transcribe(pcm, {
           language: stream.language,
-          streamId
+          streamId,
+          frameCount,
+          frame_count: frameCount
         });
         if (!result?.ok) {
           const err = createSttErrorEvent({
@@ -276,7 +279,18 @@ export function createSttAdapter({
           metrics.streams_errored += 1;
           stream.onError?.(err);
           streams.delete(String(streamId));
-          return { ok: false, error: err, sttMs: result?.sttMs ?? null };
+          return {
+            ok: false,
+            error: err,
+            sttMs: result?.sttMs ?? null,
+            diagnostics: {
+              ...(result?.diagnostics ?? {}),
+              stt_error_code: result?.errorCode ?? result?.diagnostics?.stt_error_code ?? result?.code ?? null,
+              stt_http_status: result?.httpStatus ?? result?.diagnostics?.stt_http_status ?? null,
+              stt_error_type: result?.errorType ?? result?.diagnostics?.stt_error_type ?? null,
+              utterance_frames: frameCount
+            }
+          };
         }
 
         const durationMs = result.sttMs ?? Date.now() - stream.startedAt;

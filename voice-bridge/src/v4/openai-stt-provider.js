@@ -1,9 +1,14 @@
 /**
- * v4 OpenAI endpoint/batch STT — transcribe captured 8 kHz PCM at VAD endpoint (Phase 10I).
+ * v4 OpenAI endpoint/batch STT — transcribe captured 8 kHz PCM at VAD endpoint (Phase 10I/10J).
  * No raw transcript logging; inject fetchImpl in tests.
  */
 
 import { wrapPcm8kAsWav } from "./pcm-wav.js";
+import {
+  buildSttRequestMetadata,
+  readOpenAiSttErrorResponse,
+  sanitizeOpenAiErrorSnippet
+} from "./openai-stt-diagnostics.js";
 
 const OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 
@@ -16,6 +21,27 @@ function extractTranscriptText(body) {
   if (typeof body === "string") return body.trim();
   if (body?.text) return String(body.text).trim();
   return "";
+}
+
+function failureResult({
+  code,
+  message,
+  sttMs = null,
+  httpStatus = null,
+  errorCode = null,
+  errorType = null,
+  diagnostics = {}
+}) {
+  return {
+    ok: false,
+    code,
+    message: sanitizeOpenAiErrorSnippet(message),
+    sttMs,
+    httpStatus,
+    errorCode,
+    errorType,
+    diagnostics
+  };
 }
 
 /**
@@ -49,20 +75,43 @@ export async function transcribeOpenAiPcmUtterance8k({
   language = "de",
   prompt = "",
   sampleRate = 8000,
+  frameCount = null,
   fetchImpl = globalThis.fetch
 } = {}) {
+  const requestMeta = buildSttRequestMetadata({
+    pcmBuffer,
+    wavBuffer: null,
+    sampleRate,
+    frameCount,
+    model,
+    language
+  });
+
   const key = String(apiKey ?? "").trim();
   if (!key) {
-    return { ok: false, code: "openai_api_key_missing", message: "OPENAI_API_KEY is required" };
+    return failureResult({
+      code: "openai_api_key_missing",
+      message: "OPENAI_API_KEY is required",
+      diagnostics: { ...requestMeta, stt_provider: "openai" }
+    });
   }
   if (!pcmBuffer?.length) {
-    return { ok: false, code: "pcm_empty", message: "PCM input is empty" };
+    return failureResult({
+      code: "pcm_empty",
+      message: "PCM input is empty",
+      diagnostics: { ...requestMeta, stt_provider: "openai" }
+    });
   }
   if (typeof fetchImpl !== "function") {
-    return { ok: false, code: "fetch_not_configured", message: "fetch implementation required" };
+    return failureResult({
+      code: "fetch_not_configured",
+      message: "fetch implementation required",
+      diagnostics: { ...requestMeta, stt_provider: "openai" }
+    });
   }
 
   const wav = wrapPcm8kAsWav(pcmBuffer, sampleRate);
+  requestMeta.wav_bytes = wav.length;
   const form = buildOpenAiTranscriptionFormData({ wavBuffer: wav, model, language, prompt });
   const startedAt = Date.now();
 
@@ -74,43 +123,74 @@ export async function transcribeOpenAiPcmUtterance8k({
       body: form
     });
   } catch (err) {
-    return {
-      ok: false,
+    const sttMs = Date.now() - startedAt;
+    return failureResult({
       code: "openai_fetch_failed",
-      message: String(err?.message ?? err).slice(0, 200),
-      sttMs: Date.now() - startedAt
-    };
+      message: String(err?.message ?? err),
+      sttMs,
+      diagnostics: { ...requestMeta, stt_provider: "openai", duration_ms: sttMs }
+    });
   }
 
   const sttMs = Date.now() - startedAt;
+  const diagnostics = {
+    ...requestMeta,
+    stt_provider: "openai",
+    duration_ms: sttMs
+  };
+
   if (!response?.ok) {
-    return {
-      ok: false,
-      code: `openai_stt_http_${response?.status ?? "unknown"}`,
-      message: `OpenAI STT HTTP ${response?.status ?? "error"}`,
-      sttMs
-    };
+    const errInfo = await readOpenAiSttErrorResponse(response);
+    return failureResult({
+      code: `openai_stt_http_${errInfo.httpStatus ?? "unknown"}`,
+      message: errInfo.errorMessage ?? `OpenAI STT HTTP ${errInfo.httpStatus ?? "error"}`,
+      sttMs,
+      httpStatus: errInfo.httpStatus,
+      errorCode: errInfo.errorCode,
+      errorType: errInfo.errorType,
+      diagnostics: {
+        ...diagnostics,
+        stt_http_status: errInfo.httpStatus,
+        stt_error_code: errInfo.errorCode,
+        stt_error_type: errInfo.errorType,
+        stt_error_message: errInfo.errorMessage,
+        stt_body_snippet: errInfo.bodySnippet
+      }
+    });
   }
 
   try {
     const body = await response.json();
     const text = extractTranscriptText(body);
     if (!text) {
-      return {
-        ok: false,
+      return failureResult({
         code: "empty_transcript",
         message: "transcription response did not include text",
-        sttMs
-      };
+        sttMs,
+        httpStatus: response.status,
+        diagnostics: { ...diagnostics, stt_http_status: response.status }
+      });
     }
-    return { ok: true, text, sttMs, provider: "openai", model };
-  } catch (err) {
     return {
-      ok: false,
-      code: "openai_stt_parse_failed",
-      message: String(err?.message ?? err).slice(0, 200),
-      sttMs
+      ok: true,
+      text,
+      sttMs,
+      provider: "openai",
+      model,
+      httpStatus: response.status,
+      diagnostics
     };
+  } catch (err) {
+    return failureResult({
+      code: "openai_stt_parse_failed",
+      message: String(err?.message ?? err),
+      sttMs,
+      httpStatus: response?.status ?? null,
+      diagnostics: {
+        ...diagnostics,
+        stt_http_status: response?.status ?? null
+      }
+    });
   }
 }
 
@@ -122,7 +202,7 @@ export function createOpenAiEndpointTranscribeFn(config, options = {}) {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
 
-  return async function transcribeEndpoint(pcmBuffer) {
+  return async function transcribeEndpoint(pcmBuffer, meta = {}) {
     return transcribeOpenAiPcmUtterance8k({
       pcmBuffer,
       apiKey,
@@ -130,6 +210,7 @@ export function createOpenAiEndpointTranscribeFn(config, options = {}) {
       language,
       prompt,
       sampleRate,
+      frameCount: meta?.frameCount ?? meta?.frame_count ?? null,
       fetchImpl
     });
   };
