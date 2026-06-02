@@ -1,9 +1,9 @@
 # v4 Phase 10H — Supervised Live PSTN QA Runbook (AudioSocket Canary)
 
 Date: 2026-06-01
-Baseline image: **`thnhit/technhvoice:voice-bridge-v1.22.0`** (Phase 10K) or later tag that includes 10K
+Baseline image: **`thnhit/technhvoice:voice-bridge-v1.23.0`** (Phase 10L) or later tag that includes 10L
 Prior failed QA: [voice_assistant_v4_phase10h_live_qa_report.md](./voice_assistant_v4_phase10h_live_qa_report.md) (includes failed **v1.20.0** retry)
-Stabilization: [voice_assistant_v4_phase10i_live_canary_stabilize_report.md](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md), [voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md](./voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md), [voice_assistant_v4_phase10k_full_utterance_stt_buffer_fix_report.md](./voice_assistant_v4_phase10k_full_utterance_stt_buffer_fix_report.md)
+Stabilization: [voice_assistant_v4_phase10i_live_canary_stabilize_report.md](./voice_assistant_v4_phase10i_live_canary_stabilize_report.md), [voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md](./voice_assistant_v4_phase10j_stt_failure_and_session_hardening_report.md), [voice_assistant_v4_phase10k_full_utterance_stt_buffer_fix_report.md](./voice_assistant_v4_phase10k_full_utterance_stt_buffer_fix_report.md), [voice_assistant_v4_phase10l_stt_success_buffer_metrics_report.md](./voice_assistant_v4_phase10l_stt_success_buffer_metrics_report.md)
 Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md](./voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md)
 
 **Do not execute without written maintenance-window approval.** This runbook does **not** enable production v4 GA. It validates the gated `v4_canary` path on a **supervised** PSTN call only.
@@ -300,7 +300,7 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E3 | Greeting heard | Caller hears normal greeting audio (v4 uses `skipAssistant` greeting path) |
 | E4 | VAD speech start + endpoint | `[v4-live] vad_speech_started` and `vad_endpoint_detected` |
 | E5 | STT completed | `[v4-live] stt_started stt_provider=openai` and `stt_completed stt_provider=openai` (no raw transcript in log line unless `VOICE_ASSISTANT_LOG_TRANSCRIPT_PREVIEW=true`) |
-| E5a | Full utterance sent to STT (10K) | For multi-frame utterances, SQL diagnostics show `pcm_bytes` much larger than `320`; `wav_bytes = pcm_bytes + 44`. A one-frame `pcm_bytes=320` with high `utterance_frames` is a fail. |
+| E5a | Full utterance sent to STT (10K) | For multi-frame utterances, SQL diagnostics on `stt_completed` rows where `payload ? 'pcm_bytes'` show `pcm_bytes` much larger than `320`; `wav_bytes = pcm_bytes + 44`. A one-frame `pcm_bytes=320` with high `utterance_frames` is a fail. |
 | E5b | STT failure fallback (10J) | If STT fails: `[v4-live] stt_failed … http_status=…` then `stt_fallback_started` / `stt_fallback_completed`; caller hears short retry prompt — **not** long silence |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
@@ -470,6 +470,29 @@ ORDER BY created_at;
 ```
 
 **Pass:** rows explain failure (HTTP status / error code / byte counts). **No** transcript or API key in payload text.
+
+### G.7 Successful STT buffer metrics (Phase 10K)
+
+```sql
+SELECT
+  created_at,
+  metric_value AS stt_ms,
+  payload->>'stt_provider' AS stt_provider,
+  payload->>'stt_http_status' AS stt_http_status,
+  payload->>'utterance_frames' AS utterance_frames,
+  payload->>'pcm_bytes' AS pcm_bytes,
+  payload->>'wav_bytes' AS wav_bytes,
+  payload->>'wav_bytes_minus_pcm_bytes' AS wav_bytes_minus_pcm_bytes,
+  payload->>'sample_rate' AS sample_rate,
+  payload->>'utterance_duration_ms' AS utterance_duration_ms
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'stt_completed'
+  AND payload ? 'pcm_bytes'
+ORDER BY created_at;
+```
+
+**Pass:** for normal multi-frame utterances, `pcm_bytes > 320`, `wav_bytes = pcm_bytes + 44`, `wav_bytes_minus_pcm_bytes = 44`, and `stt_http_status` is 2xx. **Fail:** high `utterance_frames` with `pcm_bytes=320`.
 
 See also [voice_assistant_v4_phase8_quality_analytics_queries.sql](./voice_assistant_v4_phase8_quality_analytics_queries.sql) (live summary query at end).
 

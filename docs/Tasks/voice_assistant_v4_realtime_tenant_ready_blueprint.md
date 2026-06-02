@@ -35,11 +35,11 @@ Last updated: 2026-06-01
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10K — full utterance STT buffer fix after v1.21.0 retry** |
-| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); next canary image target: **`voice-bridge-v1.22.0`** (10K) |
-| **v4 production status** | **Not enabled** — **10H / v1.21.0 retry failed and not accepted** |
+| **Current completed phase** | **Phase 10L — successful STT buffer metrics for SQL evidence** |
+| **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); next evidence image target: **`voice-bridge-v1.23.0`** (10L) |
+| **v4 production status** | **Not enabled** — **10H / v1.22.0 retry was functional pass/partial, production not accepted** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Ship **v1.22.0**, run STT preflight + supervised QA per updated runbook (no acceptance until human pass) |
+| **Next step** | Ship **v1.23.0**, run a short supervised evidence retry to prove successful STT buffer metrics in SQL |
 
 Completed foundation work (do not re-implement):
 
@@ -1098,7 +1098,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 10: Live AudioSocket → v4 Canary Wiring
 
-**Status: Phases 10A–10K implemented in repo; Phase 10H live QA has failed/partial results through v1.21.0; production v4 NOT enabled.**
+**Status: Phases 10A–10L implemented in repo; Phase 10H live QA has functional pass/partial results through v1.22.0; production v4 NOT enabled.**
 
 - [x] Successful: Current blocker documented (live PSTN v3 vs v4 harness).
 - [x] Successful: Target flag-gated canary architecture defined.
@@ -1119,7 +1119,9 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10H supervised PSTN QA **executed** and report filed (partial/fail; production v4 not accepted).
 - [x] Successful: Phase 10J STT diagnostics, fallback prompt, and session teardown hardening implemented.
 - [x] Successful: Phase 10K full-utterance STT buffer fix implemented after v1.21.0 showed one-frame OpenAI uploads.
-- [ ] Successful: Phase 10H supervised PSTN QA **passes** on v1.22.0+ with OpenAI STT completion.
+- [x] Successful: Phase 10H supervised PSTN QA **passes functionally** on v1.22.0 with OpenAI STT completion, dialogue, TTS, quality flush, and no new stale session.
+- [x] Successful: Phase 10L successful STT buffer-size metrics added to quality payload for SQL proof.
+- [ ] Successful: Phase 10H supervised PSTN evidence retry proves `pcm_bytes`, `wav_bytes`, and `wav_bytes_minus_pcm_bytes` on v1.23.0+.
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN.
 
 ## Sysadmin Preparation Checklist
@@ -1180,7 +1182,7 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **Phase 10A–10K implemented**; **Phase 10H runbook** [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md); **supervised human PSTN QA pass pending**; production v4 still disabled.
+- Phase 10 live AudioSocket wiring: **Phase 10A–10L implemented**; **Phase 10H runbook** [voice_assistant_v4_phase10h_live_qa_runbook.md](./voice_assistant_v4_phase10h_live_qa_runbook.md); **short supervised evidence retry pending**; production v4 still disabled.
 - **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **Phase 10H supervised PSTN QA pass**, and explicit production approval.
 
 ### Phase 10H — Supervised live PSTN QA (documentation)

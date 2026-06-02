@@ -305,7 +305,16 @@ export function createSttAdapter({
         metrics.streams_completed += 1;
         stream.onFinal?.(finalEvent);
         streams.delete(String(streamId));
-        return { ok: true, event: finalEvent, sttMs: durationMs };
+        return {
+          ok: true,
+          event: finalEvent,
+          sttMs: durationMs,
+          diagnostics: {
+            ...(result?.diagnostics ?? {}),
+            utterance_frames: frameCount
+          },
+          httpStatus: result?.httpStatus ?? result?.diagnostics?.stt_http_status ?? null
+        };
       }
 
       return this._finalizeSttTurn(streamId, options);

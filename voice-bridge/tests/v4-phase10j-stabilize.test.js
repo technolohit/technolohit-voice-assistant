@@ -236,6 +236,10 @@ test("10J: openai STT adapter buffers full utterance without direct fetchImpl", 
         provider: "openai",
         diagnostics: {
           pcm_bytes: pcmBuffer.length,
+          wav_bytes: pcmBuffer.length + 44,
+          wav_bytes_minus_pcm_bytes: 44,
+          sample_rate: 8000,
+          stt_http_status: 200,
           utterance_frames: meta.frameCount
         }
       };
@@ -254,6 +258,91 @@ test("10J: openai STT adapter buffers full utterance without direct fetchImpl", 
   assert.equal(completed.event.text, "Digitale Rezeption");
   assert.equal(captured.frameCount, 3);
   assert.equal(captured.pcmBytes, 960);
+  assert.equal(completed.diagnostics.pcm_bytes, 960);
+  assert.equal(completed.diagnostics.wav_bytes, 1004);
+  assert.equal(completed.diagnostics.wav_bytes_minus_pcm_bytes, 44);
+  assert.equal(completed.httpStatus, 200);
+});
+
+test("10J: OpenAI STT success diagnostics include non-sensitive buffer metrics", async () => {
+  const pcm = generateTestTonePcm(8000, 200);
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return { text: "Digitale Rezeption" };
+    }
+  });
+
+  const result = await transcribeOpenAiPcmUtterance8k({
+    pcmBuffer: pcm,
+    apiKey: "sk-test",
+    fetchImpl,
+    frameCount: 10
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.httpStatus, 200);
+  assert.equal(result.diagnostics.pcm_bytes, pcm.length);
+  assert.equal(result.diagnostics.wav_bytes, pcm.length + 44);
+  assert.equal(result.diagnostics.wav_bytes_minus_pcm_bytes, 44);
+  assert.equal(result.diagnostics.stt_http_status, 200);
+  assert.equal(result.diagnostics.frame_count, 10);
+  assert.equal(assertNoRawPhoneInPayload(result.diagnostics), true);
+});
+
+test("10J: live successful STT quality events persist buffer metrics", async () => {
+  await withEnv(liveCanaryEnv("qa-canary-stt-success-metrics"), async () => {
+    const config = loadConfig();
+    const ctx = makeCtx({
+      bridgeCallId: "qa-canary-stt-success-metrics",
+      callHandler: "v4_canary"
+    });
+    const socket = createMockLiveSocket();
+    const adapter = createSttAdapter({
+      provider: "openai",
+      enabled: true,
+      endpointTranscribeFn: async (pcmBuffer, meta) => ({
+        ok: true,
+        text: "Ich interessiere mich fuer die digitale Rezeption.",
+        sttMs: 55,
+        provider: "openai",
+        httpStatus: 200,
+        diagnostics: {
+          pcm_bytes: pcmBuffer.length,
+          wav_bytes: pcmBuffer.length + 44,
+          wav_bytes_minus_pcm_bytes: 44,
+          sample_rate: 8000,
+          stt_http_status: 200,
+          frame_count: meta.frameCount,
+          utterance_duration_ms: Math.round((pcmBuffer.length / 2 / 8000) * 1000)
+        }
+      })
+    });
+    const runtime = createLiveCanaryRuntime(config, ctx, {
+      sttAdapter: adapter,
+      ttsAdapter: createTtsAdapter({ provider: "mock", enabled: true })
+    });
+    ctx.v4LiveRuntime = runtime;
+    await feedSpeechUtteranceWithEndpoint(config, ctx, runtime, socket);
+
+    const completed = runtime.qualityEventsBuffer.filter((e) => e.eventType === "stt_completed");
+    const completedWithMetrics = completed.filter((e) => e.payload?.pcm_bytes != null);
+    const finals = runtime.qualityEventsBuffer.filter((e) => e.eventType === "stt_final");
+
+    assert.ok(completed.length >= 1);
+    assert.ok(completedWithMetrics.length >= 1);
+    assert.equal(finals.length, 1);
+    for (const event of completedWithMetrics) {
+      assert.ok(event.payload.pcm_bytes > 320);
+      assert.equal(event.payload.wav_bytes, event.payload.pcm_bytes + 44);
+      assert.equal(event.payload.wav_bytes_minus_pcm_bytes, 44);
+      assert.equal(event.payload.stt_http_status, 200);
+      assert.equal(assertNoRawPhoneInPayload(event.payload), true);
+    }
+    assert.equal(finals[0].payload.wav_bytes_minus_pcm_bytes, 44);
+    assert.equal(finals[0].payload.wav_bytes, finals[0].payload.pcm_bytes + 44);
+  });
 });
 
 test("10J: preflight prints safe lines and passes with mock fetch", async () => {

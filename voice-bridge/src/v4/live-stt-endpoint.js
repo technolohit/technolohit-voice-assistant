@@ -247,6 +247,13 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
   const rawText = String(completed.event.text ?? "");
   const redacted = redactPhoneLikeText(rawText);
   const transcriptChars = redacted.length;
+  const successDiagnostics = buildSttSuccessDiagnostics(
+    completed,
+    frameCount,
+    utterance,
+    completed.event.provider ?? sttProvider,
+    sttMs
+  );
 
   runtime.lastCallerTurnCandidate = {
     ok: true,
@@ -265,7 +272,8 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       transcript_chars: transcriptChars,
       utterance_frames: frameCount,
       stt_provider: completed.event.provider ?? sttProvider,
-      stt_ok: true
+      stt_ok: true,
+      ...successDiagnostics
     })
   );
   const transcriptPreview =
@@ -277,6 +285,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     buildLiveSttQualityEvent(config, ctx, runtime, buildSttFinalEvent, sttMs, {
       transcript_chars: transcriptChars,
       stt_provider: completed.event.provider ?? sttProvider,
+      ...successDiagnostics,
       ...transcriptPreview
     })
   );
@@ -352,6 +361,33 @@ function buildSttFailureDiagnostics(completed, frameCount, utterance, sttProvide
     model: diag.model ?? null,
     language: diag.language ?? null,
     utterance_frames: frameCount,
+    utterance_duration_ms: utteranceDurationMs,
+    duration_ms: diag.duration_ms ?? sttMs
+  };
+}
+
+function buildSttSuccessDiagnostics(completed, frameCount, utterance, sttProvider, sttMs) {
+  const diag = completed?.diagnostics ?? {};
+  const pcmBytes = diag.pcm_bytes == null ? null : Number(diag.pcm_bytes);
+  const wavBytes = diag.wav_bytes == null ? null : Number(diag.wav_bytes);
+  const utteranceDurationMs =
+    diag.utterance_duration_ms ??
+    (utterance?.startedAt ? Math.max(0, Date.now() - utterance.startedAt) : null);
+
+  return {
+    stt_provider: sttProvider,
+    stt_http_status: diag.stt_http_status ?? completed?.httpStatus ?? null,
+    stt_error_code: null,
+    pcm_bytes: pcmBytes,
+    wav_bytes: wavBytes,
+    wav_bytes_minus_pcm_bytes:
+      diag.wav_bytes_minus_pcm_bytes ??
+      (pcmBytes != null && wavBytes != null ? wavBytes - pcmBytes : null),
+    sample_rate: diag.sample_rate ?? null,
+    model: diag.model ?? null,
+    language: diag.language ?? null,
+    utterance_frames: frameCount,
+    frame_count: diag.frame_count ?? frameCount,
     utterance_duration_ms: utteranceDurationMs,
     duration_ms: diag.duration_ms ?? sttMs
   };

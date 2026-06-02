@@ -112,6 +112,7 @@ export async function transcribeOpenAiPcmUtterance8k({
 
   const wav = wrapPcm8kAsWav(pcmBuffer, sampleRate);
   requestMeta.wav_bytes = wav.length;
+  requestMeta.wav_bytes_minus_pcm_bytes = wav.length - (pcmBuffer?.length ?? 0);
   const form = buildOpenAiTranscriptionFormData({ wavBuffer: wav, model, language, prompt });
   const startedAt = Date.now();
 
@@ -136,6 +137,7 @@ export async function transcribeOpenAiPcmUtterance8k({
   const diagnostics = {
     ...requestMeta,
     stt_provider: "openai",
+    stt_http_status: response?.status ?? null,
     duration_ms: sttMs
   };
 
