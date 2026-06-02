@@ -11,27 +11,27 @@ import {
   shouldCancelPlaybackForSpeech,
   markBargeInTriggered,
   resetBargeInDetector,
-  getBargeInMetrics
+  getBargeInMetrics,
 } from "./barge-in-detector.js";
 import {
   requestPlaybackCancel,
   finalizePlayback,
-  getPlaybackMetrics
+  getPlaybackMetrics,
 } from "./playback-controller.js";
 import {
   captureInterruptedAssistantState,
   applyInterruptionToMemory,
-  applyInterruptionToStateMachine
+  applyInterruptionToStateMachine,
 } from "./interruption-context.js";
 import { markInterrupted } from "./audio-session.js";
-import { resetUtteranceBuffer } from "./live-stt-endpoint.js";
+import { resetUtteranceBuffer, ensureInterruptUtteranceAfterBargeIn } from "./live-stt-endpoint.js";
 import { beginInterruptFollowupWaitOnBargeIn } from "./interrupt-followup-wait.js";
 import {
   buildBargeInDetectedEvent,
   buildPlaybackCancelRequestedEvent,
   buildPlaybackCancelledEvent,
   buildInterruptionContextCapturedEvent,
-  buildRuntimeErrorEvent
+  buildRuntimeErrorEvent,
 } from "./quality-events.js";
 
 function liveLogIds(ctx) {
@@ -57,21 +57,29 @@ function safeBargeInPayload(detector) {
     barge_in_triggered: metrics.barge_in_triggered,
     playback_ms_at_trigger: metrics.playback_ms_at_trigger,
     last_rms: metrics.last_rms,
-    trigger_count: metrics.trigger_count
+    trigger_count: metrics.trigger_count,
   };
 }
 
-function buildLiveBargeQualityEvent(config, ctx, runtime, builder, metricValue, payload = {}) {
+function buildLiveBargeQualityEvent(
+  config,
+  ctx,
+  runtime,
+  builder,
+  metricValue,
+  payload = {},
+) {
   return builder({
     config,
     agentConfigResult: runtime?.runtimeContext?.agentConfig ?? null,
-    callSessionId: ctx?.callSessionId ?? runtime?.audioSession?.callSessionId ?? null,
+    callSessionId:
+      ctx?.callSessionId ?? runtime?.audioSession?.callSessionId ?? null,
     metricValue,
     payload: {
       bridge_call_id: ctx?.bridgeCallId ?? null,
       live_phase: runtime?.phase ?? "phase10f_live_barge_in",
-      ...payload
-    }
+      ...payload,
+    },
   });
 }
 
@@ -83,7 +91,7 @@ export function createLivePlaybackCancelSession() {
   return {
     cancelled: false,
     cancelReason: null,
-    cancelRequestedAt: null
+    cancelRequestedAt: null,
   };
 }
 
@@ -108,57 +116,121 @@ export function ensureLiveBargeInDetector(runtime, config) {
 /**
  * Observe inbound PCM during assistant playback; cancel when speech threshold met.
  */
-export function observeLiveCanaryBargeIn(config, ctx, runtime, payload, atMs = Date.now()) {
+export function observeLiveCanaryBargeIn(
+  config,
+  ctx,
+  runtime,
+  payload,
+  atMs = Date.now(),
+) {
   if (!isLiveV4BargeInEnabled(config)) {
-    return { ok: true, observed: false, cancelled: false, reason: "barge_in_disabled" };
+    return {
+      ok: true,
+      observed: false,
+      cancelled: false,
+      reason: "barge_in_disabled",
+    };
   }
   if (!isLivePlaybackInFlight(runtime)) {
-    return { ok: true, observed: false, cancelled: false, reason: "playback_not_active" };
+    return {
+      ok: true,
+      observed: false,
+      cancelled: false,
+      reason: "playback_not_active",
+    };
   }
 
   const playback = runtime.playback;
   if (!playback?.enabled) {
-    return { ok: true, observed: false, cancelled: false, reason: "playback_missing" };
+    return {
+      ok: true,
+      observed: false,
+      cancelled: false,
+      reason: "playback_missing",
+    };
   }
 
   try {
     const detector = ensureLiveBargeInDetector(runtime, config);
     const rms = pcmFrameRms(payload);
-    const nextDetector = observeInboundDuringPlayback(detector, payload, playback, atMs);
+    const nextDetector = observeInboundDuringPlayback(
+      detector,
+      payload,
+      playback,
+      atMs,
+    );
     runtime.bargeInDetector = nextDetector;
 
     if (!shouldCancelPlaybackForSpeech(nextDetector, playback, atMs)) {
-      return { ok: true, observed: true, cancelled: false, reason: "threshold_not_met" };
+      return {
+        ok: true,
+        observed: true,
+        cancelled: false,
+        reason: "threshold_not_met",
+      };
     }
 
     if (runtime.bargeInHandledPlaybackId === playback.playbackId) {
-      return { ok: true, observed: true, cancelled: true, reason: "already_cancelled" };
+      return {
+        ok: true,
+        observed: true,
+        cancelled: true,
+        reason: "already_cancelled",
+      };
     }
 
-    return executeLiveBargeInCancel(config, ctx, runtime, atMs);
+    return executeLiveBargeInCancel(config, ctx, runtime, atMs, payload);
   } catch (err) {
     const message = String(err?.message ?? err).slice(0, 120);
-    console.warn(`[v4-live] barge_in_error reason=${message} ${liveLogIds(ctx)}`);
+    console.warn(
+      `[v4-live] barge_in_error reason=${message} ${liveLogIds(ctx)}`,
+    );
     bufferQualityEvent(
       runtime,
-      buildLiveBargeQualityEvent(config, ctx, runtime, buildRuntimeErrorEvent, null, {
-        error_class: "barge_in_failed",
-        message,
-        event_subtype: "barge_in_error"
-      })
+      buildLiveBargeQualityEvent(
+        config,
+        ctx,
+        runtime,
+        buildRuntimeErrorEvent,
+        null,
+        {
+          error_class: "barge_in_failed",
+          message,
+          event_subtype: "barge_in_error",
+        },
+      ),
     );
     ensureListeningAfterBargeInError(runtime);
-    return { ok: false, observed: false, cancelled: false, reason: "barge_in_error", error: message };
+    return {
+      ok: false,
+      observed: false,
+      cancelled: false,
+      reason: "barge_in_error",
+      error: message,
+    };
   }
 }
 
-export function executeLiveBargeInCancel(config, ctx, runtime, atMs = Date.now()) {
+export function executeLiveBargeInCancel(
+  config,
+  ctx,
+  runtime,
+  atMs = Date.now(),
+  triggerPayload = null,
+) {
   const ts = Number(atMs) || Date.now();
   const playback = runtime.playback;
   const metricsBefore = getPlaybackMetrics(playback);
-  const responseType = runtime.lastAssistantPlanCandidate?.response_type ?? playback?.label ?? null;
+  const responseType =
+    runtime.lastAssistantPlanCandidate?.response_type ??
+    playback?.label ??
+    null;
 
-  runtime.bargeInDetector = markBargeInTriggered(runtime.bargeInDetector, playback, ts);
+  runtime.bargeInDetector = markBargeInTriggered(
+    runtime.bargeInDetector,
+    playback,
+    ts,
+  );
   const cancelResult = requestPlaybackCancel(playback, "barge_in", ts);
   runtime.playback = cancelResult.controller;
 
@@ -177,28 +249,42 @@ export function executeLiveBargeInCancel(config, ctx, runtime, atMs = Date.now()
     0;
 
   console.log(
-    `[v4-live] barge_in_detected cancel_latency_ms=${cancelLatencyMs ?? "unknown"} frames_sent_before_cancel=${framesBeforeCancel} response_type=${responseType ?? "unknown"} ${liveLogIds(ctx)}`
+    `[v4-live] barge_in_detected cancel_latency_ms=${cancelLatencyMs ?? "unknown"} frames_sent_before_cancel=${framesBeforeCancel} response_type=${responseType ?? "unknown"} ${liveLogIds(ctx)}`,
   );
   console.log(
-    `[v4-live] playback_cancel_requested cancel_latency_ms=${cancelLatencyMs ?? "unknown"} frames_sent_before_cancel=${framesBeforeCancel} ${liveLogIds(ctx)}`
+    `[v4-live] playback_cancel_requested cancel_latency_ms=${cancelLatencyMs ?? "unknown"} frames_sent_before_cancel=${framesBeforeCancel} ${liveLogIds(ctx)}`,
   );
 
   bufferQualityEvent(
     runtime,
-    buildLiveBargeQualityEvent(config, ctx, runtime, buildBargeInDetectedEvent, cancelLatencyMs, {
-      response_type: responseType,
-      frames_sent_before_cancel: framesBeforeCancel,
-      ...safeBargeInPayload(runtime.bargeInDetector)
-    })
+    buildLiveBargeQualityEvent(
+      config,
+      ctx,
+      runtime,
+      buildBargeInDetectedEvent,
+      cancelLatencyMs,
+      {
+        response_type: responseType,
+        frames_sent_before_cancel: framesBeforeCancel,
+        ...safeBargeInPayload(runtime.bargeInDetector),
+      },
+    ),
   );
   bufferQualityEvent(
     runtime,
-    buildLiveBargeQualityEvent(config, ctx, runtime, buildPlaybackCancelRequestedEvent, cancelLatencyMs, {
-      response_type: responseType,
-      frames_sent_before_cancel: framesBeforeCancel,
-      bytes_sent: cancelMetrics.bytes_sent,
-      stopped_by_barge_in: cancelMetrics.stopped_by_barge_in
-    })
+    buildLiveBargeQualityEvent(
+      config,
+      ctx,
+      runtime,
+      buildPlaybackCancelRequestedEvent,
+      cancelLatencyMs,
+      {
+        response_type: responseType,
+        frames_sent_before_cancel: framesBeforeCancel,
+        bytes_sent: cancelMetrics.bytes_sent,
+        stopped_by_barge_in: cancelMetrics.stopped_by_barge_in,
+      },
+    ),
   );
 
   const assistantPreview = runtime.orchestrator?.lastAssistantText ?? "";
@@ -207,21 +293,21 @@ export function executeLiveBargeInCancel(config, ctx, runtime, atMs = Date.now()
     stateMachine: runtime.runtimeContext?.stateMachine,
     playback: runtime.playback,
     assistantText: assistantPreview,
-    turnIndex: runtime.playback?.turnIndex
+    turnIndex: runtime.playback?.turnIndex,
   });
 
   runtime.runtimeContext.memory = applyInterruptionToMemory(
     runtime.runtimeContext.memory,
-    runtime.interruptionContext
+    runtime.interruptionContext,
   );
   runtime.runtimeContext.stateMachine = applyInterruptionToStateMachine(
     runtime.runtimeContext.stateMachine,
-    "barge_in"
+    "barge_in",
   );
   runtime.runtimeContext.memory = {
     ...runtime.runtimeContext.memory,
     current_state: runtime.runtimeContext.stateMachine.state,
-    updated_at: Date.now()
+    updated_at: Date.now(),
   };
 
   if (runtime.orchestrator) {
@@ -235,22 +321,31 @@ export function executeLiveBargeInCancel(config, ctx, runtime, atMs = Date.now()
 
   runtime.pendingInterruptionRecovery = true;
   runtime.highPriorityInterruptionTurn = true;
-  beginInterruptFollowupWaitOnBargeIn(runtime, config, ts);
+  beginInterruptFollowupWaitOnBargeIn(runtime, config, ctx, ts);
   runtime.bargeInCount = (runtime.bargeInCount ?? 0) + 1;
   runtime.bargeInHandledPlaybackId = playback.playbackId;
 
   bufferQualityEvent(
     runtime,
-    buildLiveBargeQualityEvent(config, ctx, runtime, buildInterruptionContextCapturedEvent, null, {
-      response_type: responseType,
-      interrupted_product_id: runtime.interruptionContext?.interrupted_product_id ?? null,
-      interrupted_state: runtime.interruptionContext?.interrupted_state ?? null,
-      frames_sent_before_cancel: framesBeforeCancel,
-      recovery_pending: true
-    })
+    buildLiveBargeQualityEvent(
+      config,
+      ctx,
+      runtime,
+      buildInterruptionContextCapturedEvent,
+      null,
+      {
+        response_type: responseType,
+        interrupted_product_id:
+          runtime.interruptionContext?.interrupted_product_id ?? null,
+        interrupted_state:
+          runtime.interruptionContext?.interrupted_state ?? null,
+        frames_sent_before_cancel: framesBeforeCancel,
+        recovery_pending: true,
+      },
+    ),
   );
 
-  resetUtteranceBuffer(runtime);
+  ensureInterruptUtteranceAfterBargeIn(runtime, ctx, triggerPayload);
   runtime.bargeInDetector = resetBargeInDetector(runtime.bargeInDetector);
 
   return {
@@ -259,11 +354,17 @@ export function executeLiveBargeInCancel(config, ctx, runtime, atMs = Date.now()
     cancelled: true,
     cancelLatencyMs,
     framesSentBeforeCancel: framesBeforeCancel,
-    interruptionContext: runtime.interruptionContext
+    interruptionContext: runtime.interruptionContext,
   };
 }
 
-export function finalizeLivePlaybackAfterStream(config, ctx, runtime, playbackController, streamOutcome = {}) {
+export function finalizeLivePlaybackAfterStream(
+  config,
+  ctx,
+  runtime,
+  playbackController,
+  streamOutcome = {},
+) {
   const atMs = Date.now();
   const wasCancelled =
     Boolean(streamOutcome.cancelled) ||
@@ -273,7 +374,7 @@ export function finalizeLivePlaybackAfterStream(config, ctx, runtime, playbackCo
   const finalized = finalizePlayback(
     playbackController,
     wasCancelled ? "cancelled" : "completed",
-    atMs
+    atMs,
   );
   runtime.playback = finalized.controller;
   runtime.playbackInFlight = false;
@@ -281,18 +382,31 @@ export function finalizeLivePlaybackAfterStream(config, ctx, runtime, playbackCo
   const metrics = getPlaybackMetrics(finalized.controller);
   if (wasCancelled) {
     console.log(
-      `[v4-live] playback_cancelled cancel_latency_ms=${metrics.cancel_latency_ms ?? "unknown"} frames_sent_before_cancel=${metrics.frames_sent ?? 0} ${liveLogIds(ctx)}`
+      `[v4-live] playback_cancelled cancel_latency_ms=${metrics.cancel_latency_ms ?? "unknown"} frames_sent_before_cancel=${metrics.frames_sent ?? 0} ${liveLogIds(ctx)}`,
     );
     bufferQualityEvent(
       runtime,
-      buildLiveBargeQualityEvent(config, ctx, runtime, buildPlaybackCancelledEvent, metrics.cancel_latency_ms, {
-        frames_sent_before_cancel: metrics.frames_sent,
-        bytes_sent: metrics.bytes_sent,
-        stopped_by_barge_in: metrics.stopped_by_barge_in
-      })
+      buildLiveBargeQualityEvent(
+        config,
+        ctx,
+        runtime,
+        buildPlaybackCancelledEvent,
+        metrics.cancel_latency_ms,
+        {
+          frames_sent_before_cancel: metrics.frames_sent,
+          bytes_sent: metrics.bytes_sent,
+          stopped_by_barge_in: metrics.stopped_by_barge_in,
+        },
+      ),
     );
     ensureListeningAfterBargeIn(runtime);
-    return { ok: true, cancelled: true, metrics, framesSent: metrics.frames_sent, bytesSent: metrics.bytes_sent };
+    return {
+      ok: true,
+      cancelled: true,
+      metrics,
+      framesSent: metrics.frames_sent,
+      bytesSent: metrics.bytes_sent,
+    };
   }
 
   return {
@@ -300,7 +414,7 @@ export function finalizeLivePlaybackAfterStream(config, ctx, runtime, playbackCo
     cancelled: false,
     metrics,
     framesSent: streamOutcome.frames ?? metrics.frames_sent,
-    bytesSent: streamOutcome.bytes ?? metrics.bytes_sent
+    bytesSent: streamOutcome.bytes ?? metrics.bytes_sent,
   };
 }
 
@@ -308,16 +422,28 @@ export function ensureListeningAfterBargeIn(runtime) {
   if (!runtime?.runtimeContext?.stateMachine) return;
   const sm = runtime.runtimeContext.stateMachine;
   const target =
-    sm.state === V4_STATES.INTERRUPTED ? V4_STATES.LISTENING : sm.state === V4_STATES.SPEAKING ? V4_STATES.LISTENING : sm.state;
+    sm.state === V4_STATES.INTERRUPTED
+      ? V4_STATES.LISTENING
+      : sm.state === V4_STATES.SPEAKING
+        ? V4_STATES.LISTENING
+        : sm.state;
   if (target === V4_STATES.LISTENING && sm.state !== V4_STATES.LISTENING) {
-    runtime.runtimeContext.stateMachine = transitionState(sm, V4_STATES.LISTENING, "barge_in_listen");
+    runtime.runtimeContext.stateMachine = transitionState(
+      sm,
+      V4_STATES.LISTENING,
+      "barge_in_listen",
+    );
   } else if (sm.state === V4_STATES.SPEAKING) {
-    runtime.runtimeContext.stateMachine = transitionState(sm, V4_STATES.LISTENING, "barge_in_listen");
+    runtime.runtimeContext.stateMachine = transitionState(
+      sm,
+      V4_STATES.LISTENING,
+      "barge_in_listen",
+    );
   }
   runtime.runtimeContext.memory = {
     ...runtime.runtimeContext.memory,
     current_state: runtime.runtimeContext.stateMachine.state,
-    updated_at: Date.now()
+    updated_at: Date.now(),
   };
   if (runtime.orchestrator) {
     runtime.orchestrator.stateMachine = runtime.runtimeContext.stateMachine;
@@ -330,11 +456,11 @@ function ensureListeningAfterBargeInError(runtime) {
   runtime.runtimeContext.stateMachine = transitionState(
     runtime.runtimeContext.stateMachine ?? { state: V4_STATES.LISTENING },
     V4_STATES.LISTENING,
-    "barge_in_error_recovery"
+    "barge_in_error_recovery",
   );
   runtime.runtimeContext.memory = {
     ...runtime.runtimeContext.memory,
     current_state: V4_STATES.LISTENING,
-    updated_at: Date.now()
+    updated_at: Date.now(),
   };
 }

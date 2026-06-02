@@ -12,27 +12,37 @@ import { markLiveTurnLatency } from "./live-turn-latency.js";
 import { createSttAdapter } from "./stt-adapter.js";
 import {
   createOpenAiEndpointTranscribeFn,
-  isLiveOpenAiSttConfigured
+  isLiveOpenAiSttConfigured,
 } from "./openai-stt-provider.js";
 import { redactPhoneLikeText } from "./redaction.js";
 import {
   buildSttStartedEvent,
   buildSttCompletedEvent,
   buildSttFinalEvent,
-  buildRuntimeErrorEvent
+  buildRuntimeErrorEvent,
 } from "./quality-events.js";
 
 const DEFAULT_LIVE_STT_TIMEOUT_MS = 15000;
 
 export function resolveLiveSttProvider(config) {
-  const configured = String(config?.v4?.sttProvider ?? "mock").trim().toLowerCase();
+  const configured = String(config?.v4?.sttProvider ?? "mock")
+    .trim()
+    .toLowerCase();
   if (configured !== "openai") {
     return { provider: "mock", openaiActive: false, reason: "provider_mock" };
   }
   if (!isLiveOpenAiSttConfigured(config)) {
-    return { provider: "mock", openaiActive: false, reason: "openai_not_configured" };
+    return {
+      provider: "mock",
+      openaiActive: false,
+      reason: "openai_not_configured",
+    };
   }
-  return { provider: "openai", openaiActive: true, reason: "openai_live_canary" };
+  return {
+    provider: "openai",
+    openaiActive: true,
+    reason: "openai_live_canary",
+  };
 }
 
 export function validateLiveCanarySttProvider(config, options = {}) {
@@ -42,7 +52,11 @@ export function validateLiveCanarySttProvider(config, options = {}) {
   if (provider === "mock" && !options.allowMockStt) {
     return { ok: false, reason: "live_stt_mock_not_allowed", provider };
   }
-  if (provider === "openai" && !options.endpointTranscribeFn && !isLiveOpenAiSttConfigured(config, options)) {
+  if (
+    provider === "openai" &&
+    !options.endpointTranscribeFn &&
+    !isLiveOpenAiSttConfigured(config, options)
+  ) {
     return { ok: false, reason: "openai_stt_not_configured", provider };
   }
   return { ok: true, provider, reason: resolved.reason };
@@ -54,7 +68,7 @@ export function createLiveSttAdapter(config, options = {}) {
 
   if (provider === "mock" && !options.suppressMockWarning) {
     console.warn(
-      "[v4-live] stt_provider=mock live PSTN semantic QA is invalid; set VOICE_V4_STT_PROVIDER=openai for supervised QA"
+      "[v4-live] stt_provider=mock live PSTN semantic QA is invalid; set VOICE_V4_STT_PROVIDER=openai for supervised QA",
     );
   } else if (provider === "openai") {
     console.log("[v4-live] stt_provider=openai endpoint_transcription=enabled");
@@ -64,7 +78,7 @@ export function createLiveSttAdapter(config, options = {}) {
     provider,
     enabled: true,
     timeoutMs: DEFAULT_LIVE_STT_TIMEOUT_MS,
-    fetchImpl: options.fetchImpl ?? null
+    fetchImpl: options.fetchImpl ?? null,
   };
 
   if (provider === "openai") {
@@ -72,7 +86,7 @@ export function createLiveSttAdapter(config, options = {}) {
       options.endpointTranscribeFn ??
       createOpenAiEndpointTranscribeFn(config, {
         fetchImpl: options.fetchImpl,
-        apiKey: options.apiKey
+        apiKey: options.apiKey,
       });
   }
 
@@ -97,19 +111,23 @@ export function beginUtteranceCapture(runtime, ctx) {
   const streamId = `live-stt-${ctx?.bridgeCallId ?? "pending"}-${runtime.speechStartCount ?? 0}`;
   const started = runtime.sttAdapter.startSttStream({
     streamId,
-    language: runtime?.config?.transcription?.language ?? "de"
+    language: runtime?.config?.transcription?.language ?? "de",
   });
 
   if (!started?.ok) {
     runtime.utterance = { capturing: false, frames: [], streamId: null };
-    return { ok: false, reason: "stt_stream_start_failed", error: started?.error ?? null };
+    return {
+      ok: false,
+      reason: "stt_stream_start_failed",
+      error: started?.error ?? null,
+    };
   }
 
   runtime.utterance = {
     capturing: true,
     frames: [],
     streamId: started.streamId,
-    startedAt: Date.now()
+    startedAt: Date.now(),
   };
 
   return { ok: true, streamId: started.streamId };
@@ -130,17 +148,25 @@ export function appendUtteranceFrame(runtime, payload) {
   return { ok: true, frameCount: runtime.utterance.frames.length };
 }
 
-function buildLiveSttQualityEvent(config, ctx, runtime, builder, metricValue, payload = {}) {
+function buildLiveSttQualityEvent(
+  config,
+  ctx,
+  runtime,
+  builder,
+  metricValue,
+  payload = {},
+) {
   return builder({
     config,
     agentConfigResult: runtime?.runtimeContext?.agentConfig ?? null,
-    callSessionId: ctx?.callSessionId ?? runtime?.audioSession?.callSessionId ?? null,
+    callSessionId:
+      ctx?.callSessionId ?? runtime?.audioSession?.callSessionId ?? null,
     metricValue,
     payload: {
       bridge_call_id: ctx?.bridgeCallId ?? null,
       live_phase: runtime?.phase ?? "phase10c_live_stt",
-      ...payload
-    }
+      ...payload,
+    },
   });
 }
 
@@ -193,18 +219,18 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     runtime,
     buildLiveSttQualityEvent(config, ctx, runtime, buildSttStartedEvent, null, {
       utterance_frames: frameCount,
-      stt_provider: sttProvider
-    })
+      stt_provider: sttProvider,
+    }),
   );
 
   console.log(
-    `[v4-live] stt_started stt_provider=${sttProvider} utterance_frames=${frameCount} ${liveLogIds(ctx)}`
+    `[v4-live] stt_started stt_provider=${sttProvider} utterance_frames=${frameCount} ${liveLogIds(ctx)}`,
   );
 
   let completed;
   try {
     completed = await completeLiveSttTurn(runtime.sttAdapter, streamId, {
-      finalText: undefined
+      finalText: undefined,
     });
   } catch (err) {
     completed = {
@@ -212,8 +238,8 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       error: { code: "stt_exception", message: String(err?.message ?? err) },
       diagnostics: {
         stt_provider: sttProvider,
-        utterance_frames: frameCount
-      }
+        utterance_frames: frameCount,
+      },
     };
   }
 
@@ -226,7 +252,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       frameCount,
       utterance,
       sttProvider,
-      sttMs
+      sttMs,
     );
     logSttFailed(ctx, code, sttMs, frameCount, diagnostics);
     bufferSttErrorEvent(config, ctx, runtime, code, sttMs, diagnostics);
@@ -235,7 +261,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     const fallback = await runLiveSttFailureFallback(config, ctx, runtime, {
       sttReason: code,
       sttMs,
-      diagnostics
+      diagnostics,
     });
 
     return {
@@ -243,7 +269,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       reason: code,
       sttMs,
       diagnostics,
-      fallback
+      fallback,
     };
   }
 
@@ -255,7 +281,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     frameCount,
     utterance,
     completed.event.provider ?? sttProvider,
-    sttMs
+    sttMs,
   );
 
   runtime.lastCallerTurnCandidate = {
@@ -265,20 +291,27 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     provider: completed.event.provider ?? runtime.sttAdapter.provider,
     sttMs,
     endpointIndex: runtime.endpointCount ?? 0,
-    atMs: Date.now()
+    atMs: Date.now(),
   };
   runtime.sttCompletedCount = (runtime.sttCompletedCount ?? 0) + 1;
   markLiveTurnLatency(runtime, "stt_completed");
 
   bufferQualityEvent(
     runtime,
-    buildLiveSttQualityEvent(config, ctx, runtime, buildSttCompletedEvent, sttMs, {
-      transcript_chars: transcriptChars,
-      utterance_frames: frameCount,
-      stt_provider: completed.event.provider ?? sttProvider,
-      stt_ok: true,
-      ...successDiagnostics
-    })
+    buildLiveSttQualityEvent(
+      config,
+      ctx,
+      runtime,
+      buildSttCompletedEvent,
+      sttMs,
+      {
+        transcript_chars: transcriptChars,
+        utterance_frames: frameCount,
+        stt_provider: completed.event.provider ?? sttProvider,
+        stt_ok: true,
+        ...successDiagnostics,
+      },
+    ),
   );
   const transcriptPreview =
     config?.assistant?.logTranscriptPreview === true
@@ -290,40 +323,50 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       transcript_chars: transcriptChars,
       stt_provider: completed.event.provider ?? sttProvider,
       ...successDiagnostics,
-      ...transcriptPreview
-    })
+      ...transcriptPreview,
+    }),
   );
 
   console.log(
-    `[v4-live] stt_completed stt_provider=${completed.event.provider ?? sttProvider} stt_ms=${sttMs} transcript_chars=${transcriptChars} utterance_frames=${frameCount} ${liveLogIds(ctx)}`
+    `[v4-live] stt_completed stt_provider=${completed.event.provider ?? sttProvider} stt_ms=${sttMs} transcript_chars=${transcriptChars} utterance_frames=${frameCount} ${liveLogIds(ctx)}`,
   );
-
-  resetUtteranceBuffer(runtime);
 
   const followupStt = processInterruptFollowupAfterStt(
     config,
     ctx,
     runtime,
     redacted,
-    Date.now()
+    Date.now(),
   );
   if (followupStt.defer) {
     markInterruptFollowupLatency(runtime, "followup_stt_completed", Date.now());
+    if (
+      followupStt.reason === "marker_only_waiting" ||
+      followupStt.reason === "marker_only_extend_wait"
+    ) {
+      beginUtteranceCapture(runtime, ctx);
+    } else {
+      resetUtteranceBuffer(runtime);
+    }
     return {
       ok: true,
       sttMs,
       transcriptChars,
       deferred: true,
       deferReason: followupStt.reason,
+      single_stop_detected: Boolean(followupStt.single_stop_detected),
       candidate: runtime.lastCallerTurnCandidate,
       dialogue: { ok: false, reason: "interrupt_followup_deferred" },
-      playback: { ok: false, reason: "interrupt_followup_deferred" }
+      playback: { ok: false, reason: "interrupt_followup_deferred" },
     };
   }
 
+  resetUtteranceBuffer(runtime);
+
   if (followupStt.transcript && followupStt.transcript !== redacted) {
     runtime.lastCallerTurnCandidate.transcript = followupStt.transcript;
-    runtime.lastCallerTurnCandidate.transcriptChars = followupStt.transcript.length;
+    runtime.lastCallerTurnCandidate.transcriptChars =
+      followupStt.transcript.length;
   }
   markInterruptFollowupLatency(runtime, "followup_stt_completed", Date.now());
 
@@ -333,11 +376,11 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       config,
       ctx,
       runtime,
-      runtime.lastCallerTurnCandidate
+      runtime.lastCallerTurnCandidate,
     );
   } catch (err) {
     console.warn(
-      `[v4-live] dialogue_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+      `[v4-live] dialogue_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`,
     );
     dialogue = { ok: false, reason: "dialogue_exception" };
   }
@@ -348,7 +391,7 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
       playback = await runLiveTtsAndPlayback(config, ctx, runtime, dialogue);
     } catch (err) {
       console.warn(
-        `[v4-live] tts_playback_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+        `[v4-live] tts_playback_endpoint_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`,
       );
       playback = { ok: false, reason: "tts_playback_exception" };
     }
@@ -360,25 +403,61 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
     transcriptChars,
     candidate: runtime.lastCallerTurnCandidate,
     dialogue,
-    playback
+    playback,
   };
 }
 
 export function resetUtteranceBuffer(runtime) {
   if (!runtime) return;
+  if (runtime.waitingForInterruptionFollowup) {
+    return;
+  }
   runtime.utterance = {
     capturing: false,
     frames: [],
     streamId: null,
-    startedAt: null
+    startedAt: null,
   };
 }
 
-function buildSttFailureDiagnostics(completed, frameCount, utterance, sttProvider, sttMs) {
+/**
+ * Phase 10Q — keep caller speech that triggered barge-in; do not wipe buffer.
+ */
+export function ensureInterruptUtteranceAfterBargeIn(runtime, ctx, payload = null) {
+  if (!runtime?.sttAdapter) {
+    return { ok: false, reason: "stt_adapter_missing" };
+  }
+
+  const frameCount = runtime.utterance?.frames?.length ?? 0;
+  if (runtime.utterance?.capturing && frameCount > 0) {
+    return { ok: true, action: "preserved", frameCount };
+  }
+
+  const began = beginUtteranceCapture(runtime, ctx);
+  if (!began.ok) {
+    return began;
+  }
+
+  if (payload?.length) {
+    appendUtteranceFrame(runtime, payload);
+  }
+
+  return { ok: true, action: "started", frameCount: runtime.utterance?.frames?.length ?? 0 };
+}
+
+function buildSttFailureDiagnostics(
+  completed,
+  frameCount,
+  utterance,
+  sttProvider,
+  sttMs,
+) {
   const diag = completed?.diagnostics ?? {};
   const utteranceDurationMs =
     diag.utterance_duration_ms ??
-    (utterance?.startedAt ? Math.max(0, Date.now() - utterance.startedAt) : null);
+    (utterance?.startedAt
+      ? Math.max(0, Date.now() - utterance.startedAt)
+      : null);
 
   return {
     stt_provider: sttProvider,
@@ -393,17 +472,25 @@ function buildSttFailureDiagnostics(completed, frameCount, utterance, sttProvide
     language: diag.language ?? null,
     utterance_frames: frameCount,
     utterance_duration_ms: utteranceDurationMs,
-    duration_ms: diag.duration_ms ?? sttMs
+    duration_ms: diag.duration_ms ?? sttMs,
   };
 }
 
-function buildSttSuccessDiagnostics(completed, frameCount, utterance, sttProvider, sttMs) {
+function buildSttSuccessDiagnostics(
+  completed,
+  frameCount,
+  utterance,
+  sttProvider,
+  sttMs,
+) {
   const diag = completed?.diagnostics ?? {};
   const pcmBytes = diag.pcm_bytes == null ? null : Number(diag.pcm_bytes);
   const wavBytes = diag.wav_bytes == null ? null : Number(diag.wav_bytes);
   const utteranceDurationMs =
     diag.utterance_duration_ms ??
-    (utterance?.startedAt ? Math.max(0, Date.now() - utterance.startedAt) : null);
+    (utterance?.startedAt
+      ? Math.max(0, Date.now() - utterance.startedAt)
+      : null);
 
   return {
     stt_provider: sttProvider,
@@ -420,29 +507,46 @@ function buildSttSuccessDiagnostics(completed, frameCount, utterance, sttProvide
     utterance_frames: frameCount,
     frame_count: diag.frame_count ?? frameCount,
     utterance_duration_ms: utteranceDurationMs,
-    duration_ms: diag.duration_ms ?? sttMs
+    duration_ms: diag.duration_ms ?? sttMs,
   };
 }
 
 function logSttFailed(ctx, reason, sttMs, frameCount, diagnostics = {}) {
   console.warn(
-    `[v4-live] stt_failed stt_provider=${diagnostics.stt_provider ?? "unknown"} reason=${reason} http_status=${diagnostics.stt_http_status ?? "none"} stt_error_code=${diagnostics.stt_error_code ?? "none"} stt_ms=${sttMs} utterance_frames=${frameCount} pcm_bytes=${diagnostics.pcm_bytes ?? 0} wav_bytes=${diagnostics.wav_bytes ?? 0} ${liveLogIds(ctx)}`
+    `[v4-live] stt_failed stt_provider=${diagnostics.stt_provider ?? "unknown"} reason=${reason} http_status=${diagnostics.stt_http_status ?? "none"} stt_error_code=${diagnostics.stt_error_code ?? "none"} stt_ms=${sttMs} utterance_frames=${frameCount} pcm_bytes=${diagnostics.pcm_bytes ?? 0} wav_bytes=${diagnostics.wav_bytes ?? 0} ${liveLogIds(ctx)}`,
   );
 }
 
-function bufferSttErrorEvent(config, ctx, runtime, reason, sttMs, diagnostics = {}) {
+function bufferSttErrorEvent(
+  config,
+  ctx,
+  runtime,
+  reason,
+  sttMs,
+  diagnostics = {},
+) {
   bufferQualityEvent(
     runtime,
-    buildLiveSttQualityEvent(config, ctx, runtime, buildRuntimeErrorEvent, sttMs, {
-      error_class: "stt_failed",
-      message: String(reason).slice(0, 120),
-      event_subtype: "stt_error",
-      stt_provider: diagnostics.stt_provider ?? runtime?.sttAdapter?.provider ?? "unknown",
-      stt_ok: false,
-      transcript_chars: 0,
-      stt_failed_fallback_prompted: false,
-      ...diagnostics
-    })
+    buildLiveSttQualityEvent(
+      config,
+      ctx,
+      runtime,
+      buildRuntimeErrorEvent,
+      sttMs,
+      {
+        error_class: "stt_failed",
+        message: String(reason).slice(0, 120),
+        event_subtype: "stt_error",
+        stt_provider:
+          diagnostics.stt_provider ??
+          runtime?.sttAdapter?.provider ??
+          "unknown",
+        stt_ok: false,
+        transcript_chars: 0,
+        stt_failed_fallback_prompted: false,
+        ...diagnostics,
+      },
+    ),
   );
 }
 

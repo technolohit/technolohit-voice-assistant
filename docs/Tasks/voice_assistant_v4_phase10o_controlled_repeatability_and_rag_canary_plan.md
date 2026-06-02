@@ -3,9 +3,9 @@
 Date: 2026-06-02  
 Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_semantic_recovery_report.md) — **v1.25.0 supervised canary PASS** (`call_session_id=9061f2db-713f-4d89-84d0-146e2571eb5f`).
 
-**Phase 10O-A status: FAILED (stopped).** Call 1 and retry failed conversational repeatability (premature “Gerne…” after “Stopp”, unstable product context). Transport (STT/TTS/barge-in/flush/rollback) worked. See [Phase 10P report](./voice_assistant_v4_phase10p_turn_taking_interruption_wait_report.md).
+**Phase 10O-A status: FAILED (stopped).** Call 1 and retry failed conversational repeatability (premature “Gerne…” after “Stopp”, unstable product context). **v1.26.0 / Phase 10P retry also failed** — caller had to repeat Stop/Stopp (`call_session_id=80fdee7f-4086-479c-bbd8-db40c24912cd`). Transport (STT/TTS/barge-in/flush/rollback) worked. See [Phase 10P report](./voice_assistant_v4_phase10p_turn_taking_interruption_wait_report.md) and [Phase 10Q report](./voice_assistant_v4_phase10q_single_stop_reliability_report.md).
 
-**Phase 10O-B (RAG-on): BLOCKED** until Phase 10O-A passes on **v1.26.0+** (10P turn-taking fix).
+**Phase 10O-B (RAG-on): BLOCKED** until Phase 10O-A passes on **v1.27.0+** (10Q single-stop fix).
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 

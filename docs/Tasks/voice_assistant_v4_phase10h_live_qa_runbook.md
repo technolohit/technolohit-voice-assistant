@@ -456,23 +456,34 @@ ORDER BY created_at;
 
 **Pass:** ≥ 1 row when caller interrupted assistant playback. **Fail:** 0 rows but logs show `barge_in_detected` or `quality_flush_skip_event event_type=barge_in_detected` (upgrade to v1.25.0+).
 
-### G.3d Interrupt follow-up latency (Phase 10P)
+### G.3d Interrupt follow-up latency (Phase 10P / 10Q)
 
 ```sql
 SELECT
   created_at,
+  event_type,
+  payload->>'single_stop_detected',
+  payload->>'marker_only',
+  payload->>'stop_to_cancel_ms',
+  payload->>'stop_to_wait_window_ms',
+  payload->>'wait_window_to_continuation_ms',
   payload->>'barge_in_detected_to_playback_cancelled_ms' AS cancel_ms,
-  payload->>'barge_in_detected_to_followup_speech_start_ms' AS followup_speech_ms,
-  payload->>'followup_stt_completed_to_plan_ms' AS stt_to_plan_ms,
+  payload->>'continuation_speech_started_ms',
   payload->>'followup_plan_to_first_playback_ms' AS plan_to_playback_ms
 FROM voice.call_quality_events
 WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
-  AND event_type = 'interrupt_followup_latency_metrics'
+  AND event_type IN (
+    'interrupt_followup_started',
+    'interrupt_followup_waiting',
+    'interrupt_followup_continuation_received',
+    'interrupt_followup_timeout',
+    'interrupt_followup_latency_metrics'
+  )
 ORDER BY created_at DESC
-LIMIT 3;
+LIMIT 10;
 ```
 
-**Pass:** Row present after barge-in + completed follow-up turn; use to explain perceived post-interrupt delay.
+**Pass:** After a single “Stopp” during assistant speech: `interrupt_followup_started` + `interrupt_followup_waiting` with `single_stop_detected=true`; no immediate TTS; continuation or timeout event follows. **Fail:** Caller must repeat Stop/Stopp (pre-10Q) or no follow-up events after barge-in.
 
 ### G.4 Session close + privacy-oriented payload scan
 

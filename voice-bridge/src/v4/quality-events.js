@@ -14,14 +14,14 @@ const SENSITIVE_KEYS = new Set([
   "email",
   "transcript",
   "assistant_text",
-  "user_utterance"
+  "user_utterance",
 ]);
 
 const VERSION_METADATA_KEYS = new Set([
   "runtime_version",
   "agent_config_version",
   "prompt_playbook_version",
-  "knowledge_version"
+  "knowledge_version",
 ]);
 
 /** UUID / correlation ids — excluded from digit-based phone heuristics (Phase 10M). */
@@ -30,11 +30,12 @@ const PHONE_SCAN_EXEMPT_KEYS = new Set([
   "bridge_call_id",
   "call_session_id",
   "external_call_id",
-  "audiosocket_uuid"
+  "audiosocket_uuid",
 ]);
 
 export function redactQualityPayload(payload = {}) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    return {};
   const out = {};
   for (const [key, value] of Object.entries(payload)) {
     if (SENSITIVE_KEYS.has(key)) {
@@ -47,7 +48,11 @@ export function redactQualityPayload(payload = {}) {
     }
     if (typeof value === "string") {
       out[key] = redactPhoneLikeText(value);
-    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    } else if (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value)
+    ) {
       out[key] = redactQualityPayload(value);
     } else {
       out[key] = value;
@@ -64,7 +69,7 @@ export function buildQualityEventInput({
   eventStage = null,
   metricName = null,
   metricValue = null,
-  payload = {}
+  payload = {},
 }) {
   const event_type = String(eventType ?? "").trim();
   if (!event_type) {
@@ -72,10 +77,14 @@ export function buildQualityEventInput({
   }
 
   const tenantId = String(
-    agentConfigResult?.config?.tenant_id ?? config?.v4?.tenantId ?? "technolohit"
+    agentConfigResult?.config?.tenant_id ??
+      config?.v4?.tenantId ??
+      "technolohit",
   ).trim();
   const agentId = String(
-    agentConfigResult?.config?.agent_id ?? config?.v4?.agentId ?? "main_voice_sales"
+    agentConfigResult?.config?.agent_id ??
+      config?.v4?.agentId ??
+      "main_voice_sales",
   ).trim();
 
   return {
@@ -85,8 +94,10 @@ export function buildQualityEventInput({
     eventType: event_type,
     eventStage: eventStage ? String(eventStage).trim() : null,
     metricName: metricName ? String(metricName).trim() : null,
-    metricValue: Number.isFinite(Number(metricValue)) ? Number(metricValue) : null,
-    payload: redactQualityPayload(payload)
+    metricValue: Number.isFinite(Number(metricValue))
+      ? Number(metricValue)
+      : null,
+    payload: redactQualityPayload(payload),
   };
 }
 
@@ -123,7 +134,15 @@ export function validateQualityEventInput(input) {
 }
 
 function typedBuilder(eventType, defaults = {}) {
-  return ({ config, agentConfigResult, callSessionId, eventStage, metricName, metricValue, payload } = {}) =>
+  return ({
+    config,
+    agentConfigResult,
+    callSessionId,
+    eventStage,
+    metricName,
+    metricValue,
+    payload,
+  } = {}) =>
     buildQualityEventInput({
       config,
       agentConfigResult,
@@ -132,106 +151,183 @@ function typedBuilder(eventType, defaults = {}) {
       eventStage: eventStage ?? defaults.eventStage ?? null,
       metricName: metricName ?? defaults.metricName ?? null,
       metricValue: metricValue ?? defaults.metricValue ?? null,
-      payload: { ...defaults.payload, ...(payload ?? {}) }
+      payload: { ...defaults.payload, ...(payload ?? {}) },
     });
 }
 
-export const buildCallStartedEvent = typedBuilder("call_started", { eventStage: "session" });
-export const buildTurnStartedEvent = typedBuilder("turn_started", { eventStage: "dialogue" });
-export const buildDialogueStateTransitionEvent = typedBuilder("dialogue_state_transition", {
-  eventStage: "dialogue"
+export const buildCallStartedEvent = typedBuilder("call_started", {
+  eventStage: "session",
 });
-export const buildResponsePlanCreatedEvent = typedBuilder("response_plan_created", {
-  eventStage: "dialogue"
+export const buildTurnStartedEvent = typedBuilder("turn_started", {
+  eventStage: "dialogue",
 });
-export const buildSttStartedEvent = typedBuilder("stt_started", { eventStage: "stt" });
+export const buildDialogueStateTransitionEvent = typedBuilder(
+  "dialogue_state_transition",
+  {
+    eventStage: "dialogue",
+  },
+);
+export const buildResponsePlanCreatedEvent = typedBuilder(
+  "response_plan_created",
+  {
+    eventStage: "dialogue",
+  },
+);
+export const buildSttStartedEvent = typedBuilder("stt_started", {
+  eventStage: "stt",
+});
 export const buildSttCompletedEvent = typedBuilder("stt_completed", {
   eventStage: "stt",
-  metricName: "stt_ms"
+  metricName: "stt_ms",
 });
-export const buildTtsStartedEvent = typedBuilder("tts_started", { eventStage: "tts" });
+export const buildTtsStartedEvent = typedBuilder("tts_started", {
+  eventStage: "tts",
+});
 export const buildTtsFirstAudioEvent = typedBuilder("tts_first_audio", {
   eventStage: "tts",
-  metricName: "tts_first_audio_ms"
+  metricName: "tts_first_audio_ms",
 });
 export const buildTtsCompletedEvent = typedBuilder("tts_completed", {
   eventStage: "tts",
-  metricName: "tts_ms"
+  metricName: "tts_ms",
 });
-export const buildBargeInDetectedEvent = typedBuilder("barge_in_detected", { eventStage: "playback" });
-export const buildPlaybackStartedEvent = typedBuilder("playback_started", { eventStage: "playback" });
-export const buildPlaybackCancelRequestedEvent = typedBuilder("playback_cancel_requested", {
+export const buildBargeInDetectedEvent = typedBuilder("barge_in_detected", {
   eventStage: "playback",
-  metricName: "cancel_latency_ms"
 });
+export const buildPlaybackStartedEvent = typedBuilder("playback_started", {
+  eventStage: "playback",
+});
+export const buildPlaybackCancelRequestedEvent = typedBuilder(
+  "playback_cancel_requested",
+  {
+    eventStage: "playback",
+    metricName: "cancel_latency_ms",
+  },
+);
 export const buildPlaybackCancelledEvent = typedBuilder("playback_cancelled", {
   eventStage: "playback",
-  metricName: "cancel_latency_ms"
+  metricName: "cancel_latency_ms",
 });
 export const buildPlaybackCompletedEvent = typedBuilder("playback_completed", {
   eventStage: "playback",
-  metricName: "playback_duration_ms"
+  metricName: "playback_duration_ms",
 });
-export const buildInterruptionContextCapturedEvent = typedBuilder("interruption_context_captured", {
-  eventStage: "dialogue"
+export const buildInterruptionContextCapturedEvent = typedBuilder(
+  "interruption_context_captured",
+  {
+    eventStage: "dialogue",
+  },
+);
+export const buildTopicSwitchDetectedEvent = typedBuilder(
+  "topic_switch_detected",
+  {
+    eventStage: "dialogue",
+  },
+);
+export const buildInterruptionRecoveredEvent = typedBuilder(
+  "interruption_recovered",
+  {
+    eventStage: "dialogue",
+  },
+);
+export const buildRagRetrievalStartedEvent = typedBuilder(
+  "rag_retrieval_started",
+  {
+    eventStage: "rag",
+  },
+);
+export const buildRagRetrievalCompletedEvent = typedBuilder(
+  "rag_retrieval_completed",
+  {
+    eventStage: "rag",
+    metricName: "rag_ms",
+  },
+);
+export const buildRagRetrievalFailedEvent = typedBuilder(
+  "rag_retrieval_failed",
+  {
+    eventStage: "rag",
+    metricName: "rag_ms",
+  },
+);
+export const buildPostCallErrorEvent = typedBuilder("post_call_error", {
+  eventStage: "post_call",
 });
-export const buildTopicSwitchDetectedEvent = typedBuilder("topic_switch_detected", {
-  eventStage: "dialogue"
+export const buildLeadCreatedEvent = typedBuilder("lead_created", {
+  eventStage: "lead",
 });
-export const buildInterruptionRecoveredEvent = typedBuilder("interruption_recovered", {
-  eventStage: "dialogue"
+export const buildLeadSkippedEvent = typedBuilder("lead_skipped", {
+  eventStage: "lead",
 });
-export const buildRagRetrievalStartedEvent = typedBuilder("rag_retrieval_started", {
-  eventStage: "rag"
+export const buildRuntimeErrorEvent = typedBuilder("runtime_error", {
+  eventStage: "runtime",
 });
-export const buildRagRetrievalCompletedEvent = typedBuilder("rag_retrieval_completed", {
-  eventStage: "rag",
-  metricName: "rag_ms"
-});
-export const buildRagRetrievalFailedEvent = typedBuilder("rag_retrieval_failed", {
-  eventStage: "rag",
-  metricName: "rag_ms"
-});
-export const buildPostCallErrorEvent = typedBuilder("post_call_error", { eventStage: "post_call" });
-export const buildLeadCreatedEvent = typedBuilder("lead_created", { eventStage: "lead" });
-export const buildLeadSkippedEvent = typedBuilder("lead_skipped", { eventStage: "lead" });
-export const buildRuntimeErrorEvent = typedBuilder("runtime_error", { eventStage: "runtime" });
 
 export const buildVadSpeechStartEvent = typedBuilder("vad_speech_start", {
   eventStage: "vad",
-  metricName: "vad_speech_start_ms"
+  metricName: "vad_speech_start_ms",
 });
-export const buildVadEndpointDetectedEvent = typedBuilder("vad_endpoint_detected", {
-  eventStage: "vad",
-  metricName: "endpoint_ms"
+export const buildVadEndpointDetectedEvent = typedBuilder(
+  "vad_endpoint_detected",
+  {
+    eventStage: "vad",
+    metricName: "endpoint_ms",
+  },
+);
+export const buildSttPartialEvent = typedBuilder("stt_partial", {
+  eventStage: "stt",
 });
-export const buildSttPartialEvent = typedBuilder("stt_partial", { eventStage: "stt" });
 export const buildSttFinalEvent = typedBuilder("stt_final", {
   eventStage: "stt",
-  metricName: "stt_final_ms"
+  metricName: "stt_final_ms",
 });
 export const buildTtsFirstChunkEvent = typedBuilder("tts_first_chunk", {
   eventStage: "tts",
-  metricName: "tts_first_chunk_ms"
+  metricName: "tts_first_chunk_ms",
 });
-export const buildAudioSessionClosedEvent = typedBuilder("audio_session_closed", {
-  eventStage: "session",
-  metricName: "session_duration_ms"
-});
-export const buildTurnLatencyMetricsEvent = typedBuilder("turn_latency_metrics", {
-  eventStage: "dialogue",
-  metricName: "total_turn_response_ms"
-});
-export const buildInterruptFollowupLatencyMetricsEvent = typedBuilder("interrupt_followup_latency_metrics", {
-  eventStage: "dialogue",
-  metricName: "followup_plan_to_first_playback_ms"
-});
+export const buildAudioSessionClosedEvent = typedBuilder(
+  "audio_session_closed",
+  {
+    eventStage: "session",
+    metricName: "session_duration_ms",
+  },
+);
+export const buildTurnLatencyMetricsEvent = typedBuilder(
+  "turn_latency_metrics",
+  {
+    eventStage: "dialogue",
+    metricName: "total_turn_response_ms",
+  },
+);
+export const buildInterruptFollowupLatencyMetricsEvent = typedBuilder(
+  "interrupt_followup_latency_metrics",
+  {
+    eventStage: "dialogue",
+    metricName: "followup_plan_to_first_playback_ms",
+  },
+);
+export const buildInterruptFollowupStartedEvent = typedBuilder(
+  "interrupt_followup_started",
+  { eventStage: "dialogue" },
+);
+export const buildInterruptFollowupWaitingEvent = typedBuilder(
+  "interrupt_followup_waiting",
+  { eventStage: "dialogue" },
+);
+export const buildInterruptFollowupContinuationReceivedEvent = typedBuilder(
+  "interrupt_followup_continuation_received",
+  { eventStage: "dialogue" },
+);
+export const buildInterruptFollowupTimeoutEvent = typedBuilder(
+  "interrupt_followup_timeout",
+  { eventStage: "dialogue" },
+);
 
 export function buildQualityEventFromState(state, base = {}) {
   return buildQualityEventInput({
     ...base,
     eventType: stateToQualityEvent(state),
-    payload: { state, ...(base.payload ?? {}) }
+    payload: { state, ...(base.payload ?? {}) },
   });
 }
 

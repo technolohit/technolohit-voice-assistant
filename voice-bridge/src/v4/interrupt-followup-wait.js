@@ -1,26 +1,36 @@
 /**
- * Phase 10P — post-barge-in listen window before answering marker-only interruptions.
+ * Phase 10P/10Q — post-barge-in listen window before answering marker-only interruptions.
  */
 
 import { normalizeText } from "./redaction.js";
 import { V4_STATES, transitionState } from "./state-machine.js";
 import {
   isInterruptionFollowUpPhrase,
-  isDefiniteCallerGoodbye
+  isDefiniteCallerGoodbye,
 } from "./transcript-intent.js";
 import {
   detectShortFollowUpCategory,
-  hasSubstantiveFollowUpContent
+  hasSubstantiveFollowUpContent,
 } from "./playbook-short-answer.js";
 import { matchProductAlias } from "./agent-config.js";
 import {
+  splitInterruptMarkerAndContinuation,
+  markerCharCount,
+  continuationCharCount,
+  isHardStopMarkerText,
+} from "./interrupt-marker-split.js";
+import {
   beginInterruptFollowupLatency,
-  markInterruptFollowupLatency
+  markInterruptFollowupLatency,
 } from "./interrupt-followup-latency.js";
-import { buildTurnStartedEvent } from "./quality-events.js";
+import {
+  buildInterruptFollowupStartedEvent,
+  buildInterruptFollowupWaitingEvent,
+  buildInterruptFollowupContinuationReceivedEvent,
+  buildInterruptFollowupTimeoutEvent,
+} from "./quality-events.js";
 
-const MARKER_ONLY =
-  /^(stopp|stop|moment|warte)[.!?,]*$/i;
+const MARKER_ONLY = /^(stopp|stop|halt|moment|warte)[.!?,]*$/i;
 
 export function resolveInterruptFollowupWaitConfig(config) {
   const v4 = config?.v4 ?? {};
@@ -31,6 +41,9 @@ export function resolveInterruptFollowupWaitConfig(config) {
 }
 
 export function isInterruptMarkerOnly(transcript = "", { minChars = 12 } = {}) {
+  const split = splitInterruptMarkerAndContinuation(transcript);
+  if (split.marker_only) return true;
+
   const text = normalizeText(transcript);
   if (!text) return true;
   const lower = text.toLowerCase();
@@ -39,12 +52,15 @@ export function isInterruptMarkerOnly(transcript = "", { minChars = 12 } = {}) {
   if (detectShortFollowUpCategory(text)) return false;
   if (isDefiniteCallerGoodbye(text)) return false;
 
-  if (MARKER_ONLY.test(lower.trim())) return true;
+  if (MARKER_ONLY.test(lower.trim()) || isHardStopMarkerText(text)) return true;
 
   if (isInterruptionFollowUpPhrase(text)) {
     const stripped = lower
-      .replace(/\b(stopp|stop|moment|warte)\b/gi, "")
-      .replace(/\b(kurze frage|noch eine frage|darf ich kurz fragen|ich habe eine frage|ich habe noch eine frage)\b/gi, "")
+      .replace(/\b(stopp|stop|halt|moment|warte)\b/gi, "")
+      .replace(
+        /\b(kurze frage|noch eine frage|darf ich kurz fragen|ich habe eine frage|ich habe noch eine frage)\b/gi,
+        "",
+      )
       .replace(/[.,!?]/g, "")
       .trim();
     if (stripped.length < minChars) return true;
@@ -53,7 +69,19 @@ export function isInterruptMarkerOnly(transcript = "", { minChars = 12 } = {}) {
   return text.length < minChars;
 }
 
-export function resolveEffectiveInterruptTranscript(markerTranscript = "", continuationTranscript = "") {
+export function resolveEffectiveInterruptTranscript(
+  markerTranscript = "",
+  continuationTranscript = "",
+) {
+  const split = splitInterruptMarkerAndContinuation(
+    continuationTranscript && !markerTranscript
+      ? continuationTranscript
+      : markerTranscript && continuationTranscript
+        ? `${markerTranscript} ${continuationTranscript}`.trim()
+        : markerTranscript || continuationTranscript,
+  );
+  if (split.continuation && !split.marker_only) return split.continuation;
+
   const marker = normalizeText(markerTranscript);
   const continuation = normalizeText(continuationTranscript);
   if (!continuation) return marker;
@@ -62,155 +90,306 @@ export function resolveEffectiveInterruptTranscript(markerTranscript = "", conti
   return `${marker} ${continuation}`.trim();
 }
 
-export function beginInterruptFollowupWaitOnBargeIn(runtime, config, atMs = Date.now()) {
+function bufferQualityEvent(runtime, event) {
+  if (!runtime || !event) return;
+  if (!Array.isArray(runtime.qualityEventsBuffer))
+    runtime.qualityEventsBuffer = [];
+  runtime.qualityEventsBuffer.push(event);
+}
+
+function buildFollowupEventPayload(runtime, extra = {}) {
+  const followup = runtime?.interruptFollowup ?? {};
+  const latency = runtime?.interruptFollowupLatency ?? {};
+  return {
+    bridge_call_id: runtime?.runtimeContext?.memory?.bridge_call_id ?? null,
+    live_phase: "phase10q_interrupt_followup",
+    single_stop_detected: Boolean(followup.singleStopDetected),
+    marker_only: Boolean(followup.markerOnly ?? extra.marker_only),
+    marker_chars: followup.markerChars ?? extra.marker_chars ?? null,
+    continuation_chars: followup.continuationChars ?? extra.continuation_chars ?? null,
+    waiting_for_interruption_followup: Boolean(runtime?.waitingForInterruptionFollowup),
+    stop_detected_ms: followup.stopDetectedMs ?? latency.barge_in_detected_at ?? null,
+    playback_cancelled_ms: followup.playbackCancelledMs ?? latency.playback_cancelled_at ?? null,
+    wait_window_started_ms: followup.waitWindowStartedMs ?? null,
+    continuation_speech_started_ms: latency.followup_speech_start_at ?? null,
+    continuation_endpoint_ms: latency.followup_endpoint_at ?? null,
+    effective_transcript_chars: extra.effective_transcript_chars ?? null,
+    ...extra,
+  };
+}
+
+function bufferFollowupQualityEvent(config, ctx, runtime, builder, extra = {}) {
+  bufferQualityEvent(
+    runtime,
+    builder({
+      config,
+      agentConfigResult: runtime?.runtimeContext?.agentConfig ?? null,
+      callSessionId: ctx?.callSessionId ?? null,
+      payload: {
+        bridge_call_id: ctx?.bridgeCallId ?? null,
+        ...buildFollowupEventPayload(runtime, extra),
+      },
+    }),
+  );
+}
+
+export function buildInterruptFollowupQualityPayload(runtime, extra = {}) {
+  return buildFollowupEventPayload(runtime, extra);
+}
+
+export function beginInterruptFollowupWaitOnBargeIn(
+  runtime,
+  config,
+  ctx,
+  atMs = Date.now(),
+) {
   if (!runtime) return;
-  const { maxMs } = resolveInterruptFollowupWaitConfig(config);
   runtime.waitingForInterruptionFollowup = true;
   runtime.interruptFollowup = {
     bargeInAt: atMs,
+    stopDetectedMs: atMs,
+    playbackCancelledMs: atMs,
     markerTranscript: null,
     waitUntilMs: null,
+    waitWindowStartedMs: null,
     timedOut: false,
-    timeoutResponseStarted: false
+    timeoutResponseStarted: false,
+    singleStopDetected: false,
+    markerOnly: false,
+    markerChars: 0,
+    continuationChars: 0,
   };
   beginInterruptFollowupLatency(runtime, atMs);
   markInterruptFollowupLatency(runtime, "playback_cancelled", atMs);
+  markInterruptFollowupLatency(runtime, "stop_detected", atMs);
 
   if (runtime.runtimeContext?.stateMachine) {
     runtime.runtimeContext.stateMachine = transitionState(
       runtime.runtimeContext.stateMachine,
       V4_STATES.WAITING_FOR_INTERRUPTION_FOLLOWUP,
-      "barge_in_await_followup"
+      "barge_in_await_followup",
     );
     runtime.runtimeContext.memory = {
       ...runtime.runtimeContext.memory,
       current_state: V4_STATES.WAITING_FOR_INTERRUPTION_FOLLOWUP,
-      updated_at: Date.now()
+      updated_at: Date.now(),
     };
     if (runtime.orchestrator) {
       runtime.orchestrator.stateMachine = runtime.runtimeContext.stateMachine;
       runtime.orchestrator.memory = runtime.runtimeContext.memory;
     }
   }
+
+  bufferFollowupQualityEvent(config, ctx, runtime, buildInterruptFollowupStartedEvent, {
+    playback_cancelled_ms: atMs,
+    stop_detected_ms: atMs,
+  });
 }
 
-function bufferQualityEvent(runtime, event) {
-  if (!runtime || !event) return;
-  if (!Array.isArray(runtime.qualityEventsBuffer)) runtime.qualityEventsBuffer = [];
-  runtime.qualityEventsBuffer.push(event);
-}
-
-export function buildInterruptFollowupQualityPayload(runtime, extra = {}) {
-  const mem = runtime?.runtimeContext?.memory ?? {};
-  return {
-    interrupt_marker_detected: Boolean(runtime?.interruptFollowup?.markerTranscript),
-    waiting_for_interruption_followup: Boolean(runtime?.waitingForInterruptionFollowup),
-    effective_transcript_chars: extra.effective_transcript_chars ?? null,
-    ...extra
-  };
-}
-
-/**
- * After STT on live path — defer dialogue if marker-only and wait for continuation.
- */
-export function processInterruptFollowupAfterStt(config, ctx, runtime, transcript, atMs = Date.now()) {
-  if (!runtime?.waitingForInterruptionFollowup) {
-    return { defer: false, transcript };
-  }
-
-  const { waitMs, maxMs, minChars } = resolveInterruptFollowupWaitConfig(config);
-  const followup = runtime.interruptFollowup ?? {};
-  const agentConfig = runtime?.runtimeContext?.agentConfig ?? null;
-
-  if (!followup.followupSpeechMarked && transcript) {
-    markInterruptFollowupLatency(runtime, "followup_speech_start", atMs);
-    followup.followupSpeechMarked = true;
-  }
-
-  const markerOnly = isInterruptMarkerOnly(transcript, { minChars });
-
-  if (markerOnly && !followup.markerTranscript) {
-    followup.markerTranscript = transcript;
-    followup.waitUntilMs = atMs + waitMs;
-    runtime.interruptFollowup = followup;
-
-    console.log(
-      `[v4-live] interrupt_followup_waiting wait_ms=${waitMs} transcript_chars=${transcript.length} bridge_call_id=${ctx?.bridgeCallId ?? "pending"}`
-    );
-
-    bufferQualityEvent(
-      runtime,
-      buildTurnStartedEvent({
-        config,
-        agentConfigResult: agentConfig,
-        callSessionId: ctx?.callSessionId ?? null,
-        payload: {
-          bridge_call_id: ctx?.bridgeCallId ?? null,
-          live_phase: "phase10p_interrupt_wait",
-          ...buildInterruptFollowupQualityPayload(runtime, {
-            effective_transcript_chars: transcript.length
-          })
-        }
-      })
-    );
-
-    return { defer: true, reason: "marker_only_waiting", transcript };
-  }
-
-  if (markerOnly && followup.markerTranscript) {
-    followup.waitUntilMs = Math.min(atMs + maxMs, (followup.waitUntilMs ?? atMs) + waitMs);
-    runtime.interruptFollowup = followup;
-    return { defer: true, reason: "marker_only_extend_wait", transcript };
-  }
-
-  const effective = resolveEffectiveInterruptTranscript(followup.markerTranscript ?? "", transcript);
-  const hasProduct = agentConfig && matchProductAlias(agentConfig, effective);
-
+function clearWaitStateToListening(runtime) {
   runtime.waitingForInterruptionFollowup = false;
-  runtime.interruptFollowup = null;
-  if (runtime.runtimeContext?.stateMachine?.state === V4_STATES.WAITING_FOR_INTERRUPTION_FOLLOWUP) {
+  if (
+    runtime.runtimeContext?.stateMachine?.state ===
+    V4_STATES.WAITING_FOR_INTERRUPTION_FOLLOWUP
+  ) {
     runtime.runtimeContext.stateMachine = transitionState(
       runtime.runtimeContext.stateMachine,
       V4_STATES.LISTENING,
-      "interrupt_followup_received"
+      "interrupt_followup_received",
     );
     runtime.runtimeContext.memory = {
       ...runtime.runtimeContext.memory,
       current_state: V4_STATES.LISTENING,
-      updated_at: Date.now()
+      updated_at: Date.now(),
     };
   }
+}
+
+function applyContinuationResult(
+  config,
+  ctx,
+  runtime,
+  effective,
+  split,
+  atMs,
+) {
+  const followup = runtime.interruptFollowup ?? {};
+  followup.continuationChars = continuationCharCount(effective);
+  runtime.interruptFollowup = followup;
+
+  bufferFollowupQualityEvent(
+    config,
+    ctx,
+    runtime,
+    buildInterruptFollowupContinuationReceivedEvent,
+    {
+      marker_chars: markerCharCount(split.marker),
+      continuation_chars: effective.length,
+      effective_transcript_chars: effective.length,
+      marker_only: false,
+      single_stop_detected: split.single_stop_detected,
+    },
+  );
 
   markInterruptFollowupLatency(runtime, "followup_endpoint", atMs);
+  markInterruptFollowupLatency(runtime, "continuation_endpoint", atMs);
+
+  runtime.interruptFollowup = null;
+  clearWaitStateToListening(runtime);
+
+  const agentConfig = runtime?.runtimeContext?.agentConfig ?? null;
+  const hasProduct = agentConfig && matchProductAlias(agentConfig, effective);
 
   return {
     defer: false,
     transcript: effective,
     substantive: true,
     product_detected: Boolean(hasProduct?.id),
-    effective_transcript_chars: effective.length
+    effective_transcript_chars: effective.length,
+    single_stop_detected: split.single_stop_detected,
   };
+}
+
+/**
+ * After STT on live path — defer dialogue if marker-only and wait for continuation.
+ */
+export function processInterruptFollowupAfterStt(
+  config,
+  ctx,
+  runtime,
+  transcript,
+  atMs = Date.now(),
+) {
+  if (!runtime?.waitingForInterruptionFollowup) {
+    return { defer: false, transcript };
+  }
+
+  const { waitMs, maxMs, minChars } =
+    resolveInterruptFollowupWaitConfig(config);
+  const followup = runtime.interruptFollowup ?? {};
+  const split = splitInterruptMarkerAndContinuation(transcript);
+
+  if (!followup.followupSpeechMarked && transcript) {
+    markInterruptFollowupLatency(runtime, "followup_speech_start", atMs);
+    markInterruptFollowupLatency(runtime, "continuation_speech_start", atMs);
+    followup.followupSpeechMarked = true;
+  }
+
+  if (split.continuation && !split.marker_only) {
+    const effective = split.continuation;
+    return applyContinuationResult(config, ctx, runtime, effective, split, atMs);
+  }
+
+  const markerOnly =
+    split.marker_only || isInterruptMarkerOnly(transcript, { minChars });
+
+  if (markerOnly && !followup.markerTranscript) {
+    followup.markerTranscript = split.marker ?? transcript;
+    followup.waitUntilMs = atMs + waitMs;
+    followup.waitWindowStartedMs = atMs;
+    followup.singleStopDetected = split.single_stop_detected || isHardStopMarkerText(transcript);
+    followup.markerOnly = true;
+    followup.markerChars = markerCharCount(followup.markerTranscript);
+    followup.continuationChars = 0;
+    runtime.interruptFollowup = followup;
+
+    markInterruptFollowupLatency(runtime, "wait_window_started", atMs);
+
+    console.log(
+      `[v4-live] interrupt_followup_waiting wait_ms=${waitMs} single_stop_detected=${followup.singleStopDetected} transcript_chars=${transcript.length} bridge_call_id=${ctx?.bridgeCallId ?? "pending"}`,
+    );
+
+    bufferFollowupQualityEvent(
+      config,
+      ctx,
+      runtime,
+      buildInterruptFollowupWaitingEvent,
+      {
+        marker_only: true,
+        single_stop_detected: followup.singleStopDetected,
+        marker_chars: followup.markerChars,
+        continuation_chars: 0,
+        effective_transcript_chars: transcript.length,
+        wait_window_started_ms: atMs,
+      },
+    );
+
+    return {
+      defer: true,
+      reason: "marker_only_waiting",
+      transcript,
+      single_stop_detected: followup.singleStopDetected,
+    };
+  }
+
+  if (markerOnly && followup.markerTranscript) {
+    followup.waitUntilMs = Math.min(
+      atMs + maxMs,
+      (followup.waitUntilMs ?? atMs) + waitMs,
+    );
+    runtime.interruptFollowup = followup;
+    return {
+      defer: true,
+      reason: "marker_only_extend_wait",
+      transcript,
+      single_stop_detected: followup.singleStopDetected,
+    };
+  }
+
+  const effective = resolveEffectiveInterruptTranscript(
+    followup.markerTranscript ?? "",
+    transcript,
+  );
+  return applyContinuationResult(
+    config,
+    ctx,
+    runtime,
+    effective,
+    splitInterruptMarkerAndContinuation(effective),
+    atMs,
+  );
 }
 
 export function isInterruptFollowupWaitExpired(runtime, atMs = Date.now()) {
   const followup = runtime?.interruptFollowup;
-  if (!runtime?.waitingForInterruptionFollowup || !followup?.waitUntilMs) return false;
+  if (!runtime?.waitingForInterruptionFollowup || !followup?.waitUntilMs)
+    return false;
   return atMs >= followup.waitUntilMs;
 }
 
 export function shouldRunInterruptFollowupTimeout(runtime) {
   if (!runtime?.waitingForInterruptionFollowup) return false;
   const followup = runtime.interruptFollowup;
-  if (!followup?.markerTranscript || followup.timedOut || followup.timeoutResponseStarted) return false;
+  if (
+    !followup?.markerTranscript ||
+    followup.timedOut ||
+    followup.timeoutResponseStarted
+  )
+    return false;
   if (runtime.utterance?.capturing) return false;
   if (runtime.playbackInFlight) return false;
   return isInterruptFollowupWaitExpired(runtime);
 }
 
-export function markInterruptFollowupTimeoutStarted(runtime) {
+export function markInterruptFollowupTimeoutStarted(runtime, atMs = Date.now()) {
   if (!runtime?.interruptFollowup) return;
   runtime.interruptFollowup.timeoutResponseStarted = true;
   runtime.interruptFollowup.timedOut = true;
+  markInterruptFollowupLatency(runtime, "followup_timeout", atMs);
+}
+
+export function bufferInterruptFollowupTimeoutEvent(config, ctx, runtime) {
+  bufferFollowupQualityEvent(
+    config,
+    ctx,
+    runtime,
+    buildInterruptFollowupTimeoutEvent,
+    {
+      marker_only: true,
+      single_stop_detected: Boolean(runtime?.interruptFollowup?.singleStopDetected),
+      wait_window_started_ms: runtime?.interruptFollowup?.waitWindowStartedMs ?? null,
+    },
+  );
 }
 
 export function clearInterruptFollowupWait(runtime) {
