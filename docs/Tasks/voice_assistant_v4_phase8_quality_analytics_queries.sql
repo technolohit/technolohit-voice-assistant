@@ -150,3 +150,23 @@ WHERE cqe.event_type = 'live_call_quality_summary'
   AND cqe.tenant_id = 'technolohit'
 ORDER BY cqe.created_at DESC
 LIMIT 100;
+
+-- Phase 10H: per-session QA verification (replace CALL_SESSION_ID)
+-- Event timeline
+SELECT created_at, event_type, metric_name, metric_value
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+ORDER BY created_at;
+
+-- Privacy: fail if long digit runs appear in payload text.
+-- Version fields intentionally contain date-like numbers and are excluded from this scan.
+SELECT id, event_type
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND (
+    payload
+      - 'runtime_version'
+      - 'agent_config_version'
+      - 'prompt_playbook_version'
+      - 'knowledge_version'
+  )::text ~ '\+?\d{8,}';

@@ -1,0 +1,487 @@
+# v4 Phase 10H — Supervised Live PSTN QA Runbook (AudioSocket Canary)
+
+Date: 2026-06-01  
+Baseline image: **`thnhit/technhvoice:voice-bridge-v1.19.0`** (Phases 10A–10G)  
+Blueprint: [voice_assistant_v4_realtime_tenant_ready_blueprint.md](./voice_assistant_v4_realtime_tenant_ready_blueprint.md)  
+Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md](./voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md)
+
+**Do not execute without written maintenance-window approval.** This runbook does **not** enable production v4 GA. It validates the gated `v4_canary` path on a **supervised** PSTN call only.
+
+**Production must return to v3** immediately after QA, even on pass.
+
+---
+
+## Paths and containers
+
+```text
+Compose dir:  /opt/technolohit-voice/asterisk
+Runtime env:  /opt/technolohit-voice/voice-bridge/.env
+Postgres:     container central_postgres, DB technolohit_growth
+Compose service: voice-bridge
+Container:    technolohit-voice-bridge
+```
+
+Env source of truth: [docs/voice-bridge-runtime-env.md](../voice-bridge-runtime-env.md)  
+Deploy tags: [docs/release-and-cicd.md](../release-and-cicd.md)
+
+---
+
+## A. Precondition gate (abort if any fail)
+
+Record results in [voice_assistant_v4_phase10h_live_qa_report.md](./voice_assistant_v4_phase10h_live_qa_report.md).
+
+### A.1 Written approval and window
+
+- [ ] Maintenance window scheduled (UTC): _______________
+- [ ] Sysadmin + log observer present
+- [ ] No production v4 GA approval implied by this QA
+- [ ] Rollback image recorded (previous known-good): _______________
+
+### A.2 Running image — upgrade to v1.19.0 (immutable tag)
+
+```bash
+cd /opt/technolohit-voice/asterisk
+export VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-v1.19.0
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull voice-bridge
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+sleep 3
+docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}'
+```
+
+**Pass:** image ends with `voice-bridge-v1.19.0`.  
+**Do not** pin production to `voice-bridge-latest`.
+
+### A.3 Migration 009 (quality events) — required before SQL checks
+
+```bash
+docker exec central_postgres psql -U postgres -d technolohit_growth -P pager=off -c \
+  "SELECT to_regclass('voice.call_quality_events') AS quality_table;"
+```
+
+**Pass:** `voice.call_quality_events` (not null).
+
+If missing, apply migration from tag `v1.19.0` per [voice_assistant_v4_phase9_sysadmin_runbook.md](./voice_assistant_v4_phase9_sysadmin_runbook.md) §3 (file `009_v4_call_quality_events.sql`). Re-check before canary QA.
+
+Baseline counts (optional):
+
+```bash
+docker exec central_postgres psql -U postgres -d technolohit_growth -P pager=off -c \
+  "SELECT count(*) AS total FROM voice.call_quality_events;"
+```
+
+### A.4 OpenAI key present (do not print)
+
+```bash
+docker exec technolohit-voice-bridge sh -lc 'test -n "$OPENAI_API_KEY" && echo openai_key_set=yes || echo openai_key_set=no'
+```
+
+**Pass:** `openai_key_set=yes` (required for `VOICE_V4_TTS_PROVIDER=openai`).
+
+### A.5 RAG health (host-local URL from voice-bridge network)
+
+```bash
+curl -fsS http://127.0.0.1:8080/healthz && echo rag_ok
+docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://127.0.0.1:8080/healthz || curl -fsS http://127.0.0.1:8080/healthz'
+```
+
+**Pass:** HTTP 200 / health body.  
+Phase 10H scenarios keep `VOICE_RAG_ENABLED=false` initially; this gate confirms infra only.
+
+### A.6 v3 baseline call (before any v4 canary flags)
+
+With **production-safe baseline** env (section C), place **one** normal test call on the approved QA route.
+
+```bash
+docker logs --since=5m technolohit-voice-bridge 2>&1 \
+  | grep -vEi 'api[_-]?key|password|secret|Bearer |OPENAI' \
+  | grep -vE '\+?[0-9]{8,}' \
+  | egrep 'call_handler selected=|call accepted|call_end' \
+  | tail -20
+```
+
+**Pass:**
+
+- `call_handler selected=v3` (or handler not `v4_canary`)
+- Greeting/assistant behavior normal for v3
+- No `[v4-live]` lines on this call
+
+Record `call_session_id` if needed (UUID only — **not** caller phone).
+
+### A.7 Backup env before canary changes
+
+```bash
+QA_STAMP="$(date -u +%Y%m%dT%H%MZ)"
+cp /opt/technolohit-voice/voice-bridge/.env \
+  "/opt/technolohit-voice/voice-bridge/.env.pre-10h-${QA_STAMP}.bak"
+ls -l "/opt/technolohit-voice/voice-bridge/.env.pre-10h-${QA_STAMP}.bak"
+```
+
+---
+
+## B. Safety rules
+
+| Rule | Detail |
+|------|--------|
+| Supervised only | Run only in an approved maintenance window with an operator on the call |
+| Restore v3 after QA | Revert section C env and restart **before** leaving the window |
+| Empty allowlist | `VOICE_V4_LIVE_CANARY_ALLOWLIST=` (empty) **always** fail-closes to v3 |
+| No phone in allowlist | Never put DID, E.164, or caller number in the allowlist |
+| No concurrent PSTN | During canary window, avoid overlapping calls when using broad allowlist (see B.1) |
+| No production v4 | Passing QA does not approve `VOICE_RUNTIME_VERSION=v4` for all traffic |
+| Spike flags off | `VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false`, `VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false` |
+
+### B.1 Allowlist feasibility (current code — read before canary)
+
+`bridge_call_id` is a **new random UUID on every AudioSocket connection** (`persist.assignBridgeCallIdentity`). The allowlist is evaluated **once at call start**. You **cannot** learn the ID from the same call and activate v4 on that call retroactively.
+
+| Approach | Feasible? | Notes |
+|----------|-----------|--------|
+| Put DID/phone in allowlist | **No** | Forbidden; not matched anyway |
+| Preflight call → copy UUID → second call with that UUID | **No** | Second call gets a **new** UUID |
+| Allowlist `qa-canary` without that substring in live IDs | **No** | Tests use `qa-canary`; production PSTN uses random UUIDs |
+| Maintenance window + `VOICE_V4_LIVE_CANARY_ALLOWLIST=bridge:` | **Yes (supervised)** | Matches `external_call_id` form `bridge:<uuid>` for **every** call — **only** with zero other PSTN traffic |
+| Dedicated non-phone route marker env (future code) | **Not in v1.19.0** | Recommended follow-up if `bridge:` is too broad |
+
+**Recommended Phase 10H procedure (single-call window):**
+
+1. Confirm **no other** inbound PSTN traffic during the window.
+2. Set `VOICE_V4_LIVE_CANARY_ALLOWLIST=bridge:` (matches `external_call_id`; see section D).
+3. Apply canary env, restart voice-bridge, place **one** supervised QA call.
+4. Verify `call_handler selected=v4_canary` in logs.
+5. Roll back env immediately after the call.
+
+**Optional stricter procedure (two-call, still v3 on first call):**
+
+1. Call #1 with empty allowlist → stays **v3**; note `bridge_call_id` in logs (for audit only).
+2. Do **not** reuse that UUID for call #2 — it will not match.
+3. For call #2, use `bridge:` allowlist (above) or stop and request a code follow-up for a static QA marker.
+
+**Phase 10H blocker (document if `bridge:` cannot be used):** Without `bridge:` or a code change, random per-call UUIDs prevent pre-provisioned allowlist for PSTN canary.
+
+---
+
+## C. Production-safe baseline env (default / rollback target)
+
+Edit `/opt/technolohit-voice/voice-bridge/.env`:
+
+```env
+VOICE_RUNTIME_VERSION=v3
+VOICE_V4_REALTIME_ENABLED=false
+VOICE_V4_CANARY_ENABLED=false
+VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=false
+VOICE_V4_LIVE_CANARY_ALLOWLIST=
+VOICE_V4_BARGE_IN_ENABLED=false
+VOICE_V4_TTS_PROVIDER=mock
+VOICE_RAG_ENABLED=false
+VOICE_RAG_SALES_ANSWERER_ENABLED=false
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false
+VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
+```
+
+Restart after rollback:
+
+```bash
+cd /opt/technolohit-voice/asterisk
+export VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-v1.19.0
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+```
+
+(v1.19.0 code with v3 flags is the intended production-safe state until v4 GA is approved.)
+
+---
+
+## D. Supervised canary env matrix (QA window only)
+
+Edit `/opt/technolohit-voice/voice-bridge/.env` — **only** during the window:
+
+```env
+VOICE_RUNTIME_VERSION=v4
+VOICE_V4_REALTIME_ENABLED=true
+VOICE_V4_CANARY_ENABLED=true
+VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=true
+VOICE_V4_LIVE_CANARY_ALLOWLIST=bridge:
+VOICE_V4_TTS_PROVIDER=openai
+VOICE_V4_BARGE_IN_ENABLED=true
+VOICE_RAG_ENABLED=false
+VOICE_RAG_SALES_ANSWERER_ENABLED=false
+VOICE_V4_PLAYBACK_CANCEL_SPIKE_ENABLED=false
+VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
+```
+
+Keep existing `OPENAI_API_KEY`, `VOICE_AGENT_CONFIG_PATH`, `VOICE_RAG_API_URL=http://127.0.0.1:8080`, VAD/barge-in thresholds unless ops standard says otherwise.
+
+Restart:
+
+```bash
+cd /opt/technolohit-voice/asterisk
+export VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-v1.19.0
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+sleep 3
+docker exec technolohit-voice-bridge sh -lc \
+  'printenv | sort | egrep "^(VOICE_RUNTIME_VERSION|VOICE_V4_|VOICE_RAG_|VOICE_V4_TTS_PROVIDER)=" || true'
+```
+
+Also verify the host source-of-truth file:
+
+```bash
+grep -E '^(VOICE_RUNTIME_VERSION|VOICE_V4_|VOICE_RAG_|VOICE_V4_TTS_PROVIDER)=' \
+  /opt/technolohit-voice/voice-bridge/.env
+```
+
+---
+
+## E. Live QA scenarios
+
+Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in the report template.
+
+| ID | Scenario | Pass criteria (logs / behavior) |
+|----|----------|----------------------------------|
+| E1 | v3 baseline before canary | Section A.6 — handler v3, no `[v4-live]` |
+| E2 | v4 route selected | `[voice-bridge] call_handler selected=v4_canary` |
+| E3 | Greeting heard | Caller hears normal greeting audio (v4 uses `skipAssistant` greeting path) |
+| E4 | VAD speech start + endpoint | `[v4-live] vad_speech_started` and `vad_endpoint_detected` |
+| E5 | STT completed | `[v4-live] stt_completed` (no raw transcript in log line) |
+| E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
+| E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible |
+| E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
+| E9 | Interruption product switch 1 | Say interest in **Digitale Rezeption** / voice agent → barge-in → say **Smart Website** → product updates |
+| E10 | Interruption product switch 2 | From **Smart Website** context → barge-in → say **AI Voice Assistant** (alias for Digitale Rezeption product) or explicit switch utterance |
+| E11 | Quality flush | `[v4-live] quality_flush_completed inserted_count=` (may be 0 if buffer empty; >0 if events buffered) |
+| E12 | SQL summary + close | Rows for `live_call_quality_summary` and `audio_session_closed` for session UUID |
+| E13 | Privacy | No `+49…` / long digit runs in `[v4-live]` logs or quality payloads (section G.4) |
+| E14 | Restore v3 | Section C env; new call → `call_handler selected=v3` |
+
+### E.9 / E.10 utterance hints (German, no phone numbers)
+
+Agent catalog: `voice-bridge/config/agents/technolohit.main_voice_sales.v4.json`
+
+1. **Digitale Rezeption:** e.g. “Ich interessiere mich für die digitale Rezeption.”
+2. **Barge-in + Smart Website:** during playback, “Stopp — ich meine Smart Website.”
+3. **Barge-in + voice agent / AI Voice Assistant:** during playback, “Stopp — ich meine den AI Voice Assistant.” (maps to product `voice_agent` / Digitale Rezeption)
+
+Do not speak phone numbers during QA.
+
+### E.8 barge-in tip
+
+Wait until assistant is speaking (TTS playback). Speak clearly for ~0.5–1 s (multiple 20 ms frames). Expect cancel within configured `VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS`.
+
+---
+
+## F. Logs to collect (privacy-safe)
+
+During and after the canary call:
+
+```bash
+QA_STAMP="$(date -u +%Y%m%dT%H%MZ)"
+docker logs --since=30m technolohit-voice-bridge 2>&1 \
+  | grep -vEi 'api[_-]?key|password|secret|Bearer |OPENAI_API_KEY' \
+  | grep -vE '\+?[0-9]{8,}' \
+  | egrep '\[v4-live\]|quality_flush|barge_in|stt_|tts_|playback_|dialogue|call_end|call_handler selected=' \
+  > "/tmp/voice-bridge-10h-${QA_STAMP}.log"
+wc -l "/tmp/voice-bridge-10h-${QA_STAMP}.log"
+```
+
+**Do not** paste full `.env`, API keys, raw transcripts, or assistant text into tickets.
+
+Useful single-call checklist in logs:
+
+| Pattern | Expected |
+|---------|----------|
+| `call_handler selected=v4_canary` | Once per canary call |
+| `[v4-live] call_start handler=v4_canary` | Once |
+| `vad_speech_started` / `vad_endpoint_detected` | Per caller turn |
+| `stt_completed` | After endpoint |
+| `dialogue_plan_created` | After STT |
+| `tts_completed` / `playback_started` | Per assistant reply |
+| `barge_in_detected` / `playback_cancelled` | On interruption test |
+| `quality_flush_started` / `quality_flush_completed` | On hangup |
+| `[v4-live] call_end` | On hangup |
+
+Capture `call_session_id` from log lines (UUID), not caller phone.
+
+---
+
+## G. SQL verification
+
+Use `call_session_id` from section F (UUID). Replace `<CALL_SESSION_ID>` below.
+
+### G.1 Latest v4 quality rows for session
+
+```sql
+SELECT
+  cqe.created_at,
+  cqe.event_type,
+  cqe.event_stage,
+  cqe.metric_name,
+  cqe.metric_value,
+  cqe.payload->>'live_phase' AS live_phase,
+  cqe.payload->>'runtime_version' AS runtime_version
+FROM voice.call_quality_events cqe
+WHERE cqe.call_session_id = '<CALL_SESSION_ID>'::uuid
+ORDER BY cqe.created_at ASC;
+```
+
+### G.2 Event type counts per call
+
+```sql
+SELECT event_type, count(*) AS n
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+GROUP BY event_type
+ORDER BY n DESC;
+```
+
+### G.3 Summary event (Phase 10G)
+
+```sql
+SELECT
+  created_at,
+  payload->>'live_phase' AS live_phase,
+  payload->'live_counters'->>'endpoint_count' AS endpoint_count,
+  payload->'live_counters'->>'stt_completed_count' AS stt_completed_count,
+  payload->'live_counters'->>'tts_completed_count' AS tts_completed_count,
+  payload->'live_counters'->>'barge_in_count' AS barge_in_count,
+  payload->>'close_reason' AS close_reason
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'live_call_quality_summary';
+```
+
+### G.4 Session close + privacy-oriented payload scan
+
+```sql
+SELECT event_type, created_at
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN ('audio_session_closed', 'live_call_quality_summary');
+```
+
+```sql
+-- Fail if raw phone-like pattern appears in payloads (no phone columns selected).
+-- Version fields intentionally contain date-like numbers and are excluded from this scan.
+SELECT id, event_type
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND (
+    payload
+      - 'runtime_version'
+      - 'agent_config_version'
+      - 'prompt_playbook_version'
+      - 'knowledge_version'
+  )::text ~ '\+?\d{8,}';
+```
+
+**Pass:** zero rows on G.4 phone scan; summary + close rows present when flush ran with events.
+
+### G.5 Failed flush / runtime errors (if suspected)
+
+```sql
+SELECT created_at, event_type, payload->>'error_class' AS error_class, payload->>'event_subtype' AS subtype
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'runtime_error'
+ORDER BY created_at;
+```
+
+See also [voice_assistant_v4_phase8_quality_analytics_queries.sql](./voice_assistant_v4_phase8_quality_analytics_queries.sql) (live summary query at end).
+
+---
+
+## H. Stop criteria (rollback immediately)
+
+Stop the window and run section I if **any** occur:
+
+| # | Condition |
+|---|-----------|
+| H1 | Call drops / silent line / no greeting |
+| H2 | Garbled or unusable assistant audio |
+| H3 | Assistant does not stop speaking after caller interruption (barge-in) |
+| H4 | Repeated `[v4-live] stt_failed` without recovery |
+| H5 | Repeated `[v4-live] tts_failed` / no playback |
+| H6 | `quality_flush_failed` with `relation` / missing table **after** migration 009 was verified |
+| H7 | Raw phone pattern in `[v4-live]` logs or SQL payload scan (G.4) |
+| H8 | `call_handler selected=v4_canary` on a call **outside** maintenance / wrong allowlist |
+| H9 | v3 baseline (E14) fails after rollback |
+| H10 | Unexpected concurrent production traffic while `bridge:` allowlist active |
+
+---
+
+## I. Rollback commands (restore v3)
+
+### I.1 Restore env from backup
+
+```bash
+ls -lt /opt/technolohit-voice/voice-bridge/.env.pre-10h-*.bak | head -3
+cp /opt/technolohit-voice/voice-bridge/.env.pre-10h-<STAMP>.bak \
+  /opt/technolohit-voice/voice-bridge/.env
+```
+
+Or hand-edit to section C values (especially `VOICE_RUNTIME_VERSION=v3`, empty allowlist, `VOICE_V4_TTS_PROVIDER=mock`).
+
+### I.2 Restart voice-bridge (immutable image — no `latest`)
+
+```bash
+cd /opt/technolohit-voice/asterisk
+export VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-v1.19.0
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+sleep 3
+docker inspect technolohit-voice-bridge --format 'running_image={{.Config.Image}}'
+docker logs --tail=20 technolohit-voice-bridge 2>&1 | grep -E 'voice-runtime|voice-bridge'
+```
+
+### I.3 Verify v3 on host env
+
+```bash
+grep -E '^(VOICE_RUNTIME_VERSION|VOICE_V4_LIVE_AUDIOSOCKET_ENABLED|VOICE_V4_LIVE_CANARY_ALLOWLIST|VOICE_V4_TTS_PROVIDER)=' \
+  /opt/technolohit-voice/voice-bridge/.env
+```
+
+**Expected:** `VOICE_RUNTIME_VERSION=v3`, live gates false, allowlist empty, `VOICE_V4_TTS_PROVIDER=mock`.
+
+### I.4 Optional — rollback image only (if v1.19.0 faulty)
+
+```bash
+export VOICE_BRIDGE_IMAGE=thnhit/technhvoice:voice-bridge-v1.11.0
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull voice-bridge
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+```
+
+Keep section C v3 flags regardless of image tag.
+
+### I.5 Post-rollback v3 call
+
+Repeat section A.6 / scenario E14. **Must pass** before closing the ticket.
+
+---
+
+## J. Sysadmin report
+
+Copy [voice_assistant_v4_phase10h_live_qa_report.md](./voice_assistant_v4_phase10h_live_qa_report.md) into the ticket when complete.
+
+---
+
+## Phase references (10A–10G)
+
+| Phase | Report |
+|-------|--------|
+| 10A | [voice_assistant_v4_phase10a_live_route_selection_report.md](./voice_assistant_v4_phase10a_live_route_selection_report.md) |
+| 10B | [voice_assistant_v4_phase10b_vad_endpointing_report.md](./voice_assistant_v4_phase10b_vad_endpointing_report.md) |
+| 10C | [voice_assistant_v4_phase10c_live_stt_report.md](./voice_assistant_v4_phase10c_live_stt_report.md) |
+| 10D | [voice_assistant_v4_phase10d_live_dialogue_report.md](./voice_assistant_v4_phase10d_live_dialogue_report.md) |
+| 10E | [voice_assistant_v4_phase10e_live_tts_playback_report.md](./voice_assistant_v4_phase10e_live_tts_playback_report.md) |
+| 10E2 | [voice_assistant_v4_phase10e2_real_tts_report.md](./voice_assistant_v4_phase10e2_real_tts_report.md) |
+| 10F | [voice_assistant_v4_phase10f_live_barge_in_report.md](./voice_assistant_v4_phase10f_live_barge_in_report.md) |
+| 10G | [voice_assistant_v4_phase10g_quality_flush_report.md](./voice_assistant_v4_phase10g_quality_flush_report.md) |
+
+---
+
+## Production v4 status after 10H
+
+| Outcome | Meaning |
+|---------|---------|
+| **pass** | Supervised canary path validated; **still** not production v4 for all calls |
+| **partial** | Some scenarios failed; keep v3; open engineering ticket |
+| **fail** | Do not retry without fix; v3 rollback required |
+| **unsafe** | Privacy or routing safety failure; stop immediately |
+
+Production v4 GA remains blocked until: live QA pass, production blocker list in blueprint, and explicit leadership approval for Phase 9c.
