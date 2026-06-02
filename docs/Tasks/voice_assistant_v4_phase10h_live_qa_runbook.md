@@ -306,6 +306,8 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E5d | Summary + latency SQL (10M) | G.3 returns `live_call_quality_summary`; G.3b shows `turn_latency_metrics` |
 | E5e | Interruption follow-up (10N) | During playback: **Stopp, ich habe eine kurze Frage** → acknowledgement (not “nicht verstanden”); then **Was kostet das?** → bounded playbook answer |
 | E5f | Barge-in quality (10N) | G.3c: `barge_in_detected` row present; logs must not show `quality_flush_skip_event` for that type |
+| E5g | Interrupt listen window (10P) | After **Stopp** only: logs show `interrupt_followup_waiting` — **no** immediate `dialogue_plan_created` / TTS until continuation or timeout (~2.2s) |
+| E5h | Post-interrupt latency (10P) | SQL: `interrupt_followup_latency_metrics` row with non-null `barge_in_detected_to_followup_speech_start_ms` when follow-up completes |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -454,6 +456,24 @@ ORDER BY created_at;
 
 **Pass:** ≥ 1 row when caller interrupted assistant playback. **Fail:** 0 rows but logs show `barge_in_detected` or `quality_flush_skip_event event_type=barge_in_detected` (upgrade to v1.25.0+).
 
+### G.3d Interrupt follow-up latency (Phase 10P)
+
+```sql
+SELECT
+  created_at,
+  payload->>'barge_in_detected_to_playback_cancelled_ms' AS cancel_ms,
+  payload->>'barge_in_detected_to_followup_speech_start_ms' AS followup_speech_ms,
+  payload->>'followup_stt_completed_to_plan_ms' AS stt_to_plan_ms,
+  payload->>'followup_plan_to_first_playback_ms' AS plan_to_playback_ms
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'interrupt_followup_latency_metrics'
+ORDER BY created_at DESC
+LIMIT 3;
+```
+
+**Pass:** Row present after barge-in + completed follow-up turn; use to explain perceived post-interrupt delay.
+
 ### G.4 Session close + privacy-oriented payload scan
 
 ```sql
@@ -463,10 +483,20 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
   AND event_type IN ('audio_session_closed', 'live_call_quality_summary');
 ```
 
+**Privacy scan note (Phase 10N / v1.25.0):** A naive `payload::text ~ '\+?\d{8,}'` scan can **false-positive** on telemetry-only numeric fields (e.g. `last_rms`, `playback_ms_at_trigger`, `triggered_at` epoch ms, frame/byte counters). Those are not caller phone numbers. Use the corrected query below: exclude known telemetry keys for `barge_in_detected` (and version metadata), but still fail on phone-like patterns in **string** transcript/email/phone fields.
+
 ```sql
--- Fail if raw phone-like pattern appears in payloads (no phone columns selected).
--- Version fields intentionally contain date-like numbers and are excluded from this scan.
-SELECT id, event_type
+-- Legacy broad scan (may false-positive on telemetry numerics — do not use alone after v1.25.0).
+-- SELECT id, event_type FROM voice.call_quality_events
+-- WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+--   AND (payload - 'runtime_version' - 'agent_config_version'
+--        - 'prompt_playbook_version' - 'knowledge_version')::text ~ '\+?\d{8,}';
+```
+
+```sql
+-- Corrected privacy scan: exclude version metadata + barge-in telemetry numerics.
+-- Still scans all remaining payload text (transcript/email/phone/string fields remain strict).
+SELECT id, event_type, created_at
 FROM voice.call_quality_events
 WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
   AND (
@@ -475,10 +505,25 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
       - 'agent_config_version'
       - 'prompt_playbook_version'
       - 'knowledge_version'
+      - 'last_rms'
+      - 'rms_threshold'
+      - 'playback_ms_at_trigger'
+      - 'min_playback_ms'
+      - 'speech_frames_required'
+      - 'consecutive_speech_frames'
+      - 'frames_sent_before_cancel'
+      - 'trigger_count'
+      - 'triggered_at'
+      - 'bridge_call_id'
+      - 'call_session_id'
+      - 'external_call_id'
+      - 'audiosocket_uuid'
   )::text ~ '\+?\d{8,}';
 ```
 
-**Pass:** zero rows on G.4 phone scan; summary + close rows present when flush ran with events.
+**Pass:** zero rows on corrected G.4 scan; summary + close rows present when flush ran with events.
+
+**Manual review if legacy scan was used:** If the only matches are `barge_in_detected` rows and fields are telemetry-only (see list above), treat as **pass** after v1.25.0 — re-run corrected query to confirm.
 
 ### G.5 Failed flush / runtime errors (if suspected)
 

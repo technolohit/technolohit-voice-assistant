@@ -25,6 +25,7 @@ import {
 } from "./interruption-context.js";
 import { markInterrupted } from "./audio-session.js";
 import { resetUtteranceBuffer } from "./live-stt-endpoint.js";
+import { beginInterruptFollowupWaitOnBargeIn } from "./interrupt-followup-wait.js";
 import {
   buildBargeInDetectedEvent,
   buildPlaybackCancelRequestedEvent,
@@ -234,6 +235,7 @@ export function executeLiveBargeInCancel(config, ctx, runtime, atMs = Date.now()
 
   runtime.pendingInterruptionRecovery = true;
   runtime.highPriorityInterruptionTurn = true;
+  beginInterruptFollowupWaitOnBargeIn(runtime, config, ts);
   runtime.bargeInCount = (runtime.bargeInCount ?? 0) + 1;
   runtime.bargeInHandledPlaybackId = playback.playbackId;
 

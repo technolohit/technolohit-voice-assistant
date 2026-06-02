@@ -4,6 +4,8 @@
 
 import { runLiveDialogueOnCallerTranscript } from "./live-dialogue-endpoint.js";
 import { runLiveTtsAndPlayback } from "./live-tts-playback-endpoint.js";
+import { processInterruptFollowupAfterStt } from "./interrupt-followup-wait.js";
+import { markInterruptFollowupLatency } from "./interrupt-followup-latency.js";
 import { runLiveSttFailureFallback } from "./live-stt-fallback-endpoint.js";
 import { markLiveTurnLatency } from "./live-turn-latency.js";
 
@@ -297,6 +299,33 @@ export async function runLiveSttOnEndpoint(config, ctx, runtime) {
   );
 
   resetUtteranceBuffer(runtime);
+
+  const followupStt = processInterruptFollowupAfterStt(
+    config,
+    ctx,
+    runtime,
+    redacted,
+    Date.now()
+  );
+  if (followupStt.defer) {
+    markInterruptFollowupLatency(runtime, "followup_stt_completed", Date.now());
+    return {
+      ok: true,
+      sttMs,
+      transcriptChars,
+      deferred: true,
+      deferReason: followupStt.reason,
+      candidate: runtime.lastCallerTurnCandidate,
+      dialogue: { ok: false, reason: "interrupt_followup_deferred" },
+      playback: { ok: false, reason: "interrupt_followup_deferred" }
+    };
+  }
+
+  if (followupStt.transcript && followupStt.transcript !== redacted) {
+    runtime.lastCallerTurnCandidate.transcript = followupStt.transcript;
+    runtime.lastCallerTurnCandidate.transcriptChars = followupStt.transcript.length;
+  }
+  markInterruptFollowupLatency(runtime, "followup_stt_completed", Date.now());
 
   let dialogue = { ok: false, reason: "not_run" };
   try {

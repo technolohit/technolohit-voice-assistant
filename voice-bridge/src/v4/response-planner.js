@@ -15,6 +15,9 @@ import {
   buildPlaybookShortAnswer,
   hasSubstantiveFollowUpContent
 } from "./playbook-short-answer.js";
+import {
+  buildLowConfidenceClarificationText
+} from "./closed-domain-intent.js";
 import { shouldUseRagForTurn, fallbackToPlaybook } from "./rag-orchestrator.js";
 import { V4_STATES } from "./state-machine.js";
 
@@ -152,11 +155,34 @@ export function buildResponsePlan({
   intent = null,
   ragAnswer = null,
   ragGate = null,
-  interruptionRecovery = null
+  interruptionRecovery = null,
+  closedDomain = null,
+  interruptFollowupTimeout = false
 } = {}) {
   const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory, agentConfig);
   const agent = agentConfig?.config ?? agentConfig ?? {};
   const state = stateMachine?.state ?? memory?.current_state ?? V4_STATES.LISTENING;
+
+  if (interruptFollowupTimeout) {
+    const productId =
+      memory.selected_product_id ??
+      memory?.interruption_context?.interrupted_product_id ??
+      closedDomain?.matched_product ??
+      null;
+    const productName = productDisplayName(agentConfig, productId);
+    const ack = productId
+      ? `Gerne. Zur ${productName}: Was möchten Sie genau wissen?`
+      : "Gerne. Was möchten Sie dazu wissen?";
+    return planBase(RESPONSE_TYPES.INTERRUPTION_RECOVERY, {
+      text: sanitizeResponseText(ack),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: interruptionMemoryPatch(memory, productId, {
+        current_state: V4_STATES.LISTENING
+      }),
+      quality_event_type: "interruption_recovered",
+      rag_allowed: false
+    });
+  }
   const gate =
     ragGate ??
     shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
@@ -212,6 +238,34 @@ export function buildResponsePlan({
       ragAnswer,
       ragGate: gate
     });
+  }
+
+  if (
+    resolvedIntent === "unclear" &&
+    closedDomain?.is_low_confidence &&
+    closedDomain?.clarification_type
+  ) {
+    return planBase(RESPONSE_TYPES.FALLBACK_CLARIFICATION, {
+      text: sanitizeResponseText(buildLowConfidenceClarificationText(closedDomain, agentConfig)),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: {
+        current_state: V4_STATES.LISTENING,
+        selected_product_id:
+          closedDomain.matched_product && closedDomain.product_confidence >= 0.7
+            ? closedDomain.matched_product
+            : memory.selected_product_id
+      },
+      quality_event_type: "turn_started",
+      rag_allowed: false
+    });
+  }
+
+  if (
+    closedDomain?.matched_product &&
+    closedDomain.product_confidence >= 0.75 &&
+    !memory.selected_product_id
+  ) {
+    memory = { ...memory, selected_product_id: closedDomain.matched_product };
   }
 
   if (resolvedIntent === "greeting" || state === V4_STATES.GREETING) {

@@ -111,6 +111,31 @@ WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
 
 ---
 
+## Supervised canary result (v1.25.0)
+
+| Field | Value |
+|-------|--------|
+| **Final classification** | **PASS** |
+| **call_session_id** | `9061f2db-713f-4d89-84d0-146e2571eb5f` |
+| **Image** | `thnhit/technhvoice:voice-bridge-v1.25.0` |
+
+**Evidence (all passed):**
+
+- OpenAI STT completed on live utterances
+- TTS intelligible; playback completed without long silence after STT
+- Barge-in cancelled assistant playback; `barge_in_detected` persisted (no `quality_flush_skip_event` for that type)
+- Interruption follow-up: **“Stopp, ich habe eine kurze Frage”** → acknowledgement (not generic fallback)
+- Product context preserved on short follow-up; **“Stopp, ich meine Smart Website”** → product switch
+- Warm goodbye on closing phrase (**“Vielen Dank für Ihren Anruf. Auf Wiederhören.”**)
+- Quality flush: `live_call_quality_summary` + `audio_session_closed`; latency fields populated on successful turns
+- Rollback to v3 after window — no new stale `call_session`
+
+**Production v4:** still **not globally enabled**. v1.25.0 acceptance is **live canary validation with RAG disabled** only.
+
+**Next:** [Phase 10O plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md) — 3× repeatability + one RAG-enabled product Q&A canary.
+
+---
+
 ## Production v4 status
 
-**Still not globally enabled.** Phase 10N is canary stabilization only; ship next image after review and repeat short supervised QA.
+**Still not globally enabled.** Phase 10N live canary **passed** on v1.25.0; production runtime remains **v3** until Phase 9c gates and explicit approval.

@@ -222,6 +222,10 @@ export const buildTurnLatencyMetricsEvent = typedBuilder("turn_latency_metrics",
   eventStage: "dialogue",
   metricName: "total_turn_response_ms"
 });
+export const buildInterruptFollowupLatencyMetricsEvent = typedBuilder("interrupt_followup_latency_metrics", {
+  eventStage: "dialogue",
+  metricName: "followup_plan_to_first_playback_ms"
+});
 
 export function buildQualityEventFromState(state, base = {}) {
   return buildQualityEventInput({

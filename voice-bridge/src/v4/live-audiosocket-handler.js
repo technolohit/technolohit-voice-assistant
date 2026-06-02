@@ -26,6 +26,8 @@ import {
 } from "./live-stt-endpoint.js";
 import { beginLiveTurnLatency } from "./live-turn-latency.js";
 import { observeLiveCanaryBargeIn } from "./live-barge-in-endpoint.js";
+import { shouldRunInterruptFollowupTimeout } from "./interrupt-followup-wait.js";
+import { runInterruptFollowupTimeoutClarification } from "./live-interrupt-followup-endpoint.js";
 import { flushLiveCanaryQualityEvents } from "./live-quality-flush-endpoint.js";
 
 /**
@@ -187,6 +189,16 @@ export async function processLiveCanaryInboundFrame(config, ctx, runtime, payloa
     console.warn(
       `[v4-live] barge_in_observe_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
     );
+  }
+
+  if (shouldRunInterruptFollowupTimeout(runtime)) {
+    try {
+      await runInterruptFollowupTimeoutClarification(config, ctx, runtime);
+    } catch (err) {
+      console.warn(
+        `[v4-live] interrupt_followup_timeout_error ${liveLogIds(ctx)} error=${String(err?.message ?? err).slice(0, 120)}`
+      );
+    }
   }
 
   const rms = pcmFrameRms(payload);

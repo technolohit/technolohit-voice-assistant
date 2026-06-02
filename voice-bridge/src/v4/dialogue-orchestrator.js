@@ -31,6 +31,10 @@ import {
   retrieveV4RagAnswer
 } from "./rag-orchestrator.js";
 import {
+  resolveClosedDomainIntent,
+  closedDomainQualityPayload
+} from "./closed-domain-intent.js";
+import {
   resolveInterruptionRecovery,
   captureInterruptedAssistantState
 } from "./interruption-context.js";
@@ -173,8 +177,6 @@ export function startTurn(orchestrator, input = {}) {
     updated_at: Date.now()
   };
 
-  bufferEvent(orchestrator, "turn_started", { turn_index: orchestrator.turnIndex });
-
   return { ok: true, turnIndex: orchestrator.turnIndex, stateMachine };
 }
 
@@ -206,6 +208,24 @@ export function acceptUserTranscript(orchestrator, transcript = "") {
 
 export async function decideNextAction(orchestrator, input = {}) {
   const transcript = input.transcript ?? orchestrator.currentTurn?.transcript ?? "";
+  const closedDomain =
+    input.closedDomain ??
+    resolveClosedDomainIntent({
+      agentConfig: orchestrator.agentConfig,
+      transcript,
+      memory: orchestrator.memory
+    });
+  orchestrator.lastClosedDomain = closedDomain;
+
+  bufferEvent(orchestrator, "turn_started", {
+    turn_index: orchestrator.turnIndex,
+    ...closedDomainQualityPayload(closedDomain, orchestrator.memory),
+    effective_transcript_chars: String(transcript ?? "").length,
+    waiting_for_interruption_followup: Boolean(input.waitingForInterruptionFollowup),
+    interrupt_marker_detected: Boolean(input.interruptMarkerDetected),
+    interrupt_followup_timeout: Boolean(input.interruptFollowupTimeout)
+  });
+
   const intent =
     input.intent ??
     detectTranscriptIntent(transcript, orchestrator.memory, orchestrator.agentConfig);
@@ -275,7 +295,9 @@ export async function decideNextAction(orchestrator, input = {}) {
     intent,
     ragAnswer,
     ragGate,
-    interruptionRecovery
+    interruptionRecovery,
+    closedDomain,
+    interruptFollowupTimeout: Boolean(input.interruptFollowupTimeout)
   });
 
   const ragGuard = ragAnswerMustNotCreateLead(Boolean(plan.rag_allowed));

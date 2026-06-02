@@ -129,6 +129,12 @@ export function loadConfig() {
   );
   const v4BargeInMinPlaybackMs = Math.max(0, readInt("VOICE_V4_BARGE_IN_MIN_PLAYBACK_MS", 120));
   const v4BargeInCancelTimeoutMs = Math.max(50, readInt("VOICE_V4_BARGE_IN_CANCEL_TIMEOUT_MS", 400));
+  const v4InterruptFollowupWaitMs = Math.max(500, readInt("VOICE_V4_INTERRUPT_FOLLOWUP_WAIT_MS", 2200));
+  const v4InterruptFollowupMaxMs = Math.max(
+    v4InterruptFollowupWaitMs,
+    readInt("VOICE_V4_INTERRUPT_FOLLOWUP_MAX_MS", 3000)
+  );
+  const v4InterruptMarkerOnlyMinChars = Math.max(8, readInt("VOICE_V4_INTERRUPT_MARKER_ONLY_MIN_CHARS", 12));
   const v4LiveAudioSocketEnabled = readBool("VOICE_V4_LIVE_AUDIOSOCKET_ENABLED", false);
   const v4LiveCanaryAllowlistRaw = String(process.env.VOICE_V4_LIVE_CANARY_ALLOWLIST ?? "").trim();
   const v4LiveCanaryAllowlist = v4LiveCanaryAllowlistRaw
@@ -238,6 +244,9 @@ export function loadConfig() {
       bargeInSpeechFrames: v4BargeInSpeechFrames,
       bargeInMinPlaybackMs: v4BargeInMinPlaybackMs,
       bargeInCancelTimeoutMs: v4BargeInCancelTimeoutMs,
+      interruptFollowupWaitMs: v4InterruptFollowupWaitMs,
+      interruptFollowupMaxMs: v4InterruptFollowupMaxMs,
+      interruptMarkerOnlyMinChars: v4InterruptMarkerOnlyMinChars,
       liveAudioSocketEnabled: v4LiveAudioSocketEnabled,
       liveCanaryAllowlist: v4LiveCanaryAllowlist,
       tenantId,

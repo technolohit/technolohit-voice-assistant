@@ -18,6 +18,11 @@ import { redactPhoneLikeText } from "./redaction.js";
 import { buildRuntimeErrorEvent } from "./quality-events.js";
 import { resolveInterruptionRecovery } from "./interruption-context.js";
 import { markLiveTurnLatency } from "./live-turn-latency.js";
+import {
+  finalizeInterruptFollowupLatencyMetrics,
+  markInterruptFollowupLatency
+} from "./interrupt-followup-latency.js";
+import { buildInterruptFollowupLatencyMetricsEvent } from "./quality-events.js";
 
 function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
@@ -165,7 +170,10 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     const decideFn = runtime?.liveDialogueHooks?.decideNextAction ?? decideNextAction;
     const action = await decideFn(orchestrator, {
       transcript,
-      interruptionRecovery
+      interruptionRecovery,
+      interruptFollowupTimeout: Boolean(callerCandidate.interruptFollowupTimeout),
+      waitingForInterruptionFollowup: Boolean(runtime.waitingForInterruptionFollowup),
+      interruptMarkerDetected: Boolean(runtime.interruptFollowup?.markerTranscript)
     });
     const prepared = prepareAssistantResponse(orchestrator, action.plan);
     if (!prepared?.ok) {
@@ -196,6 +204,23 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     callerCandidate.dialogueProcessed = true;
     runtime.dialogueCompletedCount = (runtime.dialogueCompletedCount ?? 0) + 1;
     markLiveTurnLatency(runtime, "dialogue_plan");
+    if (runtime.interruptFollowupLatency) {
+      markInterruptFollowupLatency(runtime, "followup_dialogue_plan", Date.now());
+    }
+
+    const interruptMetrics = finalizeInterruptFollowupLatencyMetrics(runtime);
+    if (interruptMetrics) {
+      bufferQualityEvent(
+        runtime,
+        buildInterruptFollowupLatencyMetricsEvent({
+          config,
+          agentConfigResult: runtime?.runtimeContext?.agentConfig ?? null,
+          callSessionId: ctx?.callSessionId ?? null,
+          metricValue: interruptMetrics.followup_plan_to_first_playback_ms,
+          payload: interruptMetrics
+        })
+      );
+    }
 
     console.log(
       `[v4-live] dialogue_plan_created state=${orchestrator.stateMachine?.state ?? "unknown"} intent=${action.intent ?? "unknown"} plan_type=${action.plan?.response_type ?? "unknown"} response_chars=${responseChars} ${liveLogIds(ctx)}`
