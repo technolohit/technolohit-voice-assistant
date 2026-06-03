@@ -2,7 +2,7 @@
 
 Date: 2026-06-03  
 Status: **Final ownership closure complete; no deploy, no Gate 3 live QA**  
-Target release: **`voice-bridge-v1.33.0`**
+Target release: **`voice-bridge-v1.34.0`** (v1.33.0 lacks `--baseline`; do not use for Stage A)
 
 ## Incident
 

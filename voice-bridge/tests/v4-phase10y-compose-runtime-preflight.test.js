@@ -132,6 +132,35 @@ test("10Y: baseline fails when container env disagrees with authoritative v3 fil
   assert.match(result.failures.join(","), /container_runtime_VOICE_RAG_ENABLED_mismatch_authoritative/);
 });
 
+test("10Y: forbidden keys file matches VOICE_BRIDGE_RUNTIME_ENV_KEYS", () => {
+  const fileKeys = fs
+    .readFileSync(path.join(repoRoot, "scripts/forbidden-voice-bridge-runtime-keys.txt"), "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  assert.deepEqual([...fileKeys].sort(), [...VOICE_BRIDGE_RUNTIME_ENV_KEYS].sort());
+});
+
+test("10Y: Stage A migration script is idempotent-safe shell", () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, "scripts/stage-a-migrate-runtime-env-ownership.sh"),
+    "utf8"
+  );
+  assert.match(script, /export TMPDIR="\$\{TMPDIR:-\/tmp\}"/);
+  assert.match(script, /DRY_RUN/);
+  assert.match(script, /forbidden-voice-bridge-runtime-keys/);
+});
+
+test("10Y: install script pins release ref and host tools", () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, "scripts/install-voice-preflight-host-tools.sh"),
+    "utf8"
+  );
+  assert.match(script, /stage-a-compose-runtime-preflight\.sh/);
+  assert.match(script, /stage-a-migrate-runtime-env-ownership\.sh/);
+  assert.match(script, /v1\.34\.0/);
+});
+
 test("10Y: host Stage A wrapper uses baseline mode", () => {
   const script = fs.readFileSync(
     path.join(repoRoot, "scripts/stage-a-compose-runtime-preflight.sh"),

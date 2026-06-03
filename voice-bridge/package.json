@@ -13,6 +13,7 @@
     "stt:preflight": "node scripts/openai-stt-preflight.js",
     "rag:canary-preflight": "node scripts/rag-canary-preflight.js",
     "compose:runtime-preflight": "node scripts/compose-runtime-preflight.js",
+    "compose:baseline-preflight": "node scripts/compose-runtime-preflight.js --baseline",
     "test:intelligence": "node --test tests/intelligence-upgrade.test.js",
     "tts:greeting": "node scripts/generate-greeting-openai.js",
     "audio:convert": "sh scripts/convert-greeting.sh",

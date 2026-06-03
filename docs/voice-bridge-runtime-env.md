@@ -189,7 +189,7 @@ Approved interpolation keys in `asterisk/.env` only:
 
 ### Stage A baseline (safe v3/RAG-off)
 
-Run **before** Gate 1/2/3 while production stays on safe v3/RAG-off:
+Image required for Stage A baseline preflight: **`voice-bridge-v1.34.0`** or newer.
 
 ```bash
 cd /opt/technolohit-voice/asterisk

@@ -2,6 +2,7 @@
 # Host-side compose/runtime preflight (no repo checkout required).
 # PREFLIGHT_MODE=baseline  -> Stage A: ownership + effective match while v3/RAG-off
 # PREFLIGHT_MODE=gate3     -> Gate 3 only: requires v4/RAG-on values
+export TMPDIR="${TMPDIR:-/tmp}"
 set -euo pipefail
 
 PREFLIGHT_MODE="${PREFLIGHT_MODE:-baseline}"
@@ -12,7 +13,7 @@ RAW_COMPOSE_BASE="${RAW_COMPOSE_BASE:-${DEPLOY_PATH}/docker-compose.yml}"
 RAW_COMPOSE_PROD="${RAW_COMPOSE_PROD:-${DEPLOY_PATH}/docker-compose.prod.yml}"
 CONTAINER_NAME="${CONTAINER_NAME:-technolohit-voice-bridge}"
 COMPOSE_FILES="${COMPOSE_FILES:--f docker-compose.yml -f docker-compose.prod.yml}"
-TMP_DIR="${TMP_DIR:-$(mktemp -d)}"
+TMP_DIR="$(mktemp -d "${TMPDIR}/technolohit-voice-preflight.XXXXXX")"
 
 GATE3_KEYS=(
   VOICE_RUNTIME_VERSION

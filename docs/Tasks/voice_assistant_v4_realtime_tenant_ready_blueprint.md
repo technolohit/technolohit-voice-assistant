@@ -40,7 +40,7 @@ Last updated: 2026-06-03
 | **v4 live canary** | **Phase 10S / v1.29.0 passed** for interruption handling and post-interruption product-context persistence |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release `voice-bridge-v1.33.0`, apply compose patch fragment on server, rerun Gate 2. Gate 3 blocked until dual raw Compose ownership preflight passes — [10Y report](./voice_assistant_v4_phase10y_authoritative_runtime_env_report.md) |
+| **Next step** | Release **`voice-bridge-v1.34.0`**, run [Stage A sysadmin runbook](./voice_assistant_v4_phase10y_stage_a_sysadmin_runbook.md) (ownership migration + baseline preflight). Gate 1/2/3 blocked until Stage A passes. |
 
 Completed foundation work (do not re-implement):
 
