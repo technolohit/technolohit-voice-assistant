@@ -423,6 +423,7 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E5f | Barge-in quality (10N) | G.3c: `barge_in_detected` row present; logs must not show `quality_flush_skip_event` for that type |
 | E5g | Interrupt listen window (10P) | After **Stopp** only: logs show `interrupt_followup_waiting` — **no** immediate `dialogue_plan_created` / TTS until continuation or timeout (~2.2s) |
 | E5h | Post-interrupt latency (10P) | SQL: `interrupt_followup_latency_metrics` row with non-null `barge_in_detected_to_followup_speech_start_ms` when follow-up completes |
+| E5i | Combined Smart Website inquiry (10AB) | Ask **Was ist Smart Website, was macht sie und was kostet sie?** — caller hears definition + value + scoped pricing without truncation; G.3h shows `combined_product_inquiry` |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -700,6 +701,52 @@ WHERE response_type IN ('fallback_clarification', 'collect_sales_context')
 
 **Fail:** any first product-selection response is `fallback_clarification` or
 `collect_sales_context`. Stop before Gate 3.
+
+### G.3h Combined Smart Website inquiry (Phase 10AB)
+
+During Gate 2, ask one combined product question in a single turn. Use any variant:
+
+- `Was ist Smart Website, was macht sie und was kostet sie?`
+- `Was ist die Smart-Webseite und was kostet sie?`
+- `Was macht die smarte Webseite und wie viel kostet das?`
+
+**Live functional pass:** caller hears (without truncation) Smart Website definition,
+customer value, and scope-based pricing. No immediate Neukunde / sales qualification.
+
+```sql
+SELECT created_at,
+       payload->>'response_type' AS response_type,
+       payload->>'plan_reason' AS plan_reason,
+       payload->>'current_product_context' AS current_product_context,
+       payload->>'matched_product' AS matched_product
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'response_plan_created'
+ORDER BY created_at;
+```
+
+**Pass:** combined-inquiry turn shows
+`response_type=product_question_answer`,
+`plan_reason=combined_product_inquiry`,
+`current_product_context=smart_website`.
+
+**Fail (must return 0 rows for combined turn):**
+
+```sql
+SELECT created_at, payload->>'response_type', payload->>'plan_reason'
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'response_plan_created'
+  AND payload->>'response_type' = 'collect_sales_context';
+```
+
+Post-call summary remains required on v1.34.1+:
+
+```sql
+SELECT COUNT(*) FROM voice.call_summaries WHERE call_session_id = '<CALL_SESSION_ID>'::uuid;
+SELECT event_type FROM voice.call_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid AND event_type = 'post_call_summary_created';
+```
 
 ### G.4 Session close + privacy-oriented payload scan
 

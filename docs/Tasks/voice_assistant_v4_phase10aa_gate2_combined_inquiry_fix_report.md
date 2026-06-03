@@ -3,59 +3,45 @@
 Date: 2026-06-03  
 Target release: **`voice-bridge-v1.34.2`**
 
-## Gate 2 functional failure (observed on v1.34.1)
+## Review outcome (Phase 10AB superseded)
 
-Infrastructure passed (Stage A, v4/RAG-off canary, STT/TTS, barge-in, quality flush, post-call summary on v1.34.1).
+**v1.34.2 is not approved for live Gate 2 re-test.**
 
-Functional failure: combined Smart Website inquiry ("Was ist …?", "Was macht …?", "Was kostet …?") received only a single pricing or generic snippet instead of a structured product-scoped answer.
+The combined answer shipped in v1.34.2 was **413 characters**. Default live TTS uses
+`VOICE_ASSISTANT_MAX_RESPONSE_CHARS=160` via `prepareLiveAssistantSpeechText()`.
+The pricing section was trimmed before callers could hear it, even with an optional
+300-char env override.
 
-## Root cause
+Follow-up fix: [Phase 10AB report](./voice_assistant_v4_phase10ab_live_heard_combined_inquiry_fix_report.md)
+→ target **`voice-bridge-v1.34.3`**.
 
-`detectShortFollowUpCategory()` returns **one** category (pricing wins when "kostet" is present).  
-`planScopedProductAnswer()` and the `product_question` path therefore answered only pricing, skipping intro + value explanation.
+## Original problem (correct)
 
-## Fix
+`detectShortFollowUpCategory()` returned only one category (pricing won when "kostet"
+was present), so multi-question Smart Website turns skipped intro + value.
+
+## What v1.34.2 did (partial)
 
 | Area | Change |
 |------|--------|
 | `playbook-short-answer.js` | `detectCombinedProductInquiry()` + `buildPlaybookCombinedProductAnswer()` |
-| `response-planner.js` | Use combined answer before single-category playbook fallback |
-| `sales-policy.js` | Sharper Smart Website one-line explanation |
-| `live-tts-playback-endpoint.js` | Raise v4 live response fallback to 300 chars so combined answers are not truncated mid-sentence |
+| `response-planner.js` | Combined answer before single-category fallback |
 
-Required combined answer structure (Smart Website, RAG-off):
+## What v1.34.2 did not fix (10AB blocker)
 
-1. What Smart Website is (modern site, service pages, local visibility, trust, inquiry flow)
-2. What it does for the caller (understand offer, better questions, qualified inquiries)
-3. Pricing scoped with realistic estimate language
-4. Optional soft callback/consultation offer — **not** immediate Neukunde/intake
+| Issue | Detail |
+|-------|--------|
+| Live TTS length | Combined text too long for default 160-char trim |
+| Env dependency | Suggested `VOICE_ASSISTANT_MAX_RESPONSE_CHARS=300` — not acceptable |
+| Sanitization | `einen Rückruf` → `einen Kontaktaufnahme` grammar bug in callback offer |
+| Shared v3 copy | `sales-policy.js` Smart Website explanation changed unnecessarily |
 
-## Gate 2 re-test script (sysadmin)
-
-Deploy `voice-bridge-v1.34.2`, enable same Gate 2 v4/RAG-off flags as prior run.
-
-Test utterance (single turn or natural multi-clause):
-
-> Was ist Smart Website, was macht sie und was kostet sie?
-
-**Pass criteria:**
-
-- Response mentions Smart Website definition, customer value, and scoped pricing
-- Does **not** jump to Neukunde/bestandskunde qualification on this turn
-- Does **not** repeat a single generic one-liner only
-- Post-call summary still created (`post_call_summary_created`)
-
-Optional env (if answers still truncate):
-
-```bash
-VOICE_ASSISTANT_MAX_RESPONSE_CHARS=300
-```
-
-## Gate status
+## Gate status after 10AA review
 
 | Gate | Status |
 |------|--------|
 | Stage A | PASS |
 | Gate 1 v3/RAG-off | PASS |
-| Gate 2 v4/RAG-off | **Re-test on v1.34.2** |
-| Gate 3 | Blocked until Gate 2 functional pass |
+| Gate 2 v4/RAG-off infra | PASS |
+| Gate 2 v4/RAG-off functional | **FAIL on v1.34.2** — wait for **v1.34.3** (10AB) |
+| Gate 3 | Blocked |

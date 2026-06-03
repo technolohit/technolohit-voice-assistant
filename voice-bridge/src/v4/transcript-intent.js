@@ -12,7 +12,10 @@ export function sanitizeResponseText(text) {
   const base = normalizeText(text);
   if (!base) return "";
   if (NO_RUECKRUF.test(base)) {
-    return base.replace(NO_RUECKRUF, "Kontaktaufnahme");
+    return base
+      .replace(/\beinen?\s+(?:r[üu]ckruf|rueckruf|ruckruf)\b/gi, "eine Kontaktaufnahme")
+      .replace(/\b(?:r[üu]ckruf|rueckruf|ruckruf)\b/gi, "Kontaktaufnahme")
+      .replace(/\b(?:zur[üu]ckrufen|zurueckrufen|zuruckrufen)\b/gi, "Kontakt aufnehmen");
   }
   return base;
 }
@@ -88,10 +91,10 @@ export function detectTranscriptIntent(transcript = "", memory = {}, agentConfig
     return "interruption_recovery";
   }
 
-  if (/\b(was ist|was sind|erklar|erklaer|wie funktioniert|mehr uber|mehr ueber)\b/i.test(lower)) {
+  if (/\b(was ist|was sind|was macht|was bedeutet|erklar|erklaer|wie funktioniert|mehr uber|mehr ueber)\b/i.test(lower)) {
     return "product_question";
   }
-  if (/\b(preis|kosten|was kostet|pricing|tarif|gebühr|gebuehr)\b/i.test(lower)) {
+  if (/\b(preis|kosten|was kostet|wie viel|pricing|tarif|gebühr|gebuehr)\b/i.test(lower)) {
     return "product_question";
   }
   if (/\b(termin|termine|buchung|kann das auch)\b/i.test(lower)) {

@@ -7,6 +7,7 @@ import { createStateMachine, V4_STATES } from "../src/v4/state-machine.js";
 import { detectTranscriptIntent } from "../src/v4/transcript-intent.js";
 import { resolveClosedDomainIntent } from "../src/v4/closed-domain-intent.js";
 import {
+  COMBINED_LIVE_TTS_CHAR_LIMIT,
   detectCombinedProductInquiry,
   buildPlaybookCombinedProductAnswer
 } from "../src/v4/playbook-short-answer.js";
@@ -24,16 +25,16 @@ test("10AA: detects combined Smart Website inquiry facets", () => {
   assert.equal(facets.pricing, true);
 });
 
-test("10AA: combined answer explains product, value, and pricing before callback", () => {
+test("10AA: combined answer is phone-ready and omits callback offer", () => {
   const config = loadConfig();
   const agentConfig = loadAgentConfig(config);
   const answer = buildPlaybookCombinedProductAnswer(agentConfig, "smart_website", COMBINED_TRANSCRIPT);
   assert.ok(answer);
+  assert.ok(answer.length <= COMBINED_LIVE_TTS_CHAR_LIMIT);
   assert.match(answer, /Smart Website ist eine moderne Firmenwebsite/i);
-  assert.match(answer, /Besuchern/i);
+  assert.match(answer, /Anfragen besser vor/i);
   assert.match(answer, /Preis hängt vom Umfang/i);
-  assert.match(answer, /Rückruf|Beratung/i);
-  assert.doesNotMatch(answer, /Neukunde|bestehender Kunde/i);
+  assert.doesNotMatch(answer, /Rückruf|Beratung|Neukunde|bestehender Kunde/i);
 });
 
 test("10AA: combined inquiry does not enter sales qualification", () => {
@@ -61,7 +62,6 @@ test("10AA: response plan uses combined_product_inquiry for multi-question Smart
   assert.equal(plan.response_type, RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER);
   assert.equal(plan.plan_reason, "combined_product_inquiry");
   assert.notEqual(plan.response_type, RESPONSE_TYPES.COLLECT_SALES_CONTEXT);
-  assert.match(plan.text, /Smart Website ist eine moderne Firmenwebsite/i);
   assert.match(plan.text, /Preis hängt vom Umfang/i);
 });
 
@@ -84,5 +84,5 @@ test("10AA: scoped follow-up with product context also uses combined answer", ()
   });
 
   assert.equal(plan.plan_reason, "combined_product_inquiry");
-  assert.match(plan.text, /qualifizierte Anfragen/i);
+  assert.match(plan.text, /Anfragen besser vor/i);
 });

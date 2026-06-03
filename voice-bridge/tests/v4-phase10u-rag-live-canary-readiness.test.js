@@ -128,6 +128,35 @@ test("10U: generic Smart Website pricing query uses Smart Website RAG scope", as
   });
 });
 
+test("10U: first named Smart Website combined inquiry is scoped before RAG retrieval", async () => {
+  await withEnv(ragEnv(), async () => {
+    const config = loadConfig();
+    const ctx = createRuntimeContext(config, { bridgeCallId: "10u-first-named-product" });
+    const orchestrator = createDialogueOrchestrator({
+      config,
+      runtimeContext: ctx,
+      memory: createCallSessionMemory({ bridgeCallId: "10u-first-named-product" }),
+      stateMachine: { state: V4_STATES.THINKING },
+      agentConfig: loadAgentConfig(config),
+      adapters: {
+        ragRetriever: scopedHit("Smart Website Wissen aus dem Produktkontext."),
+      },
+      qualitySink: createQualityEventSink({ v4PathActive: true }),
+      v4PathActive: true,
+    });
+    const transcript = "Was ist Smart Website, was macht sie und was kostet sie?";
+    startTurn(orchestrator);
+    acceptUserTranscript(orchestrator, transcript);
+    const action = await decideNextAction(orchestrator, { transcript });
+
+    assert.equal(action.ragResult.used_rag, true);
+    assert.equal(action.ragResult.rag_product_scope, "smart_website");
+    assert.equal(action.plan.rag_used, true);
+    assert.equal(action.plan.rag_product_scope, "smart_website");
+    assert.equal(action.plan.text, "Smart Website Wissen aus dem Produktkontext.");
+  });
+});
+
 test("10U: generic Smart Website capability query uses RAG answer", async () => {
   await withEnv(ragEnv(), async () => {
     const { action } = await runOrchestratorTurn("Wie funktioniert das?");

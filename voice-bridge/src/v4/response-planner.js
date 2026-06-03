@@ -93,7 +93,7 @@ function planScopedProductAnswer({
   const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
   if (combinedAnswer) {
     return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-      text: combinedAnswer,
+      text: ragAnswer ?? combinedAnswer,
       next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
       memory_patch: productContextMemoryPatch(memory, productId),
       quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
@@ -492,7 +492,7 @@ export function buildResponsePlan({
     const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
     if (combinedAnswer) {
       return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-        text: combinedAnswer,
+        text: ragAnswer ?? combinedAnswer,
         next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
         memory_patch: productContextMemoryPatch(memory, productId, {
           current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
@@ -537,6 +537,20 @@ export function buildResponsePlan({
   if (resolvedIntent === "product_selection") {
     const product = matchProductAlias(agentConfig, transcript);
     const productId = product?.id ?? closedDomainResolved?.matched_product ?? memory.selected_product_id;
+    const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
+    if (combinedAnswer) {
+      return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+        text: combinedAnswer,
+        next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+        memory_patch: productContextMemoryPatch(memory, productId, {
+          current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+        }),
+        quality_event_type: "turn_started",
+        rag_allowed: false,
+        plan_reason: "combined_product_inquiry",
+        lead_transition_allowed: false,
+      });
+    }
     if (!shouldEnterSalesQualification(transcript, resolvedIntent)) {
       const intro = buildPlaybookShortAnswer(agentConfig, productId, "how_it_works");
       return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {

@@ -243,8 +243,12 @@ export async function decideNextAction(orchestrator, input = {}) {
     transcript
   });
 
+  const retrievalMemory =
+    !resolveRagProductScope(orchestrator.memory) && closedDomain?.matched_product
+      ? setSelectedProduct(orchestrator.memory, closedDomain.matched_product)
+      : orchestrator.memory;
   let ragResult = input.ragResult ?? null;
-  const ragProductScope = resolveRagProductScope(orchestrator.memory);
+  const ragProductScope = resolveRagProductScope(retrievalMemory);
   const ragEnabled = Boolean(orchestrator.config?.rag?.enabled);
   const ragSalesAnswererEnabled = Boolean(orchestrator.config?.rag?.salesAnswererEnabled);
   if (ragGate.allowed && !ragResult) {
@@ -261,8 +265,8 @@ export async function decideNextAction(orchestrator, input = {}) {
     if (typeof orchestrator.adapters.ragAnswerer === "function") {
       const legacy = orchestrator.adapters.ragAnswerer({
         query: transcript,
-        productId: orchestrator.memory.selected_product_id,
-        memory: orchestrator.memory
+        productId: retrievalMemory.selected_product_id,
+        memory: retrievalMemory
       });
       ragResult =
         typeof legacy?.then === "function"
@@ -279,7 +283,7 @@ export async function decideNextAction(orchestrator, input = {}) {
         config: orchestrator.config,
         agentConfig: orchestrator.agentConfig,
         transcript,
-        memory: orchestrator.memory,
+        memory: retrievalMemory,
         stateMachine: orchestrator.stateMachine,
         retrieveFn: orchestrator.adapters.ragRetriever ?? undefined
       });

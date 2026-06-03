@@ -7,7 +7,7 @@ import { getProductById } from "./agent-config.js";
 import { buildSalesProductExplanation } from "../sales-policy.js";
 import { isInterruptionFollowUpPhrase, sanitizeResponseText } from "./transcript-intent.js";
 
-const PRICING = /\b(preis|kosten|was kostet|pricing|tarif|geb[uü]hr)\b/i;
+const PRICING = /\b(preis|kosten|was kostet|wie viel|pricing|tarif|geb[uü]hr)\b/i;
 const APPOINTMENT = /\b(termin|termine|buchung|buchen|appointment|kalender)\b/i;
 const HANDOFF = /\b(mensch|mitarbeiter|team|berater|jemanden sprechen|mit jemand)\b/i;
 const EMAIL = /\b(e-?mail|mail schicken|per mail|kontakt per mail)\b/i;
@@ -55,29 +55,14 @@ export function detectCombinedProductInquiry(transcript = "") {
   };
 }
 
-function smartWebsiteCombinedAnswer(facets) {
-  const parts = [];
+/** Phone-ready Smart Website combined answer — must fit default live TTS limit (160). */
+export const SMART_WEBSITE_COMBINED_LIVE_ANSWER =
+  "Smart Website ist eine moderne Firmenwebsite mit Leistungsseiten und lokaler Sichtbarkeit. Sie bereitet Anfragen besser vor. Der Preis hängt vom Umfang ab.";
 
-  if (facets.whatIs || facets.isCombined) {
-    parts.push(
-      "Smart Website ist eine moderne Firmenwebsite mit klaren Leistungsseiten, lokaler Sichtbarkeit, Vertrauenssignalen und einfachem Anfrage-Flow."
-    );
-  }
-  if (facets.howItWorks || (facets.isCombined && facets.whatIs)) {
-    parts.push(
-      "Sie hilft Besuchern, Ihr Angebot zu verstehen, bessere Fragen zu stellen und qualifizierte Anfragen vorzubereiten."
-    );
-  }
-  if (facets.pricing) {
-    parts.push(
-      "Der Preis hängt vom Umfang ab; für eine realistische Einschätzung klären wir kurz Ihr Ziel."
-    );
-  }
-  if (facets.isCombined) {
-    parts.push("Möchten Sie dazu einen Rückruf oder eine kurze Beratung?");
-  }
+export const COMBINED_LIVE_TTS_CHAR_LIMIT = 160;
 
-  return parts.join(" ");
+function smartWebsiteCombinedAnswer() {
+  return SMART_WEBSITE_COMBINED_LIVE_ANSWER;
 }
 
 export function hasSubstantiveFollowUpContent(transcript = "") {
@@ -139,7 +124,11 @@ export function buildPlaybookCombinedProductAnswer(agentConfig, productId, trans
   if (!facets.isCombined) return null;
 
   if (id === "smart_website") {
-    return sanitizeResponseText(smartWebsiteCombinedAnswer(facets));
+    const answer = sanitizeResponseText(smartWebsiteCombinedAnswer());
+    if (answer.length > COMBINED_LIVE_TTS_CHAR_LIMIT) {
+      throw new Error("smart_website_combined_answer_exceeds_live_tts_limit");
+    }
+    return answer;
   }
 
   const name = getProductById(agentConfig, id)?.display_name ?? "die Lösung";
@@ -153,6 +142,5 @@ export function buildPlaybookCombinedProductAnswer(agentConfig, productId, trans
   if (facets.pricing) {
     parts.push(buildPlaybookShortAnswer(agentConfig, id, "pricing"));
   }
-  parts.push("Möchten Sie dazu einen Rückruf oder eine kurze Beratung?");
   return sanitizeResponseText(parts.filter(Boolean).join(" "));
 }

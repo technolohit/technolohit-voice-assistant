@@ -6,9 +6,11 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
 **Phase 10O-B (RAG-on): BLOCKED** until the three-gate sequence passes on
-`voice-bridge-v1.32.0+`. Phase 10W Gate 2 on `v1.31.0` was **PARTIAL / FAIL**
-because known Smart Website opening turns entered `collect_sales_context`
-before introducing the product. Phase 10X addresses this behavior.
+`voice-bridge-v1.34.3+`. Gate 2 infrastructure is mostly proven, but v1.34.2
+failed the combined Smart Website inquiry because live TTS trimmed pricing.
+Phase 10AB fixes the audible RAG-off answer and preserves first-turn product
+scope for the later RAG-on canary. Post-call summary still requires live DB
+evidence before Gate 2 can pass.
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 
@@ -80,7 +82,7 @@ curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/healthz
 # tenant_id=technolohit agent_id=main_voice_sales in agent config
 ```
 
-Enable RAG for canary only (operator documents exact env keys used; do not commit secrets). Use `voice-bridge-v1.32.0` or newer with the Phase 10U product-scope guardrails and Phase 10X product-introduction behavior.
+Enable RAG for canary only (operator documents exact env keys used; do not commit secrets). Use `voice-bridge-v1.34.3` or newer with Phase 10U product-scope guardrails, Phase 10X product-introduction behavior, and Phase 10AB first-turn combined-inquiry scoping.
 
 **Call script:**
 
