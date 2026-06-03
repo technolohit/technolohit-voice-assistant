@@ -136,7 +136,7 @@ async function synthesizeLiveSpeech(ttsAdapter, speechText, options = {}) {
 }
 
 export function maxLiveResponseChars(config) {
-  return Math.max(80, Number(config?.assistant?.maxResponseChars ?? 180));
+  return Math.max(120, Number(config?.assistant?.maxResponseChars ?? 300));
 }
 
 export function trimLiveResponseText(text, config) {

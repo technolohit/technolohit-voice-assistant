@@ -52,7 +52,7 @@ export function buildSalesProductPitch(config, productId) {
 export function buildSalesProductExplanation(productId) {
   const explanations = {
     smart_website:
-      "Eine Smart Website zeigt Ihr Angebot klar, beantwortet wichtige Fragen und bereitet bessere Anfragen vor.",
+      "Smart Website ist eine moderne Firmenwebsite mit klaren Leistungsseiten, lokaler Sichtbarkeit und einfachem Anfrage-Flow.",
     aiseoq:
       "AISeoQ vergleicht Website, Inhalte und Sichtbarkeit mit Wettbewerbern und zeigt konkrete SEO-Schritte.",
     botinteg:

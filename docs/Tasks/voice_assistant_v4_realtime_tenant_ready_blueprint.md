@@ -40,7 +40,7 @@ Last updated: 2026-06-03
 | **v4 live canary** | **Phase 10S / v1.29.0 passed** for interruption handling and post-interruption product-context persistence |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Deploy **`voice-bridge-v1.34.1`**, re-run Gate 2 v4/RAG-off canary and confirm `post_call_summary_created` — [10Z report](./voice_assistant_v4_phase10z_gate2_post_call_summary_fix_report.md). Gate 3 blocked until Gate 2 post-call summary passes. |
+| **Next step** | Deploy **`voice-bridge-v1.34.2`**, re-run Gate 2 combined Smart Website inquiry — [10AA report](./voice_assistant_v4_phase10aa_gate2_combined_inquiry_fix_report.md). Gate 3 blocked until Gate 2 functional pass. |
 
 Completed foundation work (do not re-implement):
 

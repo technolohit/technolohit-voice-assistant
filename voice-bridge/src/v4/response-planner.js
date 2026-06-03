@@ -13,6 +13,7 @@ import {
 import {
   detectShortFollowUpCategory,
   buildPlaybookShortAnswer,
+  buildPlaybookCombinedProductAnswer,
   hasSubstantiveFollowUpContent
 } from "./playbook-short-answer.js";
 import {
@@ -89,6 +90,20 @@ function planScopedProductAnswer({
   planReason = "scoped_product_qa",
 }) {
   const productId = resolveCurrentProductContext(memory);
+  const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
+  if (combinedAnswer) {
+    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+      text: combinedAnswer,
+      next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+      memory_patch: productContextMemoryPatch(memory, productId),
+      quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
+      rag_allowed: gateUsesRag(ragGate),
+      plan_reason: "combined_product_inquiry",
+      lead_transition_allowed: false,
+    });
+  }
+
   const category = detectShortFollowUpCategory(transcript);
   const product = productId ? getProductById(agentConfig, productId) : null;
 
@@ -474,6 +489,21 @@ export function buildResponsePlan({
 
   if (resolvedIntent === "product_question") {
     const productId = memory.selected_product_id ?? matchProductAlias(agentConfig, transcript)?.id;
+    const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
+    if (combinedAnswer) {
+      return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+        text: combinedAnswer,
+        next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+        memory_patch: productContextMemoryPatch(memory, productId, {
+          current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+        }),
+        quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
+        allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
+        rag_allowed: gateUsesRag(effectiveRagGate),
+        plan_reason: "combined_product_inquiry",
+        lead_transition_allowed: false,
+      });
+    }
     const product = productId ? getProductById(agentConfig, productId) : null;
     const category = detectShortFollowUpCategory(transcript);
     const playbookAnswer =
