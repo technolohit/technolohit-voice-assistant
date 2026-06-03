@@ -142,7 +142,7 @@ docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://127.0.0.1:8080/hea
 ```
 
 **Pass:** HTTP 200 / health body.  
-Phase 10H scenarios keep `VOICE_RAG_ENABLED=false` initially; this gate confirms infra only.
+Phase 10H scenarios keep `VOICE_RAG_ENABLED=false` initially; this gate confirms infra only. Phase 10U RAG-on validation uses the same host-local URL and must not use Docker DNS from the host-network voice-bridge container.
 
 ### A.6 v3 baseline call (before any v4 canary flags)
 
@@ -269,6 +269,18 @@ VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
 
 Keep existing `OPENAI_API_KEY`, `VOICE_AGENT_CONFIG_PATH`, `VOICE_RAG_API_URL=http://127.0.0.1:8080`, VAD/barge-in thresholds unless ops standard says otherwise.
 
+### D.1 Phase 10U supervised RAG-on override
+
+Use only after the RAG-off canary is accepted and only during the supervised window:
+
+```env
+VOICE_RAG_API_URL=http://127.0.0.1:8080
+VOICE_RAG_ENABLED=true
+VOICE_RAG_SALES_ANSWERER_ENABLED=true
+```
+
+All other v4 live canary gates from section D remain required. Restore both RAG flags to `false` during rollback.
+
 Restart:
 
 ```bash
@@ -317,6 +329,9 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E12 | SQL summary + close | Rows for `live_call_quality_summary` and `audio_session_closed` for session UUID |
 | E13 | Privacy | No `+49…` / long digit runs in `[v4-live]` logs or quality payloads (section G.4) |
 | E14 | Restore v3 | Section C env; new call → `call_handler selected=v3` |
+| E15 | Phase 10U product-scoped RAG | In Smart Website context, `Was kostet das?`, `Wie funktioniert das?`, `Was kann das?`, and `Erklar mir das kurz.` remain scoped to `smart_website` |
+| E16 | Phase 10U interrupted RAG question | During playback say `Stopp. Wie funktioniert das?`; response uses the active product context, not the interrupted assistant topic |
+| E17 | Phase 10U RAG failure fallback | If a controlled failure is approved, caller hears a short product answer; no silence, crash, repeated fallback, or unexpected `collect_sales_context` |
 
 ### E.9 / E.10 utterance hints (German, no phone numbers)
 
@@ -661,6 +676,49 @@ ORDER BY created_at;
 
 **Pass:** for normal multi-frame utterances, `pcm_bytes > 320`, `wav_bytes = pcm_bytes + 44`, `wav_bytes_minus_pcm_bytes = 44`, and `stt_http_status` is 2xx. **Fail:** high `utterance_frames` with `pcm_bytes=320`.
 
+### G.8 RAG retrieval evidence (Phase 10U)
+
+```sql
+SELECT
+  created_at,
+  event_type,
+  metric_value AS rag_latency_ms,
+  payload->>'rag_enabled' AS rag_enabled,
+  payload->>'rag_sales_answerer_enabled' AS rag_sales_answerer_enabled,
+  payload->>'rag_product_scope' AS rag_product_scope,
+  payload->>'rag_result_count' AS rag_result_count,
+  payload->>'used_rag' AS used_rag,
+  payload->>'rag_fallback_used' AS rag_fallback_used,
+  payload->>'fallback_reason' AS fallback_reason
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN ('rag_retrieval_started', 'rag_retrieval_completed', 'rag_retrieval_failed')
+ORDER BY created_at;
+```
+
+**Pass:** product scope matches the active product, completed rows have bounded latency, and failed rows use a safe fallback. Payloads must not contain raw query or transcript text.
+
+### G.9 Response-plan RAG evidence (Phase 10U)
+
+```sql
+SELECT
+  created_at,
+  payload->>'response_type' AS response_type,
+  payload->>'plan_reason' AS plan_reason,
+  payload->>'current_product_context' AS current_product_context,
+  payload->>'previous_product_context' AS previous_product_context,
+  payload->>'rag_product_scope' AS rag_product_scope,
+  payload->>'rag_used' AS rag_used,
+  payload->>'rag_fallback_used' AS rag_fallback_used,
+  payload->>'interrupt_sequence_id' AS interrupt_sequence_id
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'response_plan_created'
+ORDER BY created_at;
+```
+
+**Pass:** `current_product_context` and `rag_product_scope` agree; `rag_used` reflects actual retrieval use; fallback plans set `rag_fallback_used=true`.
+
 See also [voice_assistant_v4_phase8_quality_analytics_queries.sql](./voice_assistant_v4_phase8_quality_analytics_queries.sql) (live summary query at end).
 
 ---
@@ -681,6 +739,9 @@ Stop the window and run section I if **any** occur:
 | H8 | `call_handler selected=v4_canary` on a call **outside** maintenance / wrong allowlist |
 | H9 | v3 baseline (E14) fails after rollback |
 | H10 | Unexpected concurrent production traffic while `bridge:` allowlist active |
+| H11 | RAG returns or speaks content for the wrong product scope |
+| H12 | RAG failure causes long silence, crash, repeated fallback loop, or unexpected sales-context collection |
+| H13 | Raw RAG query, transcript, phone, email, or lead details appear in logs or quality payloads |
 
 ---
 

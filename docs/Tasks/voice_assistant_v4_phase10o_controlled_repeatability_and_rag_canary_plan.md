@@ -5,7 +5,7 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): BLOCKED** until Phase 10O-A passes on **v1.29.0+**.
+**Phase 10O-B (RAG-on): ENGINEERING READY** after Phase 10U / `voice-bridge-v1.30.0`; execute only after Phase 10O-A repeatability is accepted.
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 
@@ -54,25 +54,30 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 ```bash
 # RAG health from voice-bridge host network
-curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health
+curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/healthz
 # Expect 200
 
 # Confirm env (canary only — not production default)
-# VOICE_RAG_API_URL or documented host-local URL
+# VOICE_RAG_API_URL=http://127.0.0.1:8080
+# VOICE_RAG_ENABLED=true
+# VOICE_RAG_SALES_ANSWERER_ENABLED=true
 # tenant_id=technolohit agent_id=main_voice_sales in agent config
 ```
 
-Enable RAG for canary only (operator document exact env keys used; do not commit secrets).
+Enable RAG for canary only (operator documents exact env keys used; do not commit secrets). Use `voice-bridge-v1.30.0` or newer with the Phase 10U product-scope guardrails.
 
 **Call script:**
 
-1. Select product (e.g. Smart Website)  
-2. Ask a product question answerable from TechnoloHit knowledge (not pricing-only playbook)  
-3. Confirm answer is **grounded** (no forbidden claims; no invented pricing guarantees)  
-4. Confirm **lead_ready** / callback flows are **not** triggered by RAG answer alone  
-5. Quality flush + privacy scan (corrected G.4)  
+1. Select or switch to **Smart Website**.
+2. Ask `Was kostet das?`, `Wie funktioniert das?`, `Was kann das?`, and `Erklar mir das kurz.`
+3. Confirm every answer remains scoped to Smart Website unless the caller explicitly changes product.
+4. During playback say `Stopp. Wie funktioniert das?`; confirm the continuation still uses Smart Website RAG scope.
+5. Confirm answers are **grounded**: no forbidden claims, no invented exact prices, no unsupported features.
+6. Confirm `lead_ready`, callback, and contact flows are not triggered by RAG answers alone.
+7. Verify `rag_retrieval_started`, `rag_retrieval_completed` or `rag_retrieval_failed`, response-plan RAG fields, quality summary counts, and corrected privacy scan.
+8. If a controlled RAG failure test is approved, confirm the assistant gives a short product playbook answer without silence, crash, or fallback loop.
 
-**Success:** **1/1** call **PASS** — grounded product Q&A; lead policy unchanged.
+**Success:** **1/1** call **PASS** — grounded product-scoped Q&A, safe failure behavior, lead policy unchanged, no raw query/transcript/PII in quality payloads.
 
 ---
 
@@ -90,6 +95,8 @@ Stop immediately and roll back to v3 if any of:
 | 6 | TTS choppy or long silence after successful STT |
 | 7 | Barge-in does not cancel playback when caller speaks during assistant audio |
 | 8 | `quality_flush_skip_event` on capstone events (`live_call_quality_summary`, `barge_in_detected`) |
+| 9 | RAG answer uses a product other than `current_product_context` without an explicit product switch |
+| 10 | Raw query, transcript, phone, email, or lead details appear in RAG or quality payloads |
 
 ---
 

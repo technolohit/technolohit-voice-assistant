@@ -57,6 +57,8 @@ function dialogueEnv(overrides = {}) {
     VOICE_V4_REALTIME_ENABLED: "true",
     VOICE_V4_CANARY_ENABLED: "true",
     VOICE_V4_BARGE_IN_ENABLED: "false",
+    VOICE_RAG_ENABLED: "true",
+    VOICE_RAG_SALES_ANSWERER_ENABLED: "true",
     VOICE_RAG_API_URL: "http://127.0.0.1:8080",
     ...overrides
   };

@@ -103,7 +103,7 @@ test("product question updates memory and state", async () => {
     });
     const turn = await simulateInboundTranscriptTurn(runtime, "Was ist Smart Website?");
     assert.equal(turn.plan.response_type, RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER);
-    assert.equal(turn.plan.rag_allowed, true);
+    assert.equal(turn.plan.rag_allowed, false);
     assert.equal(turn.memory.selected_product_id, "smart_website");
     assert.equal(turn.stateMachine.state, V4_STATES.SPEAKING);
   });
@@ -147,7 +147,9 @@ test("RAG plan is product Q&A only and cannot create lead", () => {
       memory,
       stateMachine: { state: V4_STATES.THINKING },
       transcript: "Was ist Smart Website?",
-      ragAnswer: "Kurzantwort aus Wissensbasis."
+      ragAnswer: "Kurzantwort aus Wissensbasis.",
+      ragGate: { allowed: true },
+      ragResult: { used_rag: true }
     });
     assert.equal(plan.rag_allowed, true);
     assert.equal(plan.lead_transition_allowed, false);

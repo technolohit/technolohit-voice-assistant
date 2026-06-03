@@ -8,6 +8,7 @@ import * as persist from "./persist.js";
 import { describeRuntimeRoute } from "./v4/runtime-router.js";
 import { loadAgentConfig } from "./v4/agent-config.js";
 import { finalizeAllActiveCallsOnShutdown } from "./call-finish.js";
+import { checkRagApiHealth } from "./rag-client.js";
 
 loadVoiceBridgeEnv();
 
@@ -90,8 +91,20 @@ server.listen(config.listenPort, config.listenHost, () => {
 
   const runtimeRoute = describeRuntimeRoute(config);
   console.log(
-    `[voice-runtime] selected_runtime=${runtimeRoute.selected_runtime} selected_runtime_active=${runtimeRoute.selected_runtime_active} v4_requested=${runtimeRoute.v4_requested} v4_runtime_active=${runtimeRoute.v4_runtime_active} reason=${runtimeRoute.reason} stt_provider=${config.v4.sttProvider} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId}`
+    `[voice-runtime] selected_runtime=${runtimeRoute.selected_runtime} selected_runtime_active=${runtimeRoute.selected_runtime_active} v4_requested=${runtimeRoute.v4_requested} v4_runtime_active=${runtimeRoute.v4_runtime_active} reason=${runtimeRoute.reason} stt_provider=${config.v4.sttProvider} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId} rag_enabled=${config.rag.enabled} rag_sales_answerer_enabled=${config.rag.salesAnswererEnabled} rag_api_configured=${Boolean(config.rag.apiUrl)}`
   );
+
+  if (config.rag.enabled || config.rag.salesAnswererEnabled) {
+    checkRagApiHealth(config, { timeoutMs: Math.min(config.rag.timeoutMs, 700) })
+      .then((health) => {
+        console.log(
+          `[voice-rag] health ok=${health.ok} reason=${health.reason} latency_ms=${health.latencyMs ?? "unknown"}`
+        );
+      })
+      .catch(() => {
+        console.warn("[voice-rag] health ok=false reason=health_check_failed latency_ms=unknown");
+      });
+  }
 
   const agentConfigResult = loadAgentConfig(config);
   if (agentConfigResult.ok) {

@@ -1,0 +1,132 @@
+# Voice Assistant v4 Phase 10U - RAG-On Live Canary Readiness Report
+
+Date: 2026-06-03  
+Target release: `voice-bridge-v1.30.0`  
+Status: **Implementation complete; supervised RAG-on canary still required**
+
+## Objective
+
+Prepare the gated v4 live AudioSocket canary for product-scoped RAG product/sales Q&A without changing the production v3 default or enabling RAG globally.
+
+Phase 10S proved that product context can switch and persist during interruption handling. Phase 10U makes that context authoritative for RAG retrieval and adds the evidence needed to validate a supervised RAG-on call safely.
+
+## Safety Boundaries
+
+- Production remains on `VOICE_RUNTIME_VERSION=v3`.
+- `VOICE_RAG_ENABLED=false` and `VOICE_RAG_SALES_ANSWERER_ENABLED=false` remain the defaults.
+- RAG retrieval requires both RAG flags and the existing v4 live canary gates.
+- `turn-assistant.js` is not expanded.
+- RAG cannot create leads, validate callback permission, or change contact policy.
+- RAG failures fall back to short product playbook answers.
+- No raw transcript, query text, phone number, email, or lead details are written to quality event payloads.
+- v4 voice RAG requests never persist `query_preview` in RAG retrieval logs.
+
+## Implementation
+
+### Product-scoped retrieval
+
+`voice-bridge/src/v4/rag-product-scope.js` resolves the active product from `current_product_context`, selected product, or product interest. The v4 RAG request sends:
+
+```json
+{
+  "context": {
+    "product": "smart_website",
+    "product_scope": "smart_website",
+    "v4_rag": true
+  }
+}
+```
+
+The scope is enforced twice:
+
+1. `rag-api` filters retrieval candidates to the requested product scope.
+2. `voice-bridge` rejects answer chunks that do not match the active product.
+
+Generic German references such as `Was kostet das?`, `Wie funktioniert das?`, `Was kann das?`, and `Erklar mir das kurz.` therefore bind to the current product context before retrieval.
+
+### Fail-closed behavior
+
+The assistant continues with a bounded non-RAG product answer when retrieval:
+
+- times out;
+- is unavailable;
+- returns no usable result;
+- returns a low-score result;
+- returns only a different product;
+- produces an unsafe or forbidden answer.
+
+The fallback does not restart intake or enter `collect_sales_context` unless the caller explicitly asks for contact, callback, or project discussion.
+
+### Telemetry and response-plan evidence
+
+RAG quality events use:
+
+- `rag_retrieval_started`
+- `rag_retrieval_completed`
+- `rag_retrieval_failed`
+
+Safe payload fields include:
+
+- `rag_enabled`
+- `rag_sales_answerer_enabled`
+- `rag_product_scope`
+- `rag_result_count`
+- `rag_fallback_used`
+- `fallback_reason`
+- `rag_latency_ms` through the event metric value
+
+`response_plan_created` includes safe RAG evidence:
+
+- `current_product_context`
+- `previous_product_context`
+- `matched_product`
+- `response_type`
+- `plan_reason`
+- `rag_enabled`
+- `rag_product_scope`
+- `rag_used`
+- `rag_fallback_used`
+- `interrupt_sequence_id` when applicable
+
+### 24/7 readiness foundation
+
+- `voice-bridge` has a non-blocking RAG API health check.
+- Startup logs show RAG enablement and API configuration without printing secrets or the URL.
+- Live call quality summaries already count `rag_used_count` and `rag_failed_count`.
+- Repeated RAG failures do not crash the call or prevent later non-RAG answers.
+- Existing stale-session detection and call-finalization behavior is unchanged.
+
+## Files Changed
+
+| Area | Files |
+|------|-------|
+| Product scope | `voice-bridge/src/v4/rag-product-scope.js`, `voice-bridge/src/v4/rag-orchestrator.js` |
+| Dialogue evidence | `voice-bridge/src/v4/dialogue-orchestrator.js`, `voice-bridge/src/v4/response-planner.js`, `voice-bridge/src/v4/product-context-persistence.js` |
+| Health/startup | `voice-bridge/src/rag-client.js`, `voice-bridge/src/index.js` |
+| RAG API scope/privacy | `rag-api/app/retrieval.py` |
+| Tests | `voice-bridge/tests/v4-phase10u-rag-live-canary-readiness.test.js`, existing Phase 5/6 tests, `rag-api/tests/test_contract_static.py` |
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| `cd voice-bridge && npm test` | `386/386` passed |
+| `python -m pytest rag-api/tests` | `7/7` passed |
+| `node --check` on changed JS | Passed |
+| `git diff --check` | Clean |
+| `voice-bridge/scripts/run-ci-dialogue-scenarios.ps1` | `25/25` passed |
+
+## Supervised Canary Decision
+
+Phase 10U is ready for a supervised RAG-on canary after release of `voice-bridge-v1.30.0`.
+
+The canary must:
+
+1. use `VOICE_RAG_API_URL=http://127.0.0.1:8080`;
+2. enable both RAG flags only during the approved canary window;
+3. prove Smart Website questions remain scoped to Smart Website;
+4. prove a controlled RAG failure produces a short playbook answer;
+5. prove quality payloads contain safe evidence and no raw query/transcript/PII;
+6. roll back to v3 and RAG-off after evidence collection.
+
+Passing the canary does not enable production v4 globally.

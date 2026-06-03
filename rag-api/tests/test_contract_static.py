@@ -44,6 +44,13 @@ def test_ingest_conflict_target_is_agent_aware():
 def test_voice_bridge_dockerfile_copies_agent_config():
     dockerfile = Path("voice-bridge/Dockerfile").read_text(encoding="utf-8")
     assert "COPY --chown=node:node config ./config" in dockerfile
+
+
+def test_v4_voice_rag_product_scope_and_query_preview_privacy():
+    retrieval = Path("rag-api/app/retrieval.py").read_text(encoding="utf-8")
+    assert 'request.context.get("product_scope")' in retrieval
+    assert "chunk_matches_product(chunk, requested_scope)" in retrieval
+    assert 'not bool(request.context.get("v4_rag"))' in retrieval
     assert Path(
         "voice-bridge/config/agents/technolohit.main_voice_sales.v4.json"
     ).is_file()

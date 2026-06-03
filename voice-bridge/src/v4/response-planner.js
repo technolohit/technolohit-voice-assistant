@@ -94,14 +94,15 @@ function planScopedProductAnswer({
 
   if (category) {
     const answer = sanitizeResponseText(
-      buildPlaybookShortAnswer(agentConfig, productId, category),
+      ragAnswer ?? buildPlaybookShortAnswer(agentConfig, productId, category),
     );
     return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
       text: answer,
       next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
       memory_patch: productContextMemoryPatch(memory, productId),
-      quality_event_type: "turn_started",
-      rag_allowed: false,
+      quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
+      rag_allowed: gateUsesRag(ragGate),
       plan_reason: planReason,
     });
   }
@@ -219,7 +220,7 @@ function planInterruptionFollowUp({
 }
 
 function gateUsesRag(ragGate) {
-  return Boolean(ragGate?.allowed);
+  return Boolean(ragGate?.allowed && ragGate?.used_rag);
 }
 
 export function buildResponsePlan({
@@ -230,6 +231,7 @@ export function buildResponsePlan({
   intent = null,
   ragAnswer = null,
   ragGate = null,
+  ragResult = null,
   interruptionRecovery = null,
   closedDomain = null,
   interruptFollowupTimeout = false
@@ -261,6 +263,10 @@ export function buildResponsePlan({
   const gate =
     ragGate ??
     shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
+  const effectiveRagGate = {
+    ...gate,
+    used_rag: Boolean(ragResult?.used_rag),
+  };
   const postContactProductQa = isPostContactProductQuestion(memory, transcript, resolvedIntent);
 
   const closedDomainResolved =
@@ -277,7 +283,7 @@ export function buildResponsePlan({
       memory,
       transcript,
       ragAnswer,
-      ragGate: gate,
+      ragGate: effectiveRagGate,
       planReason: interruptionRecovery ? "interrupt_scoped_product_qa" : "scoped_product_qa",
     });
   }
@@ -349,9 +355,9 @@ export function buildResponsePlan({
         text: answer,
         next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
         memory_patch: interruptionMemoryPatch(memory, productId),
-        quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
-        allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
-        rag_allowed: gateUsesRag(ragGate),
+        quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
+        allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
+        rag_allowed: gateUsesRag(effectiveRagGate),
       });
     }
   }
@@ -386,7 +392,7 @@ export function buildResponsePlan({
       resolvedIntent,
       interruptionRecovery,
       ragAnswer,
-      ragGate: gate,
+      ragGate: effectiveRagGate,
       closedDomain,
     });
   }
@@ -459,9 +465,9 @@ export function buildResponsePlan({
             ? V4_STATES.VALIDATING_CONTACT
             : V4_STATES.ANSWERING_PRODUCT_QUESTION
       },
-      quality_event_type: "rag_retrieval_completed",
-      allowed_tools: ["rag"],
-      rag_allowed: true,
+      quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
+      rag_allowed: gateUsesRag(effectiveRagGate),
       lead_transition_allowed: false
     });
   }
@@ -491,9 +497,9 @@ export function buildResponsePlan({
         product_interest: productId ?? memory.product_interest,
         current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION
       },
-      quality_event_type: gate.allowed ? "rag_retrieval_completed" : "turn_started",
-      allowed_tools: gate.allowed ? ["rag"] : [],
-      rag_allowed: gate.allowed,
+      quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
+      rag_allowed: gateUsesRag(effectiveRagGate),
       lead_transition_allowed: false
     });
   }

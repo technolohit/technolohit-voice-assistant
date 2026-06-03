@@ -35,6 +35,7 @@ import {
   closedDomainQualityPayload
 } from "./closed-domain-intent.js";
 import { planContextQualityPayload } from "./product-context-persistence.js";
+import { resolveRagProductScope } from "./rag-product-scope.js";
 import {
   resolveInterruptionRecovery,
   captureInterruptedAssistantState
@@ -235,6 +236,7 @@ export async function decideNextAction(orchestrator, input = {}) {
   const interruptionRecovery = input.interruptionRecovery ?? null;
 
   const ragGate = shouldUseRagForTurn({
+    config: orchestrator.config,
     state: orchestrator.stateMachine?.state,
     intent,
     memory: orchestrator.memory,
@@ -242,9 +244,16 @@ export async function decideNextAction(orchestrator, input = {}) {
   });
 
   let ragResult = input.ragResult ?? null;
+  const ragProductScope = resolveRagProductScope(orchestrator.memory);
+  const ragEnabled = Boolean(orchestrator.config?.rag?.enabled);
+  const ragSalesAnswererEnabled = Boolean(orchestrator.config?.rag?.salesAnswererEnabled);
   if (ragGate.allowed && !ragResult) {
     bufferEvent(orchestrator, "rag_retrieval_started", {
       rag_reason: ragGate.reason,
+      rag_enabled: ragEnabled,
+      rag_sales_answerer_enabled: ragSalesAnswererEnabled,
+      rag_product_scope: ragProductScope,
+      rag_fallback_used: false,
       tenant_id: orchestrator.config?.v4?.tenantId ?? "technolohit",
       agent_id: orchestrator.config?.v4?.agentId ?? "main_voice_sales"
     });
@@ -281,6 +290,11 @@ export async function decideNextAction(orchestrator, input = {}) {
       ragResult?.used_rag ? "rag_retrieval_completed" : "rag_retrieval_failed",
       {
         used_rag: Boolean(ragResult?.used_rag),
+        rag_enabled: ragEnabled,
+        rag_sales_answerer_enabled: ragSalesAnswererEnabled,
+        rag_product_scope: ragResult?.rag_product_scope ?? ragProductScope,
+        rag_result_count: Number(ragResult?.result_count ?? ragResult?.evidence?.hit_count ?? 0),
+        rag_fallback_used: !Boolean(ragResult?.used_rag),
         fallback_reason: ragResult?.fallback_reason ?? null,
         rag_reason: ragGate.reason
       },
@@ -298,6 +312,7 @@ export async function decideNextAction(orchestrator, input = {}) {
     intent,
     ragAnswer,
     ragGate,
+    ragResult,
     interruptionRecovery,
     closedDomain,
     interruptFollowupTimeout: Boolean(input.interruptFollowupTimeout)
@@ -307,6 +322,12 @@ export async function decideNextAction(orchestrator, input = {}) {
   if (plan.lead_transition_allowed && ragGuard.createsLead === false && plan.rag_allowed) {
     plan.lead_transition_allowed = false;
   }
+
+  plan.rag_enabled = ragEnabled;
+  plan.rag_sales_answerer_enabled = ragSalesAnswererEnabled;
+  plan.rag_product_scope = ragResult?.rag_product_scope ?? ragProductScope;
+  plan.rag_used = Boolean(ragResult?.used_rag);
+  plan.rag_fallback_used = Boolean(ragGate.allowed && !ragResult?.used_rag);
 
   orchestrator.lastPlan = plan;
   return { ok: true, plan, intent, ragResult, ragGate };

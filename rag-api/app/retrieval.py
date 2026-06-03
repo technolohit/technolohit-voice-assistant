@@ -13,7 +13,14 @@ PRODUCT_ALIASES: dict[str, tuple[str, ...]] = {
     "aiseoq": ("aiseoq", "ai seo q", "seo workspace"),
     "botinteg": ("botinteg", "bot integ"),
     "lokalki": ("lokalki", "lokal ki", "lokale ki"),
-    "voice_agent": ("digitale rezeption", "digitaler telefonassistent", "voice agent", "telefonassistent"),
+    "voice_agent": (
+        "digitale rezeption",
+        "digitaler telefonassistent",
+        "voice agent",
+        "ai voice assistant",
+        "ki voice assistant",
+        "telefonassistent",
+    ),
 }
 
 SEMANTIC_PRODUCT_SIGNALS: dict[str, tuple[str, ...]] = {
@@ -293,6 +300,10 @@ async def retrieve(
     semantic_accept_floor = max(0.0, min(1.0, float(getattr(settings, "semantic_product_accept_floor", 0.66))))
     product_ids = requested_product_ids(request.query)
     semantic_product_ids = requested_semantic_product_ids(request.query)
+    requested_scope = normalize_text(str(request.context.get("product_scope") or request.context.get("product") or ""))
+    if requested_scope in PRODUCT_ALIASES:
+        product_ids.add(requested_scope)
+        semantic_product_ids.add(requested_scope)
     explicit_lokalki_semantic = is_explicit_lokalki_semantic_query(request.query)
     definition_query = is_definition_query(request.query)
 
@@ -477,6 +488,12 @@ async def retrieve(
                 )
             )
         ][:top_k]
+        if requested_scope in PRODUCT_ALIASES:
+            chunks = [
+                chunk
+                for chunk in chunks
+                if chunk_matches_product(chunk, requested_scope)
+            ][:top_k]
         if not chunks and "lokalki" in semantic_product_ids:
             fallback_candidates = [
                 chunk
@@ -566,7 +583,12 @@ async def log_retrieval(
     min_score: float,
     top_k: int,
 ) -> None:
-    query_preview = request.query[:160] if settings.log_query_preview else None
+    # Voice queries may contain caller PII. Never persist a preview for v4 voice RAG.
+    query_preview = (
+        request.query[:160]
+        if settings.log_query_preview and not bool(request.context.get("v4_rag"))
+        else None
+    )
     selected_ids = [chunk.chunk_id for chunk in chunks]
     await conn.execute(
         """
@@ -600,6 +622,9 @@ def safe_context(context: dict[str, Any]) -> dict[str, Any]:
         "source",
         "tenant_id",
         "agent_id",
+        "product",
+        "product_scope",
+        "v4_rag",
     }
     return {key: value for key, value in context.items() if key in allowed}
 

@@ -104,5 +104,10 @@ export function planContextQualityPayload(memory = {}, closedDomain = null, plan
     matched_product: closedDomain?.matched_product ?? current ?? null,
     response_type: plan?.response_type ?? null,
     plan_reason: plan?.plan_reason ?? null,
+    rag_enabled: Boolean(plan?.rag_enabled),
+    rag_sales_answerer_enabled: Boolean(plan?.rag_sales_answerer_enabled),
+    rag_product_scope: plan?.rag_product_scope ?? current ?? null,
+    rag_used: Boolean(plan?.rag_used),
+    rag_fallback_used: Boolean(plan?.rag_fallback_used),
   };
 }

@@ -51,3 +51,33 @@ export async function retrieveRagContext(config, payload) {
     clearTimeout(timeout);
   }
 }
+
+export async function checkRagApiHealth(config, { timeoutMs = 500, fetchImpl = fetch } = {}) {
+  const apiUrl = String(config?.rag?.apiUrl || "").trim();
+  if (!apiUrl) {
+    return { ok: false, reason: "rag_api_url_missing", latencyMs: null };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(100, Number(timeoutMs) || 500));
+  const startedAt = Date.now();
+  try {
+    const response = await fetchImpl(normalizeUrl(apiUrl, "/healthz"), {
+      method: "GET",
+      signal: controller.signal
+    });
+    return {
+      ok: response.ok,
+      reason: response.ok ? "ok" : `http_${response.status}`,
+      latencyMs: Math.max(0, Date.now() - startedAt)
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err?.name === "AbortError" ? "timeout" : "request_failed",
+      latencyMs: Math.max(0, Date.now() - startedAt)
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}

@@ -21,6 +21,10 @@ import {
   isPostContactProductQuestion
 } from "./transcript-intent.js";
 import { ragAnswerMustNotCreateLead } from "./lead-validator.js";
+import {
+  filterRagChunksByProductScope,
+  resolveRagProductScope
+} from "./rag-product-scope.js";
 
 const MAX_ANSWER_CHARS = 220;
 const PHONE_IN_TEXT = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
@@ -49,9 +53,16 @@ export {
   isPostContactProductQuestion
 } from "./transcript-intent.js";
 
-export function shouldUseRagForTurn({ state, intent, memory = {}, transcript = "" } = {}) {
+export function shouldUseRagForTurn({ config = null, state, intent, memory = {}, transcript = "" } = {}) {
   const resolvedState = String(state ?? memory?.current_state ?? "").trim();
   const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory);
+
+  if (
+    config &&
+    (!config?.rag?.enabled || !config?.rag?.salesAnswererEnabled)
+  ) {
+    return { allowed: false, reason: "rag_disabled", state: resolvedState };
+  }
 
   if (V4_RAG_FORBIDDEN_STATES.has(resolvedState)) {
     return { allowed: false, reason: "forbidden_state", state: resolvedState };
@@ -97,7 +108,7 @@ export function buildV4RagQuery({
   }
 
   const summary = summarizeMemoryForPrompt(memory);
-  const productId = memory?.selected_product_id ?? memory?.product_interest ?? null;
+  const productId = resolveRagProductScope(memory);
   const state = stateMachine?.state ?? memory?.current_state ?? null;
 
   return buildRagRetrievePayload(
@@ -109,6 +120,7 @@ export function buildV4RagQuery({
       context: {
         source: "rag_sales_answerer",
         product: productId,
+        product_scope: productId,
         current_state: state,
         customer_type: summary.customer_type ?? null,
         dialogue_summary: JSON.stringify({
@@ -199,7 +211,7 @@ export function fallbackToPlaybook({ productId, transcript = "", agentConfig = n
 }
 
 function buildAnswerFromChunks(productId, ragData, agentConfig) {
-  const chunks = Array.isArray(ragData?.answer_context) ? ragData.answer_context : [];
+  const chunks = filterRagChunksByProductScope(ragData?.answer_context, productId);
   if (!chunks.length) return null;
   const snippet = normalizeText(chunks[0]?.snippet || chunks[0]?.text || "");
   if (!snippet) return null;
@@ -227,24 +239,31 @@ export async function retrieveV4RagAnswer({
   minScore = null
 } = {}) {
   const guard = ragAnswerMustNotCreateLead(true);
-  const productId = memory?.selected_product_id ?? memory?.product_interest ?? null;
+  const productId = resolveRagProductScope(memory);
   const playbookFallback = () =>
     fallbackToPlaybook({ productId, transcript, agentConfig });
+  const scopedFallback = (extra = {}) => ({
+    ...playbookFallback(),
+    rag_product_scope: productId,
+    result_count: 0,
+    ...extra
+  });
 
   const ragCheck = shouldUseRagForTurn({
+    config,
     state: stateMachine?.state ?? memory?.current_state,
     memory,
     transcript
   });
   if (!ragCheck.allowed) {
-    return { ...playbookFallback(), blocked: true, block_reason: ragCheck.reason };
+    return { ...scopedFallback(), blocked: true, block_reason: ragCheck.reason };
   }
 
   const apiUrl = String(config?.rag?.apiUrl ?? "").trim();
   const documentedUrl = resolveDocumentedRagBaseUrl(config);
   if (!apiUrl) {
     return {
-      ...playbookFallback(),
+      ...scopedFallback(),
       fallback_reason: "rag_api_url_missing",
       documented_base_url: documentedUrl
     };
@@ -255,7 +274,7 @@ export async function retrieveV4RagAnswer({
     payload = buildV4RagQuery({ config, agentConfig, transcript, memory, stateMachine });
   } catch (err) {
     return {
-      ...playbookFallback(),
+      ...scopedFallback(),
       fallback_reason: err?.message ?? "rag_query_invalid"
     };
   }
@@ -264,11 +283,19 @@ export async function retrieveV4RagAnswer({
     minScore ?? payload.min_score ?? Number(config?.rag?.minScore ?? 0.72);
   const timeoutMs = Math.max(100, Number(config?.rag?.timeoutMs ?? 700));
 
-  const ragResult = await retrieveFn(config, { ...payload, timeoutMs });
+  let ragResult;
+  try {
+    ragResult = await retrieveFn(config, { ...payload, timeoutMs });
+  } catch {
+    return {
+      ...scopedFallback(),
+      fallback_reason: "rag_request_failed"
+    };
+  }
 
   if (!ragResult?.ok) {
     return {
-      ...playbookFallback(),
+      ...scopedFallback(),
       fallback_reason: ragResult?.reason ?? "rag_unavailable",
       latency_ms: ragResult?.latencyMs ?? null,
       evidence: summarizeRagEvidence(ragResult)
@@ -277,8 +304,21 @@ export async function retrieveV4RagAnswer({
 
   if (!ragResult.hit || ragResult.hitCount === 0) {
     return {
-      ...playbookFallback(),
+      ...scopedFallback(),
       fallback_reason: "rag_miss",
+      latency_ms: ragResult.latencyMs ?? null,
+      evidence: summarizeRagEvidence(ragResult)
+    };
+  }
+
+  const scopedChunks = filterRagChunksByProductScope(
+    ragResult?.data?.answer_context,
+    productId
+  );
+  if (productId && scopedChunks.length === 0) {
+    return {
+      ...scopedFallback(),
+      fallback_reason: "rag_wrong_product_scope",
       latency_ms: ragResult.latencyMs ?? null,
       evidence: summarizeRagEvidence(ragResult)
     };
@@ -286,17 +326,18 @@ export async function retrieveV4RagAnswer({
 
   if (Number.isFinite(ragResult.topScore) && ragResult.topScore < threshold) {
     return {
-      ...playbookFallback(),
+      ...scopedFallback(),
       fallback_reason: "rag_low_score",
       latency_ms: ragResult.latencyMs ?? null,
       evidence: summarizeRagEvidence(ragResult)
     };
   }
 
-  const built = buildAnswerFromChunks(productId, ragResult.data, agentConfig);
+  const scopedData = { ...(ragResult.data ?? {}), answer_context: scopedChunks };
+  const built = buildAnswerFromChunks(productId, scopedData, agentConfig);
   if (!built) {
     return {
-      ...playbookFallback(),
+      ...scopedFallback(),
       fallback_reason: "rag_unsafe_or_empty",
       latency_ms: ragResult.latencyMs ?? null,
       evidence: summarizeRagEvidence(ragResult)
@@ -307,6 +348,8 @@ export async function retrieveV4RagAnswer({
     ...built,
     latency_ms: ragResult.latencyMs ?? null,
     evidence: summarizeRagEvidence(ragResult),
+    rag_product_scope: productId,
+    result_count: scopedChunks.length,
     payload_tenant_id: payload.tenant_id,
     payload_agent_id: payload.agent_id,
     creates_lead: guard.createsLead
