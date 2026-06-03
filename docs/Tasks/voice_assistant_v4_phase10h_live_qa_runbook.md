@@ -604,6 +604,46 @@ LIMIT 15;
 
 **Pass:** `current_product_context=smart_website`; no `fallback_clarification` / `collect_sales_context` for generic product questions unless caller starts sales/contact flow.
 
+### G.3g First product-selection response (Phase 10X)
+
+For Gate 2, start a fresh call with one of these opening variants:
+
+- `Hallo, ich interessiere mich für die Smart Website.`
+- `Hallo, ich interessiere mich für die Smart-Webseite.`
+- `Ich interessiere mich für die smarte Webseite.`
+
+The first product-selection response must introduce or answer the known product.
+It must not immediately enter sales qualification.
+
+```sql
+WITH first_product_selection AS (
+  SELECT created_at,
+         payload->>'response_type' AS response_type,
+         payload->>'plan_reason' AS plan_reason,
+         payload->>'current_product_context' AS current_product_context,
+         payload->>'matched_product' AS matched_product
+  FROM voice.call_quality_events
+  WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+    AND event_type = 'response_plan_created'
+    AND payload->>'matched_product' = 'smart_website'
+  ORDER BY created_at
+  LIMIT 1
+)
+SELECT *
+FROM first_product_selection
+WHERE response_type IN ('fallback_clarification', 'collect_sales_context')
+   OR current_product_context IS DISTINCT FROM 'smart_website'
+   OR plan_reason IS DISTINCT FROM 'product_selection_intro';
+```
+
+**Pass:** query returns `0 rows`. The corresponding first product response has
+`response_type=product_question_answer`,
+`current_product_context=smart_website`, and
+`plan_reason=product_selection_intro`.
+
+**Fail:** any first product-selection response is `fallback_clarification` or
+`collect_sales_context`. Stop before Gate 3.
+
 ### G.4 Session close + privacy-oriented payload scan
 
 ```sql

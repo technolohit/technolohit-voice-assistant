@@ -40,7 +40,7 @@ export function isGenericScopedProductQuestion(transcript = "") {
 }
 
 export function shouldEnterSalesQualification(transcript = "", resolvedIntent = null) {
-  if (resolvedIntent === "sales_customer_type" || resolvedIntent === "product_selection") {
+  if (resolvedIntent === "sales_customer_type") {
     return true;
   }
   if (resolvedIntent === "contact_email" || resolvedIntent === "contact_phone") {

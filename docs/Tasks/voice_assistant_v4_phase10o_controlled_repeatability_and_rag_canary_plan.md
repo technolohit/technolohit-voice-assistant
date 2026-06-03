@@ -5,7 +5,10 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): BLOCKED** until the Phase 10V three-gate sequence passes on `voice-bridge-v1.30.1+`.
+**Phase 10O-B (RAG-on): BLOCKED** until the three-gate sequence passes on
+`voice-bridge-v1.32.0+`. Phase 10W Gate 2 on `v1.31.0` was **PARTIAL / FAIL**
+because known Smart Website opening turns entered `collect_sales_context`
+before introducing the product. Phase 10X addresses this behavior.
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 
@@ -31,7 +34,7 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 ## Phase 10V three-gate requirement
 
 1. Gate 1: v3 baseline health and known-product pricing sanity. Do not test `Stopp` or barge-in on v3.
-2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior.
+2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior. The first known-product opening response must be neither `fallback_clarification` nor `collect_sales_context`.
 3. Gate 3: v4/RAG-on canary. Run only after Gate 2 passes.
 
 Gate 3 is invalid unless `docker exec technolohit-voice-bridge npm run
@@ -74,7 +77,7 @@ curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/healthz
 # tenant_id=technolohit agent_id=main_voice_sales in agent config
 ```
 
-Enable RAG for canary only (operator documents exact env keys used; do not commit secrets). Use `voice-bridge-v1.30.0` or newer with the Phase 10U product-scope guardrails.
+Enable RAG for canary only (operator documents exact env keys used; do not commit secrets). Use `voice-bridge-v1.32.0` or newer with the Phase 10U product-scope guardrails and Phase 10X product-introduction behavior.
 
 **Call script:**
 

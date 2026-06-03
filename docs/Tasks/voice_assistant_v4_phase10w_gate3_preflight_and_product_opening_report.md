@@ -1,7 +1,7 @@
 # Voice Assistant v4 Phase 10W - Gate 3 Preflight and Product Opening Report
 
 Date: 2026-06-03
-Status: **Implementation complete; supervised live validation required**
+Status: **Implementation complete; Gate 2 live validation PARTIAL / FAIL**
 Target release: `voice-bridge-v1.31.0`
 
 ## Incident
@@ -112,3 +112,24 @@ clarification.
 5. Run `npm run rag:canary-preflight` inside the container.
 6. Abort if it does not pass.
 7. Only then place the RAG-on call.
+
+## Supervised Gate 2 Result
+
+Phase 10W Gate 2 on `voice-bridge-v1.31.0` was classified **PARTIAL / FAIL**.
+
+The Smart Website opening variants no longer produced
+`fallback_clarification`, but at least two calls produced
+`response_type=collect_sales_context` on the first product-selection turn.
+
+This exposed a second planner defect: product recognition worked, but product
+selection was still treated as an automatic sales-qualification signal.
+
+Phase 10X corrects that behavior and expands the Gate 2 bad-opening check to
+reject both:
+
+```text
+fallback_clarification
+collect_sales_context
+```
+
+Gate 3 remains blocked until Phase 10X Gate 2 passes.

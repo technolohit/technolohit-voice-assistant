@@ -506,6 +506,22 @@ export function buildResponsePlan({
 
   if (resolvedIntent === "product_selection") {
     const product = matchProductAlias(agentConfig, transcript);
+    const productId = product?.id ?? closedDomainResolved?.matched_product ?? memory.selected_product_id;
+    if (!shouldEnterSalesQualification(transcript, resolvedIntent)) {
+      const intro = buildPlaybookShortAnswer(agentConfig, productId, "how_it_works");
+      return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
+        text: sanitizeResponseText(
+          intro || `Gerne zu ${product?.display_name ?? "diesem Produkt"}. Was möchten Sie dazu wissen?`
+        ),
+        next_state: V4_STATES.LISTENING,
+        memory_patch: productContextMemoryPatch(memory, productId, {
+          current_state: V4_STATES.LISTENING
+        }),
+        quality_event_type: "turn_started",
+        rag_allowed: false,
+        plan_reason: "product_selection_intro"
+      });
+    }
     return planBase(RESPONSE_TYPES.COLLECT_SALES_CONTEXT, {
       text: sanitizeResponseText(
         product
@@ -514,11 +530,13 @@ export function buildResponsePlan({
       ),
       next_state: V4_STATES.COLLECTING_SALES_CONTEXT,
       memory_patch: {
-        selected_product_id: product?.id ?? memory.selected_product_id,
-        product_interest: product?.id ?? memory.product_interest,
+        selected_product_id: productId,
+        product_interest: productId,
+        current_product_context: productId,
         current_state: V4_STATES.COLLECTING_SALES_CONTEXT
       },
-      quality_event_type: "turn_started"
+      quality_event_type: "turn_started",
+      plan_reason: "explicit_sales_qualification"
     });
   }
 

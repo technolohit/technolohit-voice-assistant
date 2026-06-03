@@ -474,7 +474,7 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
     intent: resolvedPlan?.intent ?? null,
     next_state: toState,
     ...planContextQualityPayload(
-      orchestrator.memory,
+      memory,
       orchestrator.lastClosedDomain,
       resolvedPlan,
       { activeInterruptSequenceId: orchestrator.activeInterruptSequenceId },
