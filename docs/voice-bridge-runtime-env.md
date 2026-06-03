@@ -177,7 +177,8 @@ files without exposing secrets.
 |-------|--------|---------|
 | Ownership | Raw `docker-compose.yml` **and** `docker-compose.prod.yml` | Fail if any forbidden runtime key appears in `voice-bridge.environment:` |
 | Ownership | `asterisk/.env` key names only | Fail if forbidden runtime keys are duplicated in Compose project env |
-| Effective | Sanitized Gate 3 snapshots | Authoritative file, rendered Compose, and container must match |
+| Effective (Stage A) | Sanitized runtime snapshots from authoritative file | Rendered Compose and container must match authoritative file while v3/RAG-off |
+| Effective (Gate 3) | Sanitized Gate 3 snapshots | Authoritative file, rendered Compose, and container must match required v4/RAG-on values |
 
 Approved interpolation keys in `asterisk/.env` only:
 
@@ -186,14 +187,47 @@ Approved interpolation keys in `asterisk/.env` only:
 - `BUILD_VERSION`
 - `IMAGE_TAG`
 
-Run from the server (same logic as `scripts/gate3-compose-runtime-preflight.sh`):
+### Stage A baseline (safe v3/RAG-off)
+
+Run **before** Gate 1/2/3 while production stays on safe v3/RAG-off:
+
+```bash
+cd /opt/technolohit-voice/asterisk
+bash /opt/technolohit-voice/bin/stage-a-compose-runtime-preflight.sh
+```
+
+Install wrappers once from the release branch if needed:
+
+```bash
+install -m 755 /path/from/release/scripts/compose-runtime-preflight-host.sh \
+  /opt/technolohit-voice/bin/compose-runtime-preflight-host.sh
+install -m 755 /path/from/release/scripts/stage-a-compose-runtime-preflight.sh \
+  /opt/technolohit-voice/bin/stage-a-compose-runtime-preflight.sh
+```
+
+Full server migration steps: [Phase 10Y Stage A sysadmin runbook](./Tasks/voice_assistant_v4_phase10y_stage_a_sysadmin_runbook.md).
+
+**Abort Stage A** unless output includes:
+
+```text
+compose_runtime_preflight=pass
+mode=baseline
+ownership_pass=true
+compose_source_forbidden_by_file=none
+compose_project_env_forbidden_keys=none
+baseline_effective_pass=true
+```
+
+### Gate 3 preflight (v4/RAG-on canary only)
+
+Run from the server only after Gate 2 passes and you intentionally enable v4/RAG-on:
 
 ```bash
 cd /opt/technolohit-voice/asterisk
 bash /opt/technolohit-voice/bin/gate3-compose-runtime-preflight.sh
 ```
 
-Install the wrapper once from the release branch if needed:
+Install the Gate 3 wrapper once from the release branch if needed:
 
 ```bash
 install -m 755 /path/from/release/scripts/gate3-compose-runtime-preflight.sh \

@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 /**
- * Gate 3 compose/runtime preflight.
- * Expects sanitized snapshots for effective layers and raw Compose sources for ownership checks.
+ * Compose/runtime preflight — baseline (Stage A, safe v3/RAG-off) or gate3 (RAG-on canary).
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import {
   assertOutputIsPrivacySafe,
+  extractAuthoritativeRuntimeEnv,
   extractEnvKeyNames,
   extractEnvKeyNamesFromList,
   extractSanitizedRuntimeSnapshot,
-  extractVoiceBridgeEnvironmentFromComposeConfig,
   formatComposeRuntimePreflightLines,
   parseEnvAssignments,
   PREFLIGHT_DOCKER_USER,
-  runComposeRuntimePreflight
+  runComposeRuntimePreflight,
+  VOICE_BRIDGE_RUNTIME_ENV_KEYS
 } from "../src/v4/compose-runtime-preflight.js";
 
 function readRepeatedArgValues(flag, args) {
@@ -28,15 +28,14 @@ function readRepeatedArgValues(flag, args) {
   return values;
 }
 
-function readInput(flag, args) {
-  const values = readRepeatedArgValues(flag, args);
-  if (values.length === 0) return null;
-  if (values.length === 1) return fs.readFileSync(values[0], "utf8");
-  return values.map((filePath) => fs.readFileSync(filePath, "utf8")).join("\n");
+function resolveMode(args) {
+  if (args.includes("--gate3")) return "gate3";
+  if (args.includes("--baseline")) return "baseline";
+  return "baseline";
 }
 
 const args = process.argv.slice(2);
-const mode = args.includes("--gate3") ? "gate3" : "gate3";
+const mode = resolveMode(args);
 
 const authoritativePath =
   readRepeatedArgValues("--authoritative-file", args)[0] ??
@@ -60,13 +59,15 @@ if (
   !composeProjectEnvKeysPath
 ) {
   console.error(
-    "Usage: node scripts/compose-runtime-preflight.js --gate3 \\\n" +
+    "Usage: node scripts/compose-runtime-preflight.js --baseline|--gate3 \\\n" +
       "  --authoritative-file /tmp/authoritative-snapshot.env \\\n" +
       "  --compose-config-file /tmp/compose-snapshot.env \\\n" +
       "  --container-env-file /tmp/container-snapshot.env \\\n" +
       "  --raw-compose-file /raw/docker-compose.yml \\\n" +
       "  --raw-compose-file /raw/docker-compose.prod.yml \\\n" +
       "  --compose-project-env-keys-file /tmp/compose-project-env-keys.txt\n\n" +
+      "  --baseline  Stage A: ownership + effective match (safe v3/RAG-off)\n" +
+      "  --gate3     Gate 3 only: requires v4/RAG-on values\n\n" +
       `Preflight docker user: ${PREFLIGHT_DOCKER_USER}`
   );
   process.exit(2);
@@ -82,11 +83,16 @@ const composeRawSources = rawComposePaths.map((filePath) => ({
   content: fs.readFileSync(filePath, "utf8")
 }));
 
+const snapshotKeys = mode === "gate3" ? undefined : VOICE_BRIDGE_RUNTIME_ENV_KEYS;
+
 const result = runComposeRuntimePreflight({
   mode,
-  authoritativeEnv: extractSanitizedRuntimeSnapshot(authoritativeEnv),
-  composeEnvironment: extractSanitizedRuntimeSnapshot(composeEnvironment),
-  containerEnv: extractSanitizedRuntimeSnapshot(containerEnv),
+  authoritativeEnv:
+    mode === "gate3"
+      ? extractSanitizedRuntimeSnapshot(authoritativeEnv)
+      : extractAuthoritativeRuntimeEnv(authoritativeEnv),
+  composeEnvironment: extractSanitizedRuntimeSnapshot(composeEnvironment, snapshotKeys),
+  containerEnv: extractSanitizedRuntimeSnapshot(containerEnv, snapshotKeys),
   composeRawSources,
   composeProjectEnvKeys: extractEnvKeyNamesFromList(composeProjectEnvKeysContent).length
     ? extractEnvKeyNamesFromList(composeProjectEnvKeysContent)

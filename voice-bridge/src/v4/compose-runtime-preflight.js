@@ -336,13 +336,67 @@ function compareLayer(layerName, env, expected, failures, mismatches) {
   }
 }
 
+function compareEffectiveLayersToAuthoritative(
+  authoritativeEnv,
+  composeEnvironment,
+  containerEnv,
+  failures,
+  mismatches
+) {
+  const keys = [
+    ...new Set([
+      ...Object.keys(authoritativeEnv),
+      ...Object.keys(composeEnvironment),
+      ...Object.keys(containerEnv)
+    ])
+  ].filter((key) => VOICE_BRIDGE_RUNTIME_ENV_KEYS.includes(key));
+
+  for (const key of keys) {
+    const expected = normalizeEnvValue(authoritativeEnv[key]);
+    const composeActual = normalizeEnvValue(composeEnvironment[key]);
+    const containerActual = normalizeEnvValue(containerEnv[key]);
+
+    if (composeActual !== expected) {
+      failures.push(`compose_config_${key}_mismatch_authoritative`);
+      mismatches.push({
+        layer: "compose_config",
+        key,
+        expected: expected || "<unset>",
+        actual: composeActual || "<unset>"
+      });
+    }
+    if (containerActual !== expected) {
+      failures.push(`container_runtime_${key}_mismatch_authoritative`);
+      mismatches.push({
+        layer: "container_runtime",
+        key,
+        expected: expected || "<unset>",
+        actual: containerActual || "<unset>"
+      });
+    }
+  }
+}
+
+export const BASELINE_SAFE_DISPLAY_KEYS = [
+  "VOICE_RUNTIME_VERSION",
+  "VOICE_RAG_ENABLED",
+  "VOICE_RAG_SALES_ANSWERER_ENABLED",
+  "VOICE_V4_LIVE_AUDIOSOCKET_ENABLED",
+  "VOICE_SEMANTIC_INTENT_ENABLED",
+  "VOICE_CONVERSATION_REPAIR_ENABLED"
+];
+
+export function extractAuthoritativeRuntimeEnv(env) {
+  return extractSanitizedRuntimeSnapshot(env, VOICE_BRIDGE_RUNTIME_ENV_KEYS);
+}
+
 export function runComposeRuntimePreflight(options = {}) {
   const authoritativeEnv = options.authoritativeEnv ?? {};
   const composeEnvironment = options.composeEnvironment ?? {};
   const containerEnv = options.containerEnv ?? {};
   const composeRawSources = options.composeRawSources ?? [];
   const composeProjectEnvKeys = options.composeProjectEnvKeys ?? [];
-  const mode = options.mode ?? "gate3";
+  const mode = options.mode ?? "baseline";
   const failures = [];
   const mismatches = [];
 
@@ -360,6 +414,14 @@ export function runComposeRuntimePreflight(options = {}) {
     compareLayer("authoritative_file", authoritativeEnv, GATE3_REQUIRED_RUNTIME, failures, mismatches);
     compareLayer("compose_config", composeEnvironment, GATE3_REQUIRED_RUNTIME, failures, mismatches);
     compareLayer("container_runtime", containerEnv, GATE3_REQUIRED_RUNTIME, failures, mismatches);
+  } else if (mode === "baseline") {
+    compareEffectiveLayersToAuthoritative(
+      authoritativeEnv,
+      composeEnvironment,
+      containerEnv,
+      failures,
+      mismatches
+    );
   }
 
   const ownershipOk =
@@ -381,6 +443,10 @@ export function runComposeRuntimePreflight(options = {}) {
         composeProjectEnvKeys
       )
     },
+    baselineEffectivePass:
+      mode === "baseline"
+        ? !failures.some((failure) => failure.includes("_mismatch_authoritative"))
+        : null,
     layers: {
       authoritative_file: pickRuntimeKeys(authoritativeEnv),
       compose_config: pickRuntimeKeys(composeEnvironment),
@@ -400,20 +466,30 @@ function pickRuntimeKeys(env) {
 }
 
 export function formatComposeRuntimePreflightLines(result) {
+  const displayKeys =
+    result?.mode === "gate3" ? Object.keys(GATE3_REQUIRED_RUNTIME) : BASELINE_SAFE_DISPLAY_KEYS;
+
   const lines = [
     `compose_runtime_preflight=${result?.ok ? "pass" : "fail"}`,
-    `mode=${result?.mode ?? "gate3"}`,
+    `mode=${result?.mode ?? "baseline"}`,
     `ownership_pass=${result?.ownership?.ok ? "true" : "false"}`,
     `compose_source_forbidden_by_file=${formatComposeSourceForbiddenFindings(result?.ownership?.composeSourceForbiddenFindings)}`,
     `compose_project_env_forbidden_keys=${result?.ownership?.composeProjectEnvForbiddenKeys?.join(",") || "none"}`,
-    `compose_project_env_approved_keys=${result?.ownership?.composeProjectEnvApprovedKeys?.join(",") || "none"}`,
+    `compose_project_env_approved_keys=${result?.ownership?.composeProjectEnvApprovedKeys?.join(",") || "none"}`
+  ];
+
+  if (result?.mode === "baseline") {
+    lines.push(`baseline_effective_pass=${result?.baselineEffectivePass ? "true" : "false"}`);
+  }
+
+  lines.push(
     `failure_count=${result?.failures?.length ?? 0}`,
     `failures=${result?.failures?.join(",") || "none"}`
-  ];
+  );
 
   for (const layerName of ["authoritative_file", "compose_config", "container_runtime"]) {
     const layer = result?.layers?.[layerName] ?? {};
-    for (const key of Object.keys(GATE3_REQUIRED_RUNTIME)) {
+    for (const key of displayKeys) {
       const value = normalizeEnvValue(layer[key]);
       lines.push(`${layerName}.${key}=${value || "<unset>"}`);
     }

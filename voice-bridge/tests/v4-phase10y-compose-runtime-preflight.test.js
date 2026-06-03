@@ -47,6 +47,33 @@ function gate3Env(overrides = {}) {
   };
 }
 
+function baselineEnv(overrides = {}) {
+  return {
+    VOICE_RUNTIME_VERSION: "v3",
+    VOICE_RAG_ENABLED: "false",
+    VOICE_RAG_SALES_ANSWERER_ENABLED: "false",
+    VOICE_V4_LIVE_AUDIOSOCKET_ENABLED: "false",
+    VOICE_V4_REALTIME_ENABLED: "false",
+    VOICE_V4_CANARY_ENABLED: "false",
+    VOICE_SEMANTIC_INTENT_ENABLED: "true",
+    VOICE_CONVERSATION_REPAIR_ENABLED: "true",
+    ...overrides
+  };
+}
+
+function runBaselinePreflight(overrides = {}) {
+  const env = baselineEnv();
+  return runComposeRuntimePreflight({
+    mode: "baseline",
+    authoritativeEnv: env,
+    composeEnvironment: env,
+    containerEnv: env,
+    composeRawSources: CLEAN_RAW_SOURCES,
+    composeProjectEnvKeys: ["VOICE_BRIDGE_IMAGE"],
+    ...overrides
+  });
+}
+
 function runGate3Preflight(overrides = {}) {
   return runComposeRuntimePreflight({
     mode: "gate3",
@@ -68,6 +95,57 @@ test("10Y: forbidden runtime key list includes interrupt and spike keys", () => 
   ]) {
     assert.ok(VOICE_BRIDGE_RUNTIME_ENV_KEYS.includes(key), key);
   }
+});
+
+test("10Y: baseline mode passes for safe v3/RAG-off when ownership is clean", () => {
+  const result = runBaselinePreflight();
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, "baseline");
+  assert.equal(result.baselineEffectivePass, true);
+  const output = formatComposeRuntimePreflightLines(result);
+  assert.match(output, /mode=baseline/);
+  assert.match(output, /baseline_effective_pass=true/);
+  assert.match(output, /authoritative_file\.VOICE_RUNTIME_VERSION=v3/);
+  assert.match(output, /authoritative_file\.VOICE_RAG_ENABLED=false/);
+});
+
+test("10Y: gate3 mode fails while production remains v3/RAG-off", () => {
+  const env = baselineEnv();
+  const result = runComposeRuntimePreflight({
+    mode: "gate3",
+    authoritativeEnv: env,
+    composeEnvironment: env,
+    containerEnv: env,
+    composeRawSources: CLEAN_RAW_SOURCES,
+    composeProjectEnvKeys: ["VOICE_BRIDGE_IMAGE"]
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.failures.join(","), /authoritative_file_VOICE_RUNTIME_VERSION_expected_v4/);
+});
+
+test("10Y: baseline fails when container env disagrees with authoritative v3 file", () => {
+  const result = runBaselinePreflight({
+    containerEnv: baselineEnv({ VOICE_RAG_ENABLED: "true" })
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.baselineEffectivePass, false);
+  assert.match(result.failures.join(","), /container_runtime_VOICE_RAG_ENABLED_mismatch_authoritative/);
+});
+
+test("10Y: host Stage A wrapper uses baseline mode", () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, "scripts/stage-a-compose-runtime-preflight.sh"),
+    "utf8"
+  );
+  assert.match(script, /PREFLIGHT_MODE=baseline/);
+});
+
+test("10Y: host Gate 3 wrapper uses gate3 mode", () => {
+  const script = fs.readFileSync(
+    path.join(repoRoot, "scripts/gate3-compose-runtime-preflight.sh"),
+    "utf8"
+  );
+  assert.match(script, /PREFLIGHT_MODE=gate3/);
 });
 
 test("10Y: tracked compose prod override does not declare runtime flags in environment:", () => {
@@ -170,7 +248,7 @@ test("10Y: passes only when every raw Compose file and effective layers are clea
 
 test("10Y: host wrapper mounts and passes both raw Compose files", () => {
   const script = fs.readFileSync(
-    path.join(repoRoot, "scripts/gate3-compose-runtime-preflight.sh"),
+    path.join(repoRoot, "scripts/compose-runtime-preflight-host.sh"),
     "utf8"
   );
   assert.match(script, /RAW_COMPOSE_BASE/);
@@ -179,6 +257,9 @@ test("10Y: host wrapper mounts and passes both raw Compose files", () => {
   assert.match(script, /--raw-compose-file \/raw\/docker-compose.yml/);
   assert.match(script, /--raw-compose-file \/raw\/docker-compose.prod.yml/);
   assert.match(script, /docker run --rm --user 0:0/);
+  assert.match(script, /PREFLIGHT_MODE=baseline/);
+  assert.match(script, /PREFLIGHT_FLAG="--baseline"/);
+  assert.match(script, /PREFLIGHT_FLAG="--gate3"/);
   assert.equal(PREFLIGHT_DOCKER_USER, "0:0");
 });
 

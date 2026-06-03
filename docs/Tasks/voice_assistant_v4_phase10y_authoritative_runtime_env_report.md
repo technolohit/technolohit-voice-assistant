@@ -91,21 +91,44 @@ Asterisk/SIP keys such as `EASYBELL_*` are not rejected.
 |------|-------|
 | Ownership logic | `voice-bridge/src/v4/compose-runtime-preflight.js` |
 | CLI | `voice-bridge/scripts/compose-runtime-preflight.js` |
-| Host wrapper | `scripts/gate3-compose-runtime-preflight.sh` |
+| Host wrapper (Stage A) | `scripts/stage-a-compose-runtime-preflight.sh` |
+| Host wrapper (Gate 3) | `scripts/gate3-compose-runtime-preflight.sh` |
+| Shared host logic | `scripts/compose-runtime-preflight-host.sh` |
 | Deploy verifier | `.github/workflows/deploy.yml` |
 | Tests | `voice-bridge/tests/v4-phase10y-compose-runtime-preflight.test.js` |
 | Docs | runtime env, release/CICD, 10H runbook, blueprint, this report |
 
 ## Self-Contained Sysadmin Commands
 
+**Stage A (baseline, v3/RAG-off):**
+
+```bash
+cd /opt/technolohit-voice/asterisk
+bash /opt/technolohit-voice/bin/stage-a-compose-runtime-preflight.sh
+```
+
+See [Stage A sysadmin runbook](./voice_assistant_v4_phase10y_stage_a_sysadmin_runbook.md) for ownership cleanup on the server.
+
+**Gate 3 (v4/RAG-on canary only):**
+
 ```bash
 cd /opt/technolohit-voice/asterisk
 bash /opt/technolohit-voice/bin/gate3-compose-runtime-preflight.sh
-# or section D.1 inline heredoc in the 10H runbook
 docker exec technolohit-voice-bridge npm run rag:canary-preflight
 ```
 
-Abort unless output includes:
+Abort Stage A unless output includes:
+
+```text
+compose_runtime_preflight=pass
+mode=baseline
+ownership_pass=true
+compose_source_forbidden_by_file=none
+compose_project_env_forbidden_keys=none
+baseline_effective_pass=true
+```
+
+Abort Gate 3 unless output includes:
 
 ```text
 compose_runtime_preflight=pass
