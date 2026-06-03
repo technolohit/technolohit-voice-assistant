@@ -29,6 +29,25 @@ import { observeLiveCanaryBargeIn } from "./live-barge-in-endpoint.js";
 import { shouldRunInterruptFollowupTimeout } from "./interrupt-followup-wait.js";
 import { runInterruptFollowupTimeoutClarification } from "./live-interrupt-followup-endpoint.js";
 import { flushLiveCanaryQualityEvents } from "./live-quality-flush-endpoint.js";
+import { closeCall } from "./dialogue-orchestrator.js";
+
+export function attachLiveV4PostCallHandoff(ctx, runtime) {
+  const orchestrator = runtime?.orchestrator;
+  if (!orchestrator) {
+    return null;
+  }
+
+  let closed = null;
+  if (orchestrator.status === "closed" && orchestrator.postCallHandoff?.summaryMetadata) {
+    closed = { postCallHandoff: orchestrator.postCallHandoff };
+  } else {
+    closed = closeCall(orchestrator);
+  }
+
+  ctx.v4PostCallMetadata = closed?.postCallHandoff?.summaryMetadata ?? null;
+  ctx.v4PostCallHandoff = closed?.postCallHandoff ?? null;
+  return closed;
+}
 
 /**
  * Parse allowlist entries from config (comma/semicolon/whitespace separated).
@@ -373,6 +392,7 @@ export async function finishLiveCanaryCall(
   }
 
   const runtime = ctx.v4LiveRuntime;
+  attachLiveV4PostCallHandoff(ctx, runtime);
   const frameCount = runtime?.inboundFrameCount ?? 0;
   const durationMs = runtime?.startedAt
     ? Math.max(0, Date.now() - runtime.startedAt)

@@ -40,7 +40,7 @@ Last updated: 2026-06-03
 | **v4 live canary** | **Phase 10S / v1.29.0 passed** for interruption handling and post-interruption product-context persistence |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release **`voice-bridge-v1.34.0`**, run [Stage A sysadmin runbook](./voice_assistant_v4_phase10y_stage_a_sysadmin_runbook.md) (ownership migration + baseline preflight). Gate 1/2/3 blocked until Stage A passes. |
+| **Next step** | Deploy **`voice-bridge-v1.34.1`**, re-run Gate 2 v4/RAG-off canary and confirm `post_call_summary_created` — [10Z report](./voice_assistant_v4_phase10z_gate2_post_call_summary_fix_report.md). Gate 3 blocked until Gate 2 post-call summary passes. |
 
 Completed foundation work (do not re-implement):
 

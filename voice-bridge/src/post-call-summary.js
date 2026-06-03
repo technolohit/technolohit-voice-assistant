@@ -142,6 +142,89 @@ function buildSummaryText(fields) {
   ].join("\n");
 }
 
+function callerNeedFromV4Metadata(v4Metadata) {
+  const memory = v4Metadata?.v4_memory_snapshot;
+  if (memory && typeof memory === "object") {
+    const fromMemory = normalizeText(
+      memory.use_case_summary || memory.current_problem || memory.last_user_utterance
+    );
+    if (fromMemory) return fromMemory.slice(0, 220);
+  }
+  return normalizeText(v4Metadata?.caller_need).slice(0, 220);
+}
+
+function productInterestFromV4Metadata(v4Metadata) {
+  const value = normalizeText(v4Metadata?.product_interest);
+  return value || "none";
+}
+
+export async function generatePostCallSummaryFromV4Metadata(
+  config,
+  ctx,
+  sessionRow,
+  v4Metadata,
+  options = {},
+  fullCallRow = null
+) {
+  const callSessionId = String(ctx?.callSessionId ?? sessionRow?.id ?? "").trim();
+  if (!callSessionId || !v4Metadata?.v4_runtime) return null;
+
+  const productInterest = productInterestFromV4Metadata(v4Metadata);
+  const callerNeed = callerNeedFromV4Metadata(v4Metadata);
+  const contactPreference = normalizeText(v4Metadata?.contact_preference) || "unknown";
+  const permission = normalizeText(v4Metadata?.permission) || "unknown";
+  const nextAction = normalizeText(v4Metadata?.next_action) || "manual_review";
+  const confidence = normalizeText(v4Metadata?.confidence) || "medium";
+  const qualityNote =
+    normalizeText(v4Metadata?.transcript_quality_notes) || "v4_canary_memory";
+
+  const summaryFields = {
+    productInterest,
+    callerNeed,
+    contactPreference,
+    permission,
+    nextAction
+  };
+  const summaryText = buildSummaryText(summaryFields);
+
+  const metadata = mergeV4SummaryMetadataPatch(
+    {
+      product_interest: productInterest,
+      customer_type: v4Metadata?.customer_type ?? null,
+      caller_need: callerNeed,
+      contact_preference: contactPreference,
+      permission,
+      phone_present: Boolean(v4Metadata?.phone_present),
+      email_directed: Boolean(v4Metadata?.email_directed),
+      next_action: nextAction,
+      confidence,
+      transcript_quality_notes: qualityNote,
+      last_detected_intent: "unknown",
+      has_full_call_transcript: Boolean(options.fullTranscript || fullCallRow?.text),
+      full_call_transcript_length: normalizeText(options.fullTranscript || fullCallRow?.text).length,
+      lead_policy_strict_callback: config?.leadPolicy?.strictCallback !== false,
+      summary_source: "v4_post_call_handoff"
+    },
+    v4Metadata
+  );
+
+  const summaryId = await db.upsertCallSummary(config, {
+    callSessionId,
+    summaryType: "auto",
+    model: "deterministic-post-call-v1",
+    summaryText,
+    metadata
+  });
+
+  return summaryId
+    ? {
+        summaryId,
+        summaryText,
+        metadata
+      }
+    : null;
+}
+
 export async function generatePostCallSummary(config, ctx, options = {}) {
   if (!config?.postCallSummary?.enabled) return null;
   if (!db.isDbConfigured(config)) return null;
@@ -153,7 +236,22 @@ export async function generatePostCallSummary(config, ctx, options = {}) {
     db.listTurnTranscripts(config, callSessionId),
     db.getLatestFullCallTranscript(config, callSessionId)
   ]);
-  if (!sessionRow || !turnRows.length) return null;
+  if (!sessionRow) return null;
+
+  if (!turnRows.length) {
+    const v4Metadata = ctx?.v4PostCallMetadata;
+    if (v4Metadata?.v4_runtime) {
+      return generatePostCallSummaryFromV4Metadata(
+        config,
+        ctx,
+        sessionRow,
+        v4Metadata,
+        options,
+        fullCallRow
+      );
+    }
+    return null;
+  }
 
   const assistantMeta = latestAssistantMetadata(turnRows);
   const productInterest = findProductInterest(turnRows, assistantMeta);
