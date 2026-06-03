@@ -2,7 +2,7 @@
 
 Date: 2026-06-03  
 Target release: `voice-bridge-v1.30.0`  
-Status: **Implementation complete; supervised RAG-on canary still required**
+Status: **Implementation complete; RAG-on canary blocked until Phase 10V Gate 1 and Gate 2 pass**
 
 ## Objective
 
@@ -130,3 +130,15 @@ The canary must:
 6. roll back to v3 and RAG-off after evidence collection.
 
 Passing the canary does not enable production v4 globally.
+
+## Phase 10V Gate Correction
+
+The first v1.30.0 attempt stopped on a v3 baseline call before RAG-on. The call exposed a real v3 fallback defect, but v3 must not be used to validate v4 barge-in or interactive behavior.
+
+The corrected sequence is:
+
+1. v3 baseline health and known-product pricing sanity;
+2. v4/RAG-off control call for interactivity, interruption, and product context;
+3. v4/RAG-on canary for product-scoped retrieval.
+
+See [Phase 10V report](./voice_assistant_v4_phase10v_v3_fallback_and_canary_gate_report.md).

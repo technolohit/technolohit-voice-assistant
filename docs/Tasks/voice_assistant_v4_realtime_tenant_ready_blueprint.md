@@ -35,12 +35,12 @@ Last updated: 2026-06-03
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10U — production-safe RAG-on live canary readiness** |
+| **Current completed phase** | **Phase 10V — v3 fallback pricing repair and corrected canary gates** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
 | **v4 live canary** | **Phase 10S / v1.29.0 passed** for interruption handling and post-interruption product-context persistence |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release `voice-bridge-v1.30.0`, complete controlled repeatability, then run supervised **10O-B RAG-on** canary — [10U report](./voice_assistant_v4_phase10u_rag_on_live_canary_readiness_report.md) |
+| **Next step** | Release `voice-bridge-v1.30.1`, then execute Gate 1 v3 baseline, Gate 2 v4/RAG-off control, and only then Gate 3 RAG-on — [10V report](./voice_assistant_v4_phase10v_v3_fallback_and_canary_gate_report.md) |
 
 Completed foundation work (do not re-implement):
 
@@ -1099,7 +1099,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 
 ### Phase 10: Live AudioSocket → v4 Canary Wiring
 
-**Status: Phases 10A–10U implemented; Phase 10S / v1.29.0 live canary passed; Phase 10U prepares product-scoped RAG-on validation; production v4 NOT globally enabled.**
+**Status: Phases 10A–10V implemented; Phase 10V repairs v3 fallback pricing and separates v3 health, v4/RAG-off control, and v4/RAG-on validation; production v4 NOT globally enabled.**
 
 - [x] Successful: Current blocker documented (live PSTN v3 vs v4 harness).
 - [x] Successful: Target flag-gated canary architecture defined.
@@ -1130,6 +1130,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10R repeated/nested interruption stability — [report](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md). **v1.28.0 canary PARTIAL/STRONG**.
 - [x] Successful: Phase 10S post-interruption product context persistence — scoped generic Q&A, `interrupt_sequence_id` — [report](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 - [x] Successful: Phase 10U product-scoped RAG retrieval, fail-closed fallback, safe telemetry, startup health evidence — [report](./voice_assistant_v4_phase10u_rag_on_live_canary_readiness_report.md).
+- [x] Successful: Phase 10V v3 known-product pricing repair, repeated-response prevention, all-live-call telemetry, corrected three-gate runbook — [report](./voice_assistant_v4_phase10v_v3_fallback_and_canary_gate_report.md).
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.29.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.30.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).

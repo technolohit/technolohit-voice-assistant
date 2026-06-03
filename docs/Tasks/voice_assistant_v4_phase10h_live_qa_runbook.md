@@ -144,9 +144,17 @@ docker exec technolohit-voice-bridge sh -lc 'wget -qO- http://127.0.0.1:8080/hea
 **Pass:** HTTP 200 / health body.  
 Phase 10H scenarios keep `VOICE_RAG_ENABLED=false` initially; this gate confirms infra only. Phase 10U RAG-on validation uses the same host-local URL and must not use Docker DNS from the host-network voice-bridge container.
 
-### A.6 v3 baseline call (before any v4 canary flags)
+### A.6 Gate 1 - v3 baseline health and pricing sanity (before any v4 canary flags)
 
 With **production-safe baseline** env (section C), place **one** normal test call on the approved QA route.
+
+Use this short script:
+
+1. `Hallo, ich interessiere mich fuer die Smart Website.`
+2. `Was kostet das?`
+3. End the call normally.
+
+**Important:** v3 does not support barge-in by design. Do not say `Stopp` to validate interruption behavior in the v3 baseline. Gate 1 is a health, routing, persistence, pricing-sanity, and rollback check. It is not a v4 interactivity test.
 
 ```bash
 docker logs --since=5m technolohit-voice-bridge 2>&1 \
@@ -160,7 +168,10 @@ docker logs --since=5m technolohit-voice-bridge 2>&1 \
 
 - `call_handler selected=v3` (or handler not `v4_canary`)
 - Greeting/assistant behavior normal for v3
+- Smart Website pricing is answered briefly before customer-type qualification
 - No `[v4-live]` lines on this call
+- `live_runtime_selected`, `live_response_created`, and `live_runtime_summary` quality events are present when migration 009 is available
+- No new stale active session
 
 Record `call_session_id` if needed (UUID only — **not** caller phone).
 
@@ -248,7 +259,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-brid
 
 ---
 
-## D. Supervised canary env matrix (QA window only)
+## D. Gate 2 - supervised v4 / RAG-off control env (QA window only)
 
 Edit `/opt/technolohit-voice/voice-bridge/.env` — **only** during the window:
 
@@ -269,7 +280,9 @@ VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
 
 Keep existing `OPENAI_API_KEY`, `VOICE_AGENT_CONFIG_PATH`, `VOICE_RAG_API_URL=http://127.0.0.1:8080`, VAD/barge-in thresholds unless ops standard says otherwise.
 
-### D.1 Phase 10U supervised RAG-on override
+Gate 2 must pass before enabling RAG. It validates v4 interactivity, STT/TTS, barge-in, interruption recovery, product-context persistence, and quality flush.
+
+### D.1 Gate 3 - Phase 10U supervised RAG-on override
 
 Use only after the RAG-off canary is accepted and only during the supervised window:
 
@@ -279,7 +292,7 @@ VOICE_RAG_ENABLED=true
 VOICE_RAG_SALES_ANSWERER_ENABLED=true
 ```
 
-All other v4 live canary gates from section D remain required. Restore both RAG flags to `false` during rollback.
+All other v4 live canary gates from section D remain required. Restore both RAG flags to `false` during rollback. Do not run Gate 3 if Gate 2 fails.
 
 Restart:
 
@@ -307,7 +320,7 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 
 | ID | Scenario | Pass criteria (logs / behavior) |
 |----|----------|----------------------------------|
-| E1 | v3 baseline before canary | Section A.6 — handler v3, no `[v4-live]` |
+| E1 | Gate 1 v3 baseline | Section A.6 — handler v3, known-product pricing answered, no `[v4-live]`; no barge-in expectation |
 | E2 | v4 route selected | `[voice-bridge] call_handler selected=v4_canary` |
 | E3 | Greeting heard | Caller hears normal greeting audio (v4 uses `skipAssistant` greeting path) |
 | E4 | VAD speech start + endpoint | `[v4-live] vad_speech_started` and `vad_endpoint_detected` |
@@ -332,6 +345,16 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E15 | Phase 10U product-scoped RAG | In Smart Website context, `Was kostet das?`, `Wie funktioniert das?`, `Was kann das?`, and `Erklar mir das kurz.` remain scoped to `smart_website` |
 | E16 | Phase 10U interrupted RAG question | During playback say `Stopp. Wie funktioniert das?`; response uses the active product context, not the interrupted assistant topic |
 | E17 | Phase 10U RAG failure fallback | If a controlled failure is approved, caller hears a short product answer; no silence, crash, repeated fallback, or unexpected `collect_sales_context` |
+
+### E.18 Three-gate execution order
+
+| Gate | Required result |
+|------|-----------------|
+| Gate 1 | v3 health/pricing/persistence passes; no barge-in test |
+| Gate 2 | v4/RAG-off control call passes E2-E14, including interruption and product context |
+| Gate 3 | v4/RAG-on canary passes E15-E17 |
+
+Stop before Gate 3 if Gate 2 is partial, fail, or unsafe.
 
 ### E.9 / E.10 utterance hints (German, no phone numbers)
 
@@ -718,6 +741,27 @@ ORDER BY created_at;
 ```
 
 **Pass:** `current_product_context` and `rag_product_scope` agree; `rag_used` reflects actual retrieval use; fallback plans set `rag_fallback_used=true`.
+
+### G.10 Minimal all-live-call runtime evidence (Phase 10V)
+
+```sql
+SELECT
+  created_at,
+  event_type,
+  payload->>'runtime_selected' AS runtime_selected,
+  payload->>'handler_selected' AS handler_selected,
+  payload->>'response_type' AS response_type,
+  payload->>'response_template' AS response_template,
+  payload->>'current_product_context' AS current_product_context,
+  payload->>'close_reason' AS close_reason,
+  payload->'counters' AS counters
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN ('live_runtime_selected', 'live_response_created', 'live_runtime_summary')
+ORDER BY created_at;
+```
+
+**Gate 1 pass:** v3 runtime/handler rows exist, pricing response type/template is visible, summary close reason exists, and no raw transcript, assistant text, phone, email, RAG query, or lead details appear in payloads.
 
 See also [voice_assistant_v4_phase8_quality_analytics_queries.sql](./voice_assistant_v4_phase8_quality_analytics_queries.sql) (live summary query at end).
 

@@ -60,6 +60,11 @@ import {
   productSelectionIntentForId,
   recordInterruptionContext
 } from "./interruption-recovery.js";
+import {
+  detectKnownProductQuestion,
+  preventRepeatedV3Response,
+  routeKnownProductQuestion
+} from "./v3/product-question-routing.js";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -1574,6 +1579,21 @@ async function maybeCreateProductResponse(config, ctx, turnIndex, callerText, an
   if (productState.awaitingInterestConfirmation && productState.selectedProduct) {
     const policy = productPolicyById(productState.selectedProduct);
     const interestQuestion = policy?.mandatoryInterestQuestion || "Möchten Sie so etwas für Ihr Unternehmen prüfen lassen?";
+
+    const directProductQuestion = routeKnownProductQuestion({
+      callerText,
+      intent,
+      productId: productState.selectedProduct,
+      normalizeResponse: (text) => normalizeAssistantResponse(text, config)
+    });
+    if (directProductQuestion) {
+      productState.lastProductIntent = directProductQuestion.detectedIntent;
+      productState.lastProductTurnIndex = turnIndex;
+      return {
+        ...directProductQuestion,
+        product: productState
+      };
+    }
 
     if (productState.productDialogueState === "sales_customer_type") {
       if (
@@ -4006,6 +4026,20 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
   if (!text) {
     text = CLARIFICATION_TEXT;
     usedClarificationFallback = true;
+  }
+
+  const repeatedProductQuestion = preventRepeatedV3Response({
+    responseText: text,
+    previousAssistantText: history.at(-1)?.assistant ?? "",
+    productId: turnState(ctx).product?.selectedProduct ?? null,
+    category: detectKnownProductQuestion(callerText, responseDetectedIntent),
+    normalizeResponse: (value) => normalizeAssistantResponse(value, config)
+  });
+  if (repeatedProductQuestion.repeated) {
+    text = repeatedProductQuestion.text;
+    finalResponseTemplate = "product_question_repeat_guard";
+    usedTemplateResponse = true;
+    usedLlmResponse = false;
   }
 
   const intakeState = ensureIntakeState(turnState(ctx));

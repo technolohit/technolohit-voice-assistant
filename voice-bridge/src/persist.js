@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as db from "./db.js";
+import { recordLiveAssistantResponse } from "./live-call-quality.js";
 
 function safePayload(payload) {
   if (!payload || typeof payload !== "object") return {};
@@ -402,6 +403,8 @@ export async function onAssistantResponseCreated(config, ctx, info = {}) {
   } catch (err) {
     logDbError("insertCallEvent(assistant_response_created)", err);
   }
+
+  await recordLiveAssistantResponse(config, ctx, info);
 
   return true;
 }

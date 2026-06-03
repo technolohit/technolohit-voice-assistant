@@ -90,6 +90,7 @@ jobs:
             v3_post_completion_product_question
             v3_email_contact_closing
             v3_pricing_after_contact_capture
+            v3_smart_website_pricing_before_qualification
             voice_agent_ki_assistent
             voice_agent_telefonassistent
             rueckruf_input_maps_to_phone

@@ -941,6 +941,34 @@ const SCENARIOS = {
       ];
     }
   },
+  v3_smart_website_pricing_before_qualification: {
+    turns: [
+      "Hallo, ich interessiere mich fuer die Smart Website.",
+      "Ich moechte wissen, was kostet das?",
+      "Was kostet das?"
+    ],
+    assert(results) {
+      const firstPricing = results[1];
+      const repeatedPricing = results[2];
+      return [
+        assertCondition(
+          "known Smart Website pricing is answered before qualification",
+          firstPricing &&
+            firstPricing.normalized_intent === "pricing_question" &&
+            (includesAll(firstPricing.assistant, ["umfang"]) || includesAll(firstPricing.assistant, ["individuell"])) &&
+            excludes(firstPricing.assistant, "eigenes unternehmen") &&
+            excludes(firstPricing.assistant, "kundenprojekt"),
+          firstPricing ? `${firstPricing.normalized_intent}: ${firstPricing.assistant}` : "missing pricing turn"
+        ),
+        assertCondition(
+          "repeated pricing question does not repeat identical response",
+          repeatedPricing && normalizeText(firstPricing.assistant) !== normalizeText(repeatedPricing.assistant),
+          repeatedPricing?.assistant
+        ),
+        ...noBannedCallbackOutputChecks(results)
+      ];
+    }
+  },
   v3_explanation_then_phone_handoff: {
     turns: [
       "Ich interessiere mich fuer AI Assistant.",
@@ -1327,6 +1355,7 @@ Scenarios:
   v3_sales_depth_before_handoff, v3_post_completion_product_question,
   v3_email_contact_closing,
   v3_pricing_after_contact_capture,
+  v3_smart_website_pricing_before_qualification,
   unclear_input, unknown_intent, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional

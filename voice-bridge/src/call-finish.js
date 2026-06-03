@@ -11,6 +11,7 @@ import {
   listActiveCalls,
   getActiveCallRegistrySize
 } from "./active-call-registry.js";
+import { recordLiveCallSummary } from "./live-call-quality.js";
 
 function callFinishLogLabel(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"} handler=${ctx?.callHandler ?? "unknown"}`;
@@ -60,6 +61,8 @@ export async function finalizeAudioSocketCall(config, ctx, reason, deps = {}) {
       );
     }
   }
+
+  await recordLiveCallSummary(config, ctx, reason);
 
   unregisterActiveCall(ctx);
 

@@ -29,6 +29,7 @@ import {
   handleLiveCanaryInboundFrame,
   shouldCaptureAssistantTurnAudio
 } from "./v4/live-audiosocket-handler.js";
+import { recordLiveHandlerSelected } from "./live-call-quality.js";
 
 function normalizePhone(value) {
   const raw = String(value ?? "").trim();
@@ -194,6 +195,7 @@ function handleFrame(config, ctx, socket, type, payload) {
         console.log(
           `[voice-bridge] call_handler selected=${selection.handler} reason=${selection.reason} bridge_call_id=${ctx.bridgeCallId ?? "pending"} call_session_id=${ctx.callSessionId ?? "pending"}`
         );
+        await recordLiveHandlerSelected(config, ctx, selection);
 
         if (selection.handler === "v4_canary" && selection.runtime) {
           await startLiveCanaryCall(config, ctx, socket, selection.runtime);

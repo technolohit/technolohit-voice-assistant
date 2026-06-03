@@ -5,7 +5,7 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): ENGINEERING READY** after Phase 10U / `voice-bridge-v1.30.0`; execute only after Phase 10O-A repeatability is accepted.
+**Phase 10O-B (RAG-on): BLOCKED** until the Phase 10V three-gate sequence passes on `voice-bridge-v1.30.1+`.
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 
@@ -27,6 +27,12 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 | RAG canary | **Only after** RAG API health check passes and `tenant_id` / `agent_id` scoping matches agent config |
 | Deploy | Sysadmin-driven image pin; no blueprint-driven production env change |
 | Privacy | Use [10H runbook G.4 corrected privacy query](./voice_assistant_v4_phase10h_live_qa_runbook.md) — not legacy broad numeric scan |
+
+## Phase 10V three-gate requirement
+
+1. Gate 1: v3 baseline health and known-product pricing sanity. Do not test `Stopp` or barge-in on v3.
+2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior.
+3. Gate 3: v4/RAG-on canary. Run only after Gate 2 passes.
 
 ---
 
