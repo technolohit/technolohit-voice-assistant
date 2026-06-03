@@ -22,7 +22,9 @@ product should first hear a short product introduction or answer. Sales
 qualification must not begin until the caller explicitly signals a project,
 implementation, contact, callback, or customer-type discussion.
 
-Gate 3 remains blocked until Gate 2 fully passes.
+Gate 3 remains blocked until Gate 2 fully passes. Phase 10Y adds a mandatory
+three-layer compose/runtime preflight so Gate 3 cannot start with RAG flags
+false in the running container when `voice-bridge/.env` says true.
 
 ## Root Cause
 

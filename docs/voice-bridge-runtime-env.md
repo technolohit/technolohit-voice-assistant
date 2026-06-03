@@ -16,12 +16,13 @@ When `VOICE_DEPLOY_PATH` is `/opt/technolohit-voice/asterisk`, the file is:
 
 This comes from Docker Compose `env_file` on the **voice-bridge** service (not from `asterisk/.env` alone).
 
-`asterisk/.env` is for Asterisk/SIP settings. Changing only `asterisk/.env` does **not** update voice-bridge flags.
+`asterisk/.env` is for Asterisk/SIP settings and Compose interpolation (image tags only). Changing only `asterisk/.env` does **not** update voice-bridge runtime flags. Do **not** duplicate `VOICE_*` runtime flags in `asterisk/.env` — when the server compose file interpolates those keys into `voice-bridge.environment:`, they override `env_file` and can invalidate Gate 3.
 
 Keep image selection separate from runtime flags:
 
-- Runtime flags: `/opt/technolohit-voice/voice-bridge/.env`
+- Runtime flags: `/opt/technolohit-voice/voice-bridge/.env` (sole source of truth)
 - Image tag: GitHub Actions deploy input, `VOICE_BRIDGE_IMAGE` shell override, or the Compose interpolation env used by `docker compose`
+- Compose reference: `asterisk/docker-compose.voice-bridge.reference.yml` (server patch shape; base `docker-compose.yml` is not tracked in this repo)
 
 ## v4 foundation flags (Phase 1–3 — default off)
 
@@ -160,9 +161,67 @@ GitHub Actions **Deploy Voice Stack** can optionally verify these flags when `ve
 
 ## Supervised v4 RAG-on canary preflight
 
-After editing `/opt/technolohit-voice/voice-bridge/.env` and recreating the
-voice-bridge container, Gate 3 must hard-fail unless the running container
-proves that v4 live routing and both RAG flags are enabled:
+Gate 3 requires **two** hard checks after editing
+`/opt/technolohit-voice/voice-bridge/.env` and recreating the container:
+
+### 1. Source ownership + effective runtime (sanitized snapshots)
+
+This check is **self-contained on the production host**. It does not require a
+repository checkout. It uses the deployed `voice-bridge` image with
+`docker run --user 0:0` so the preflight can read host-owned `0600` snapshot
+files without exposing secrets.
+
+**What it verifies**
+
+| Check | Source | Purpose |
+|-------|--------|---------|
+| Ownership | Raw `docker-compose.yml` **and** `docker-compose.prod.yml` | Fail if any forbidden runtime key appears in `voice-bridge.environment:` |
+| Ownership | `asterisk/.env` key names only | Fail if forbidden runtime keys are duplicated in Compose project env |
+| Effective | Sanitized Gate 3 snapshots | Authoritative file, rendered Compose, and container must match |
+
+Approved interpolation keys in `asterisk/.env` only:
+
+- `VOICE_BRIDGE_IMAGE`
+- `RAG_API_IMAGE`
+- `BUILD_VERSION`
+- `IMAGE_TAG`
+
+Run from the server (same logic as `scripts/gate3-compose-runtime-preflight.sh`):
+
+```bash
+cd /opt/technolohit-voice/asterisk
+bash /opt/technolohit-voice/bin/gate3-compose-runtime-preflight.sh
+```
+
+Install the wrapper once from the release branch if needed:
+
+```bash
+install -m 755 /path/from/release/scripts/gate3-compose-runtime-preflight.sh \
+  /opt/technolohit-voice/bin/gate3-compose-runtime-preflight.sh
+```
+
+If the wrapper is not installed yet, use the self-contained inline block in
+[Phase 10H runbook section D.1](./Tasks/voice_assistant_v4_phase10h_live_qa_runbook.md).
+
+**Abort Gate 3** unless output includes:
+
+```text
+compose_runtime_preflight=pass
+ownership_pass=true
+compose_source_forbidden_by_file=none
+compose_project_env_forbidden_keys=none
+authoritative_file.VOICE_RAG_ENABLED=true
+compose_config.VOICE_RAG_ENABLED=true
+container_runtime.VOICE_RAG_ENABLED=true
+container_runtime.VOICE_RAG_API_URL=http://127.0.0.1:8080
+```
+
+`docker compose config` alone cannot prove ownership — it expands `env_file`
+into the rendered environment. The preflight inspects **every raw Compose file**
+used by the render command (`docker-compose.yml` and `docker-compose.prod.yml`)
+plus **key names** from `asterisk/.env`.
+
+### 2. In-container RAG canary guard
 
 ```bash
 docker exec technolohit-voice-bridge npm run rag:canary-preflight

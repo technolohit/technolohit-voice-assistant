@@ -1,0 +1,48 @@
+# PATCH FRAGMENT ONLY — do not replace the full production voice-bridge service.
+#
+# Base file (not tracked here): /opt/technolohit-voice/asterisk/docker-compose.yml
+#
+# Preserve ALL existing service settings on the server:
+# volumes, depends_on, logging, healthcheck, network_mode, container_name, etc.
+#
+# Apply ONLY these ownership changes to the existing voice-bridge service:
+# 1. Ensure env_file includes ../voice-bridge/.env
+# 2. Remove forbidden VOICE_* runtime keys from service environment:
+# 3. Keep approved Compose interpolation keys only (BUILD_VERSION, IMAGE_TAG)
+#
+# asterisk/.env must NOT contain voice-bridge runtime flags — only image tags and
+# Asterisk/SIP interpolation keys such as VOICE_BRIDGE_IMAGE and RAG_API_IMAGE.
+#
+# --- BEFORE (broken — service environment overrides env_file) -----------------
+#   voice-bridge:
+#     env_file:
+#       - ../voice-bridge/.env
+#     environment:
+#       VOICE_RAG_ENABLED: "${VOICE_RAG_ENABLED}"
+#       VOICE_RAG_SALES_ANSWERER_ENABLED: "${VOICE_RAG_SALES_ANSWERER_ENABLED}"
+#       VOICE_RAG_API_URL: "${VOICE_RAG_API_URL}"
+#       VOICE_RUNTIME_VERSION: "${VOICE_RUNTIME_VERSION}"
+#       BUILD_VERSION: ${BUILD_VERSION:-}
+#       IMAGE_TAG: ${IMAGE_TAG:-}
+#
+# --- AFTER (correct — runtime only from env_file) ---------------------------
+#   voice-bridge:
+#     env_file:
+#       - ../voice-bridge/.env
+#     environment:
+#       BUILD_VERSION: ${BUILD_VERSION:-}
+#       IMAGE_TAG: ${IMAGE_TAG:-}
+#
+# Validate on server:
+#   cd /opt/technolohit-voice/asterisk
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml config \
+#     | awk '/voice-bridge:/,/^[a-z]/ { print }' \
+#     | egrep 'env_file:|environment:|VOICE_'
+#
+# Expected: env_file present; environment contains no VOICE_* runtime keys.
+#
+# Image override remains in tracked asterisk/docker-compose.prod.yml:
+#   services:
+#     voice-bridge:
+#       image: ${VOICE_BRIDGE_IMAGE:-thnhit/technhvoice:voice-bridge-latest}
+#       build: null

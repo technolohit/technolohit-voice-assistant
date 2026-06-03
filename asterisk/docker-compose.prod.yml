@@ -1,3 +1,5 @@
+# Production image override only. Runtime flags stay in ../voice-bridge/.env (env_file).
+# See asterisk/docker-compose.voice-bridge.reference.yml for the required service shape.
 services:
   voice-bridge:
     image: ${VOICE_BRIDGE_IMAGE:-thnhit/technhvoice:voice-bridge-latest}

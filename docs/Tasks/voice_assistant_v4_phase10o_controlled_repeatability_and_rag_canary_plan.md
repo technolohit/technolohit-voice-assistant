@@ -37,9 +37,12 @@ before introducing the product. Phase 10X addresses this behavior.
 2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior. The first known-product opening response must be neither `fallback_clarification` nor `collect_sales_context`.
 3. Gate 3: v4/RAG-on canary. Run only after Gate 2 passes.
 
-Gate 3 is invalid unless `docker exec technolohit-voice-bridge npm run
-rag:canary-preflight` exits `0` immediately before the call and reports both
-`rag_enabled=true` and `rag_sales_answerer_enabled=true`.
+Gate 3 is invalid unless **both** checks pass immediately before the call:
+
+1. `bash ../scripts/gate3-compose-runtime-preflight.sh` — authoritative
+   `voice-bridge/.env`, rendered Compose config, and container runtime must agree.
+2. `docker exec technolohit-voice-bridge npm run rag:canary-preflight` — must
+   report `rag_enabled=true` and `rag_sales_answerer_enabled=true`.
 
 ---
 

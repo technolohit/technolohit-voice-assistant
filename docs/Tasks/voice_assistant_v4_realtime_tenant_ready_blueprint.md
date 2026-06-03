@@ -35,12 +35,12 @@ Last updated: 2026-06-03
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10X — product introduction before sales qualification** |
+| **Current completed phase** | **Phase 10Y — authoritative voice-bridge runtime env and Gate 3 compose preflight** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
 | **v4 live canary** | **Phase 10S / v1.29.0 passed** for interruption handling and post-interruption product-context persistence |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release the Phase 10X image and rerun Gate 2 v4/RAG-off control. Gate 3 remains blocked until the first known-product response is neither fallback nor sales qualification — [10X report](./voice_assistant_v4_phase10x_product_intro_before_qualification_report.md) |
+| **Next step** | Release `voice-bridge-v1.33.0`, apply compose patch fragment on server, rerun Gate 2. Gate 3 blocked until dual raw Compose ownership preflight passes — [10Y report](./voice_assistant_v4_phase10y_authoritative_runtime_env_report.md) |
 
 Completed foundation work (do not re-implement):
 
@@ -1133,6 +1133,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10V v3 known-product pricing repair, repeated-response prevention, all-live-call telemetry, corrected three-gate runbook — [report](./voice_assistant_v4_phase10v_v3_fallback_and_canary_gate_report.md).
 - [x] Successful: Phase 10W hard Gate 3 in-container RAG preflight and v4 product-opening recovery — [report](./voice_assistant_v4_phase10w_gate3_preflight_and_product_opening_report.md).
 - [x] Successful: Phase 10X product-selection introduction before explicit sales qualification — [report](./voice_assistant_v4_phase10x_product_intro_before_qualification_report.md).
+- [x] Successful: Phase 10Y authoritative voice-bridge runtime env ownership and Gate 3 compose preflight — [report](./voice_assistant_v4_phase10y_authoritative_runtime_env_report.md).
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).

@@ -24,12 +24,13 @@ The call therefore provides no RAG-on quality evidence.
 
 ## Root Causes
 
-### Missing hard Gate 3 runtime guard
+### Missing hard Gate 3 runtime guard (Phase 10W)
 
 The runbook described the desired env values but did not require a hard
-in-container preflight after the container was recreated. A change to the wrong
-file, a missing recreate, or a v3 verifier could leave RAG disabled while the
-operator believed Gate 3 was active.
+in-container preflight after the container was recreated. Phase 10Y adds a
+three-layer compose/runtime preflight because editing only `voice-bridge/.env`
+is insufficient when Compose `environment:` interpolates conflicting values
+from `asterisk/.env`.
 
 ### Product opening fallback
 
