@@ -121,7 +121,7 @@ VOICE_SEMANTIC_INTENT_MODE=deterministic
 VOICE_RAG_ENABLED=false
 VOICE_RAG_SALES_ANSWERER_ENABLED=false
 VOICE_RAG_QA_MODE=false
-VOICE_RAG_API_URL=http://technolohit-rag-api:8080
+VOICE_RAG_API_URL=http://127.0.0.1:8080
 VOICE_LEAD_POLICY_STRICT_CALLBACK=true
 VOICE_LOG_TRANSCRIPT_PREVIEW=false
 ```
@@ -157,3 +157,33 @@ Expected:
 ## Deploy workflow
 
 GitHub Actions **Deploy Voice Stack** can optionally verify these flags when `verify_v3_qa_env=true` (see `.github/workflows/deploy.yml`).
+
+## Supervised v4 RAG-on canary preflight
+
+After editing `/opt/technolohit-voice/voice-bridge/.env` and recreating the
+voice-bridge container, Gate 3 must hard-fail unless the running container
+proves that v4 live routing and both RAG flags are enabled:
+
+```bash
+docker exec technolohit-voice-bridge npm run rag:canary-preflight
+```
+
+The command prints safe booleans and RAG health only. It does not print
+secrets, queries, transcripts, phone numbers, or lead data.
+
+**Required pass output includes:**
+
+```text
+rag_canary_preflight=pass
+runtime_v4=true
+v4_live_audiosocket_enabled=true
+rag_enabled=true
+rag_sales_answerer_enabled=true
+rag_health_ok=true
+failure_count=0
+```
+
+Abort the canary if the command exits non-zero. The deploy workflow can run
+the same guard with `verify_v4_rag_canary_env=true`. Do not set
+`verify_v3_qa_env=true` and `verify_v4_rag_canary_env=true` in the same deploy
+request because they intentionally expect opposite RAG flag values.

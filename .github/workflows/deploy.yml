@@ -25,6 +25,14 @@ on:
         options:
           - "false"
           - "true"
+      verify_v4_rag_canary_env:
+        description: "After deploy, hard-fail unless the running voice-bridge is ready for a supervised v4 RAG-on canary"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       enable_rag_sales_answerer:
         description: "Documentation hint only - RAG sales answerer must stay false in ../voice-bridge/.env unless explicitly approved"
         required: true
@@ -156,6 +164,20 @@ jobs:
           echo "v3 QA env verification passed."
           REMOTE
 
+      - name: Verify v4 RAG-on canary env
+        if: ${{ inputs.verify_v4_rag_canary_env == 'true' }}
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.VOICE_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.VOICE_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/voice_deploy_key "${DEPLOY_USER}@${DEPLOY_HOST}" bash -se <<'REMOTE'
+          set -euo pipefail
+          docker exec technolohit-voice-bridge npm run rag:canary-preflight
+          echo "v4 RAG-on canary env verification passed."
+          REMOTE
+
       - name: Deploy rag-api
         if: ${{ inputs.deploy_rag_api == 'true' }}
         shell: bash
@@ -191,6 +213,7 @@ jobs:
               echo "- rag-api: \`${DOCKER_IMAGE}:${{ steps.validate_inputs.outputs.rag_api_tag }}\`"
             fi
             echo "- verify v3 QA env: \`${{ inputs.verify_v3_qa_env }}\`"
+            echo "- verify v4 RAG-on canary env: \`${{ inputs.verify_v4_rag_canary_env }}\`"
             echo "- RAG sales answerer (must stay off unless approved): \`${{ inputs.enable_rag_sales_answerer }}\`"
             echo "- voice-bridge env source of truth: \`../voice-bridge/.env\` on server (see docs/voice-bridge-runtime-env.md)"
           } >> "$GITHUB_STEP_SUMMARY"

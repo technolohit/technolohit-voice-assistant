@@ -294,6 +294,39 @@ VOICE_RAG_SALES_ANSWERER_ENABLED=true
 
 All other v4 live canary gates from section D remain required. Restore both RAG flags to `false` during rollback. Do not run Gate 3 if Gate 2 fails.
 
+After editing the authoritative file, recreate the container and run the hard
+Gate 3 preflight before placing any call:
+
+```bash
+cd /opt/technolohit-voice/asterisk
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d voice-bridge
+
+docker exec technolohit-voice-bridge npm run rag:canary-preflight
+```
+
+**Abort Gate 3 if exit code is non-zero or output does not include all of:**
+
+```text
+rag_canary_preflight=pass
+runtime_v4=true
+v4_live_audiosocket_enabled=true
+rag_enabled=true
+rag_sales_answerer_enabled=true
+rag_health_ok=true
+failure_count=0
+```
+
+Also verify the raw runtime env without printing secrets:
+
+```bash
+docker exec technolohit-voice-bridge sh -lc \
+  'printenv | sort | egrep "^(VOICE_RUNTIME_VERSION|VOICE_V4_REALTIME_ENABLED|VOICE_V4_CANARY_ENABLED|VOICE_V4_LIVE_AUDIOSOCKET_ENABLED|VOICE_V4_LIVE_CANARY_ALLOWLIST|VOICE_RAG_ENABLED|VOICE_RAG_SALES_ANSWERER_ENABLED|VOICE_RAG_API_URL)="'
+```
+
+If GitHub Actions deploy is used for Gate 3, set
+`verify_v4_rag_canary_env=true` and `verify_v3_qa_env=false`. These two
+verifiers intentionally expect opposite RAG states.
+
 Restart:
 
 ```bash

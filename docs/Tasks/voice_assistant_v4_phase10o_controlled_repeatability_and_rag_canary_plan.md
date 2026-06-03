@@ -34,6 +34,10 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior.
 3. Gate 3: v4/RAG-on canary. Run only after Gate 2 passes.
 
+Gate 3 is invalid unless `docker exec technolohit-voice-bridge npm run
+rag:canary-preflight` exits `0` immediately before the call and reports both
+`rag_enabled=true` and `rag_sales_answerer_enabled=true`.
+
 ---
 
 ## Phase 10O-A — Repeatability (3 calls, RAG disabled)

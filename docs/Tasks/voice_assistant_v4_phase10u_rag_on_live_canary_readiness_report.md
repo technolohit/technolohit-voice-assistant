@@ -142,3 +142,18 @@ The corrected sequence is:
 3. v4/RAG-on canary for product-scoped retrieval.
 
 See [Phase 10V report](./voice_assistant_v4_phase10v_v3_fallback_and_canary_gate_report.md).
+
+## Phase 10W Gate 3 Invalid Attempt Follow-up
+
+The first Phase 10V Gate 3 attempt was **FAIL / INVALID** because the running
+container still reported `VOICE_RAG_ENABLED=false` and
+`VOICE_RAG_SALES_ANSWERER_ENABLED=false`. SQL response-plan evidence also
+reported `rag_enabled=false` and `rag_used=false`.
+
+Phase 10W adds a hard in-container preflight:
+
+```bash
+docker exec technolohit-voice-bridge npm run rag:canary-preflight
+```
+
+No future RAG-on call is valid unless this command exits `0`.

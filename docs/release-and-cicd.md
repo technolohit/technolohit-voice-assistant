@@ -76,8 +76,16 @@ GitHub Actions **Deploy Voice Stack** inputs:
 | `deploy_rag_api` | `true` when co-deploying RAG |
 | `rag_api_tag` | `v1.11.0` |
 | `verify_v3_qa_env` | `true` |
+| `verify_v4_rag_canary_env` | `false` |
 
 This deploys v4 foundation code **without** enabling production v4. Keep `VOICE_RUNTIME_VERSION=v3` and all `VOICE_V4_*` flags `false` in `/opt/technolohit-voice/voice-bridge/.env`.
+
+For a supervised v4 RAG-on Gate 3 deploy, use
+`verify_v4_rag_canary_env=true` and `verify_v3_qa_env=false`. The RAG canary
+verifier runs `npm run rag:canary-preflight` inside the running container and
+fails unless both RAG flags, all v4 live gates, the allowlist, and RAG health
+are present. Never enable both verifiers in the same request because they
+intentionally expect opposite RAG states.
 
 Operator runbook: [docs/Tasks/voice_assistant_v4_phase9_sysadmin_runbook.md](./Tasks/voice_assistant_v4_phase9_sysadmin_runbook.md)
 
@@ -174,6 +182,7 @@ Runs manually with:
 - `voice_bridge_tag`, for example `voice-bridge-v1.11.0` or shorthand `v1.11.0`
 - optional `rag_api_tag`, for example `rag-api-v1.11.0` or `v1.11.0`
 - `verify_v3_qa_env=true` to assert v3 QA flags inside the running container
+- `verify_v4_rag_canary_env=true` to hard-fail an invalid v4 RAG-on canary environment
 
 Input normalization: bare semver tags like `v1.11.0` are expanded to `voice-bridge-v1.11.0` / `rag-api-v1.11.0`. Always pin immutable tags in production — never deploy only `:latest`.
 

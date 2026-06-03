@@ -100,6 +100,11 @@ export function detectTranscriptIntent(transcript = "", memory = {}, agentConfig
   if (/\b(smart website|digitale rezeption|voice agent|lokalki|botinteg|aiseoq)\b/i.test(lower)) {
     return "product_selection";
   }
+  // Closed-domain product aliases are authoritative even when STT inserts
+  // punctuation or inflects the product phrase (for example Smart-Webseite).
+  if (agentConfig && matchProductAlias(agentConfig, transcript)?.id) {
+    return "product_selection";
+  }
   if (/\b(neukunde|neu kunde|bestandskunde|eigene firma|unternehmen)\b/i.test(lower)) {
     return "sales_customer_type";
   }
