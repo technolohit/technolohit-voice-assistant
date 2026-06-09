@@ -5,12 +5,10 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): Gate 3 PARTIAL pending v1.34.8 retrieve-timeout validation.** v1.34.6
-preflights passed and one valid supervised live Gate 3 call was placed. Human observation was
-positive, but live RAG retrieval timed out at about 702 ms and the answer came from playbook
-fallback (`rag_used=false`, `rag_fallback_used=true`). v1.34.7 then timed out during retrieve
-preflight at the 700 ms budget. **Do not classify Gate 3 as full PASS** until a v1.34.8+ live
-call emits `rag_retrieval_completed`, `rag_used=true`, and `rag_result_count>0`.
+**Phase 10O-B (RAG-on): Gate 3 PARTIAL on v1.34.8.** Valid supervised live call; human quality
+passed. Raw `rag:retrieve-preflight` passed but live RAG missed (`rag_used=false`,
+`rag_result_count=0`, 347 ms, no timeout). **Do not classify as full Gate 3 PASS.**
+v1.34.9 adds `rag:live-path-preflight` (same path as `retrieveV4RagAnswer()`).
 Gate 2 remains **PASS** (v4/RAG-off).
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
@@ -40,19 +38,21 @@ Gate 2 remains **PASS** (v4/RAG-off).
 2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior. The first known-product opening response must be neither `fallback_clarification` nor `collect_sales_context`.
 3. Gate 3: v4/RAG-on canary. Gate 2 passed on v1.34.3; v1.34.6 live call was partial due to live RAG timeout. Retest on v1.34.8+ only, run one supervised call, and roll back immediately after evidence collection.
 
-Gate 3 is invalid unless **all three** checks pass immediately before the call:
+Gate 3 is invalid unless **all four** checks pass immediately before the call:
 
 1. `bash ../scripts/gate3-compose-runtime-preflight.sh` — authoritative
    `voice-bridge/.env`, rendered Compose config, and container runtime must agree.
 2. `docker exec technolohit-voice-bridge npm run rag:canary-preflight` — must
    report `rag_enabled=true` and `rag_sales_answerer_enabled=true`.
-3. `docker exec technolohit-voice-bridge npm run rag:retrieve-preflight` — must
-   report `rag_retrieve_preflight=pass`, `product_scope=smart_website`, `hit=true`,
-   `result_count>0`, and `success_count>=required_success_count`. **Abort Gate 3** on any failure.
-4. If step 3 fails with `fallback_reason=rag_retrieve_timeout`, run
-   `docker exec technolohit-voice-bridge npm run rag:retrieve-diagnostics`.
-   - `classification=latency_budget_issue` → team decision on canary `VOICE_RAG_TIMEOUT_MS`; still no Gate 3 until preflight passes.
-   - `classification=rag_miss` at all budgets → fix RAG knowledge ingestion.
+3. `docker exec technolohit-voice-bridge npm run rag:retrieve-preflight` — raw HTTP retrieve;
+   must report `rag_retrieve_preflight=pass`, `preflight_mode=raw_retrieve`, `hit=true`.
+   **Not sufficient alone** (v1.34.8 false positive).
+4. `docker exec technolohit-voice-bridge npm run rag:live-path-preflight` — **mandatory v1.34.9+**;
+   must report `rag_live_path_preflight=pass`, `used_rag=true`,
+   `result_count_after_product_filter>0`.
+
+If step 3 fails with `fallback_reason=rag_retrieve_timeout`, run
+`docker exec technolohit-voice-bridge npm run rag:retrieve-diagnostics` before retry.
 
 ---
 

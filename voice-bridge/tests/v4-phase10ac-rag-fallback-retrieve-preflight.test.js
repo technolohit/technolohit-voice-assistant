@@ -247,8 +247,8 @@ test("10AC: rag_retrieval_failed events include safe diagnostics without transcr
     assert.equal(failed.payload.rag_product_scope, "smart_website");
     assert.equal(failed.payload.rag_result_count, 0);
     assert.equal(failed.payload.rag_fallback_used, true);
-    assert.equal(failed.payload.payload_tenant_id, "technolohit");
-    assert.equal(failed.payload.payload_agent_id, "main_voice_sales");
+    assert.equal(failed.payload.tenant_id, "technolohit");
+    assert.equal(failed.payload.agent_id, "main_voice_sales");
     assert.equal("transcript" in failed.payload, false);
     assert.equal("query" in failed.payload, false);
   });

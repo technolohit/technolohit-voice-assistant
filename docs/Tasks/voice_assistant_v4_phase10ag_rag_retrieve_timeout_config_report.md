@@ -88,6 +88,15 @@ Gate 3 live PASS still requires actual live RAG usage:
 
 Fallback-only answers remain user-safe but are **not** Gate 3 PASS.
 
+## Phase 10AH update (v1.34.8 live call)
+
+v1.34.8 Gate 3 live call: raw `rag:retrieve-preflight` passed (`result_count=1`, `timeout_ms=1500`)
+but live path failed RAG (`rag_result_count=0`, `rag_latency_ms=347`, `timeout_count=0`).
+Root cause: raw preflight did not exercise product filtering, answer safety, or Gate 3 transcript.
+See [Phase 10AH report](./voice_assistant_v4_phase10ah_live_rag_path_equivalence_report.md).
+
+Gate 3 now requires **`rag:live-path-preflight`** in addition to raw retrieve preflight.
+
 ## Recommendation
 
 Release as `voice-bridge-v1.34.8`. Do not deploy a new `rag-api` image unless diagnostics prove

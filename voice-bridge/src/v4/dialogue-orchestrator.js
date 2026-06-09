@@ -30,6 +30,7 @@ import {
   shouldUseRagForTurn,
   retrieveV4RagAnswer
 } from "./rag-orchestrator.js";
+import { buildSafeRagEventDiagnostics } from "./rag-quality-diagnostics.js";
 import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
@@ -252,14 +253,22 @@ export async function decideNextAction(orchestrator, input = {}) {
   const ragEnabled = Boolean(orchestrator.config?.rag?.enabled);
   const ragSalesAnswererEnabled = Boolean(orchestrator.config?.rag?.salesAnswererEnabled);
   if (ragGate.allowed && !ragResult) {
+    const ragDiagnosticsBase = {
+      config: orchestrator.config,
+      transcript,
+      productScope: ragProductScope,
+      tenantId: orchestrator.config?.v4?.tenantId ?? "technolohit",
+      agentId: orchestrator.config?.v4?.agentId ?? "main_voice_sales",
+    };
     bufferEvent(orchestrator, "rag_retrieval_started", {
       rag_reason: ragGate.reason,
       rag_enabled: ragEnabled,
       rag_sales_answerer_enabled: ragSalesAnswererEnabled,
       rag_product_scope: ragProductScope,
       rag_fallback_used: false,
-      tenant_id: orchestrator.config?.v4?.tenantId ?? "technolohit",
-      agent_id: orchestrator.config?.v4?.agentId ?? "main_voice_sales"
+      tenant_id: ragDiagnosticsBase.tenantId,
+      agent_id: ragDiagnosticsBase.agentId,
+      ...buildSafeRagEventDiagnostics(ragDiagnosticsBase),
     });
 
     if (typeof orchestrator.adapters.ragAnswerer === "function") {
@@ -302,18 +311,16 @@ export async function decideNextAction(orchestrator, input = {}) {
         rag_fallback_used: !Boolean(ragResult?.used_rag),
         fallback_reason: ragResult?.fallback_reason ?? null,
         rag_reason: ragGate.reason,
-        rag_http_status: ragResult?.rag_http_status ?? null,
-        rag_error_reason: ragResult?.rag_error_reason ?? ragResult?.fallback_reason ?? null,
         rag_latency_ms: ragResult?.latency_ms ?? ragEvidence.latency_ms ?? null,
-        rag_attempt_count: ragResult?.rag_attempt_count ?? null,
-        rag_success_count: ragResult?.rag_success_count ?? null,
-        rag_timeout_count: ragResult?.rag_timeout_count ?? null,
-        rag_attempt_fallback_reasons: ragResult?.rag_attempt_fallback_reasons ?? [],
         rag_total_latency_ms: ragResult?.rag_total_latency_ms ?? ragResult?.latency_ms ?? ragEvidence.latency_ms ?? null,
-        min_score: ragResult?.min_score ?? null,
-        top_score: ragResult?.top_score ?? ragEvidence.top_score ?? null,
-        payload_tenant_id: ragResult?.payload_tenant_id ?? null,
-        payload_agent_id: ragResult?.payload_agent_id ?? null
+        ...buildSafeRagEventDiagnostics({
+          config: orchestrator.config,
+          transcript,
+          ragResult,
+          productScope: ragResult?.rag_product_scope ?? ragProductScope,
+          tenantId: ragResult?.payload_tenant_id ?? orchestrator.config?.v4?.tenantId ?? "technolohit",
+          agentId: ragResult?.payload_agent_id ?? orchestrator.config?.v4?.agentId ?? "main_voice_sales",
+        }),
       },
       ragResult?.latency_ms ?? null
     );

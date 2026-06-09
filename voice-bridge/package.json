@@ -14,6 +14,7 @@
     "rag:canary-preflight": "node scripts/rag-canary-preflight.js",
     "rag:retrieve-preflight": "node scripts/rag-retrieve-preflight.js",
     "rag:retrieve-diagnostics": "node scripts/rag-retrieve-diagnostics.js",
+    "rag:live-path-preflight": "node scripts/rag-live-path-preflight.js",
     "compose:runtime-preflight": "node scripts/compose-runtime-preflight.js",
     "compose:baseline-preflight": "node scripts/compose-runtime-preflight.js --baseline",
     "test:intelligence": "node --test tests/intelligence-upgrade.test.js",

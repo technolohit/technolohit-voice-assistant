@@ -12,7 +12,11 @@ import { runtimeRetrieveMaxAttempts, runtimeRetrieveTimeoutMs } from "./rag-retr
 export { runtimeRetrieveMaxAttempts, runtimeRetrieveTimeoutMs } from "./rag-retrieve-config.js";
 
 export const PROBE_PRODUCT_SCOPE = "smart_website";
-const PROBE_QUERY = "Was ist Smart Website und was kostet sie?";
+
+/** Gate 3 live combined inquiry — must match supervised canary utterance. */
+export const LIVE_GATE3_COMBINED_TRANSCRIPT =
+  "Was ist Smart Website, was macht sie und was kostet sie?";
+
 const EMAIL_IN_TEXT = /\b[\w.+-]+@[\w.-]+\.\w{2,}\b/i;
 const PHONE_IN_TEXT = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
 
@@ -31,22 +35,37 @@ export function diagnosticTimeoutBudgets(config) {
   return [...new Set(budgets)].sort((a, b) => a - b);
 }
 
+export function buildLiveGate3RagProbeContext(options = {}) {
+  const transcript = options.transcript ?? LIVE_GATE3_COMBINED_TRANSCRIPT;
+  let memory = createCallSessionMemory({
+    bridgeCallId: options.bridgeCallId ?? "rag-live-path-preflight",
+  });
+  memory.current_state = V4_STATES.THINKING;
+  memory = setSelectedProduct(memory, PROBE_PRODUCT_SCOPE);
+  return {
+    transcript,
+    memory,
+    stateMachine: { state: V4_STATES.THINKING },
+  };
+}
+
 export function buildSmartWebsiteRetrievePayload(config, options = {}) {
   const agentConfig = options.agentConfig ?? loadAgentConfig(config);
   const buildQuery = options.buildV4RagQueryFn ?? buildV4RagQuery;
-  const memory = setSelectedProduct(
-    createCallSessionMemory({ bridgeCallId: options.bridgeCallId ?? "rag-retrieve-probe" }),
-    PROBE_PRODUCT_SCOPE
-  );
-  memory.current_product_context = PROBE_PRODUCT_SCOPE;
+  const transcript = options.transcript ?? LIVE_GATE3_COMBINED_TRANSCRIPT;
+  const probeContext = buildLiveGate3RagProbeContext({
+    ...options,
+    transcript,
+    bridgeCallId: options.bridgeCallId ?? "rag-retrieve-probe",
+  });
   const payload = buildQuery({
     config,
     agentConfig,
-    transcript: PROBE_QUERY,
-    memory,
-    stateMachine: { state: V4_STATES.THINKING }
+    transcript: probeContext.transcript,
+    memory: probeContext.memory,
+    stateMachine: probeContext.stateMachine,
   });
-  return { payload, agentConfig };
+  return { payload, agentConfig, probeContext };
 }
 
 export function validateRetrievePayload(payload) {

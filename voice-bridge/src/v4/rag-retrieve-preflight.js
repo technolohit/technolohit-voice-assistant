@@ -188,6 +188,7 @@ export function formatRagRetrievePreflightLines(result) {
   const retrieve = result?.retrieve ?? {};
   const lines = [
     `rag_retrieve_preflight=${result?.ok ? "pass" : "fail"}`,
+    `preflight_mode=raw_retrieve`,
     `product_scope=${result?.product_scope ?? PROBE_PRODUCT_SCOPE}`,
     `result_count=${result?.result_count ?? 0}`,
     `hit=${safeBoolean(result?.hit)}`,

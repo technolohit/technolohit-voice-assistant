@@ -356,7 +356,8 @@ docker run --rm --user 0:0 \
 GATE3_PREFLIGHT
 docker exec technolohit-voice-bridge npm run rag:canary-preflight
 docker exec technolohit-voice-bridge npm run rag:retrieve-preflight
-# If retrieve preflight fails with rag_retrieve_timeout:
+docker exec technolohit-voice-bridge npm run rag:live-path-preflight
+# If raw retrieve preflight fails with rag_retrieve_timeout:
 docker exec technolohit-voice-bridge npm run rag:retrieve-diagnostics
 ```
 
@@ -375,12 +376,18 @@ rag_sales_answerer_enabled=true
 rag_health_ok=true
 failure_count=0
 rag_retrieve_preflight=pass
+preflight_mode=raw_retrieve
 product_scope=smart_website
 hit=true
 result_count>0
-success_count>=required_success_count
+rag_live_path_preflight=pass
+used_rag=true
+result_count_after_product_filter>0
 timeout_ms=1500
 ```
+
+**Raw retrieve preflight alone does not approve Gate 3.** v1.34.8 showed raw pass + live RAG miss
+(347 ms, `rag_result_count=0`). **`rag:live-path-preflight` is mandatory** on v1.34.9+.
 
 If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail`, **do not place the Gate 3 call**.
 
@@ -1067,6 +1074,29 @@ wc -l "/tmp/voice-bridge-10h-${QA_STAMP}-pre-rollback.log"
 ```
 
 Then run section I.1–I.3.
+
+### I.0a Wait for post-call summary before rollback (Gate 2/3)
+
+After a **successful** supervised Gate 2 or Gate 3 call (no H1–H13 emergency stop), wait for
+post-call summary before rolling back. Do not revert env immediately on socket close alone.
+
+```sql
+SELECT event_type, created_at, payload->>'reason' AS reason
+FROM voice.call_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type LIKE 'post_call_%'
+ORDER BY created_at;
+
+SELECT COUNT(*) AS summary_count
+FROM voice.call_summaries
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid;
+```
+
+**Proceed to rollback when:** `post_call_summary_created` is present **or** 60 seconds have
+elapsed since call end without summary (log `post_call_summary_failed` / `post_call_summary_skipped`
+and include in report).
+
+Emergency rollback (H1–H13) skips this wait.
 
 ### I.1 Restore env from backup
 
