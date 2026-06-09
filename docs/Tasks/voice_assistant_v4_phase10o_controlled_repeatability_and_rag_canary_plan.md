@@ -5,10 +5,11 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): READY FOR ONE SUPERVISED CANARY** on
-`voice-bridge-v1.34.3+`. Gate 2 passed on v1.34.3 with v4/RAG-off:
-combined Smart Website inquiry, OpenAI STT/TTS, barge-in/context, quality flush,
-privacy scan, post-call summary, and rollback were all verified.
+**Phase 10O-B (RAG-on): Gate 3 FAILED on v1.34.3** (`call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`).
+RAG retrieval missed 3×; generic fallback omitted pricing on combined Smart Website inquiry.
+**No second Gate 3 canary** until **`voice-bridge-v1.34.4+`** is deployed and both
+`rag:canary-preflight` **and** `rag:retrieve-preflight` pass.
+Gate 2 remains **PASS** on v1.34.3 (v4/RAG-off).
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
 
@@ -37,12 +38,16 @@ privacy scan, post-call summary, and rollback were all verified.
 2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior. The first known-product opening response must be neither `fallback_clarification` nor `collect_sales_context`.
 3. Gate 3: v4/RAG-on canary. Gate 2 passed on v1.34.3; run only one supervised call and roll back immediately after evidence collection.
 
-Gate 3 is invalid unless **both** checks pass immediately before the call:
+Gate 3 is invalid unless **all three** checks pass immediately before the call:
 
 1. `bash ../scripts/gate3-compose-runtime-preflight.sh` — authoritative
    `voice-bridge/.env`, rendered Compose config, and container runtime must agree.
 2. `docker exec technolohit-voice-bridge npm run rag:canary-preflight` — must
    report `rag_enabled=true` and `rag_sales_answerer_enabled=true`.
+3. `docker exec technolohit-voice-bridge npm run rag:retrieve-preflight` — must
+   report `rag_retrieve_preflight=pass`, `product_scope=smart_website`, `hit=true`,
+   and `result_count>0`. If `hit=false` / `fallback_reason=rag_miss`, **abort Gate 3**
+   (RAG has no retrievable Smart Website knowledge).
 
 ---
 

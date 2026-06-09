@@ -87,62 +87,28 @@ function planScopedProductAnswer({
   transcript,
   ragAnswer = null,
   ragGate = null,
+  ragResult = null,
   planReason = "scoped_product_qa",
 }) {
   const productId = resolveCurrentProductContext(memory);
-  const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
-  if (combinedAnswer) {
-    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-      text: ragAnswer ?? combinedAnswer,
-      next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
-      memory_patch: productContextMemoryPatch(memory, productId),
-      quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
-      allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
-      rag_allowed: gateUsesRag(ragGate),
-      plan_reason: "combined_product_inquiry",
-      lead_transition_allowed: false,
-    });
-  }
-
-  const category = detectShortFollowUpCategory(transcript);
-  const product = productId ? getProductById(agentConfig, productId) : null;
-
-  if (category) {
-    const answer = sanitizeResponseText(
-      ragAnswer ?? buildPlaybookShortAnswer(agentConfig, productId, category),
-    );
-    return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-      text: answer,
-      next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
-      memory_patch: productContextMemoryPatch(memory, productId),
-      quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
-      allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
-      rag_allowed: gateUsesRag(ragGate),
-      plan_reason: planReason,
-    });
-  }
-
-  const playbookAnswer = productId
-    ? buildPlaybookShortAnswer(agentConfig, productId, "how_it_works")
-    : null;
-  const answer =
-    ragAnswer ??
-    (playbookAnswer
-      ? sanitizeResponseText(playbookAnswer)
-      : sanitizeResponseText(
-          product
-            ? `${product.display_name} wird individuell nach Bedarf kalkuliert. Möchten Sie mehr Details?`
-            : "Gerne. Was möchten Sie dazu wissen?",
-        ));
+  const resolved = resolveRagAwareProductAnswer({
+    agentConfig,
+    productId,
+    transcript,
+    ragAnswer,
+    ragResult,
+    planReason,
+  });
 
   return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-    text: answer,
+    text: resolved.text,
     next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
     memory_patch: productContextMemoryPatch(memory, productId),
     quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
     allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
     rag_allowed: gateUsesRag(ragGate),
-    plan_reason: planReason,
+    plan_reason: resolved.planReason,
+    lead_transition_allowed: false,
   });
 }
 
@@ -170,6 +136,7 @@ function planInterruptionFollowUp({
   interruptionRecovery,
   ragAnswer,
   ragGate,
+  ragResult = null,
   closedDomain = null,
 }) {
   const interruptedId =
@@ -190,22 +157,36 @@ function planInterruptionFollowUp({
     interruptionRecovery?.recoveryAction === "product_question";
 
   if (category) {
-    const answer = sanitizeResponseText(
-      buildPlaybookShortAnswer(agentConfig, productId, category)
-    );
+    const resolved = resolveRagAwareProductAnswer({
+      agentConfig,
+      productId,
+      transcript,
+      ragAnswer,
+      ragResult,
+      planReason: "interrupt_scoped_product_qa",
+    });
     return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-      text: answer,
+      text: resolved.text,
       next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
       memory_patch: interruptionMemoryPatch(memory, productId),
-      quality_event_type: "turn_started",
-      rag_allowed: false
+      quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
+      allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
+      rag_allowed: gateUsesRag(ragGate),
+      plan_reason: resolved.planReason,
     });
   }
 
   if (substantive && productId) {
+    const resolved = resolveRagAwareProductAnswer({
+      agentConfig,
+      productId,
+      transcript,
+      ragAnswer,
+      ragResult,
+      planReason: "interrupt_scoped_product_qa",
+    });
     const playbook =
-      ragAnswer ??
-      fallbackToPlaybook({ productId, transcript, agentConfig }).answer ??
+      resolved.text ??
       sanitizeResponseText(
         `${productName} unterstützt Sichtbarkeit und Anfragen. Was möchten Sie genau wissen?`
       );
@@ -215,7 +196,8 @@ function planInterruptionFollowUp({
       memory_patch: interruptionMemoryPatch(memory, productId),
       quality_event_type: gateUsesRag(ragGate) ? "rag_retrieval_completed" : "turn_started",
       allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
-      rag_allowed: gateUsesRag(ragGate)
+      rag_allowed: gateUsesRag(ragGate),
+      plan_reason: resolved.planReason,
     });
   }
 
@@ -236,6 +218,57 @@ function planInterruptionFollowUp({
 
 function gateUsesRag(ragGate) {
   return Boolean(ragGate?.allowed && ragGate?.used_rag);
+}
+
+/**
+ * Prefer playbook answers over RAG fallback text when retrieval did not produce a hit.
+ */
+function resolveRagAwareProductAnswer({
+  agentConfig,
+  productId,
+  transcript,
+  ragAnswer = null,
+  ragResult = null,
+  planReason = "scoped_product_qa",
+}) {
+  const combined = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
+  const category = detectShortFollowUpCategory(transcript);
+
+  if (ragResult?.used_rag && ragAnswer) {
+    return {
+      text: sanitizeResponseText(ragAnswer),
+      planReason: combined ? "combined_product_inquiry" : planReason,
+    };
+  }
+
+  if (combined) {
+    return { text: combined, planReason: "combined_product_inquiry" };
+  }
+
+  if (category && productId) {
+    return {
+      text: sanitizeResponseText(buildPlaybookShortAnswer(agentConfig, productId, category)),
+      planReason: category === "pricing" ? "product_pricing_fallback" : planReason,
+    };
+  }
+
+  if (ragAnswer) {
+    return { text: sanitizeResponseText(ragAnswer), planReason };
+  }
+
+  const product = productId ? getProductById(agentConfig, productId) : null;
+  const playbookAnswer = productId
+    ? buildPlaybookShortAnswer(agentConfig, productId, "how_it_works")
+    : null;
+  return {
+    text: sanitizeResponseText(
+      playbookAnswer ||
+        (product
+          ? `${product.display_name} wird individuell nach Bedarf kalkuliert. Möchten Sie mehr Details?`
+          : "Gerne. Was möchten Sie dazu wissen?"),
+    ),
+    planReason,
+  };
 }
 
 export function buildResponsePlan({
@@ -299,6 +332,7 @@ export function buildResponsePlan({
       transcript,
       ragAnswer,
       ragGate: effectiveRagGate,
+      ragResult,
       planReason: interruptionRecovery ? "interrupt_scoped_product_qa" : "scoped_product_qa",
     });
   }
@@ -408,6 +442,7 @@ export function buildResponsePlan({
       interruptionRecovery,
       ragAnswer,
       ragGate: effectiveRagGate,
+      ragResult,
       closedDomain,
     });
   }
@@ -489,48 +524,25 @@ export function buildResponsePlan({
 
   if (resolvedIntent === "product_question") {
     const productId = memory.selected_product_id ?? matchProductAlias(agentConfig, transcript)?.id;
-    const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
-    if (combinedAnswer) {
-      return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-        text: ragAnswer ?? combinedAnswer,
-        next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
-        memory_patch: productContextMemoryPatch(memory, productId, {
-          current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
-        }),
-        quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
-        allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
-        rag_allowed: gateUsesRag(effectiveRagGate),
-        plan_reason: "combined_product_inquiry",
-        lead_transition_allowed: false,
-      });
-    }
-    const product = productId ? getProductById(agentConfig, productId) : null;
-    const category = detectShortFollowUpCategory(transcript);
-    const playbookAnswer =
-      category && productId
-        ? buildPlaybookShortAnswer(agentConfig, productId, category)
-        : null;
-    const answer =
-      ragAnswer ??
-      (playbookAnswer
-        ? sanitizeResponseText(playbookAnswer)
-        : sanitizeResponseText(
-            product
-              ? `${product.display_name} unterstützt Sichtbarkeit und Anfragen. Möchten Sie mehr Details?`
-              : "Gerne erkläre ich Ihnen unsere Lösungen. Welches Produkt interessiert Sie?"
-          ));
+    const resolved = resolveRagAwareProductAnswer({
+      agentConfig,
+      productId,
+      transcript,
+      ragAnswer,
+      ragResult,
+      planReason: "scoped_product_qa",
+    });
     return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
-      text: answer,
+      text: resolved.text,
       next_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
-      memory_patch: {
-        selected_product_id: productId ?? memory.selected_product_id,
-        product_interest: productId ?? memory.product_interest,
-        current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION
-      },
+      memory_patch: productContextMemoryPatch(memory, productId, {
+        current_state: V4_STATES.ANSWERING_PRODUCT_QUESTION,
+      }),
       quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
       allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
       rag_allowed: gateUsesRag(effectiveRagGate),
-      lead_transition_allowed: false
+      plan_reason: resolved.planReason,
+      lead_transition_allowed: false,
     });
   }
 

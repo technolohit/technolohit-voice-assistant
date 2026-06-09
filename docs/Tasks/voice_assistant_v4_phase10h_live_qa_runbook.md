@@ -355,6 +355,7 @@ docker run --rm --user 0:0 \
     --compose-project-env-keys-file /compose-project-env-keys.txt
 GATE3_PREFLIGHT
 docker exec technolohit-voice-bridge npm run rag:canary-preflight
+docker exec technolohit-voice-bridge npm run rag:retrieve-preflight
 ```
 
 **Abort Gate 3 unless every step exits zero and output includes all of:**
@@ -371,7 +372,15 @@ rag_enabled=true
 rag_sales_answerer_enabled=true
 rag_health_ok=true
 failure_count=0
+rag_retrieve_preflight=pass
+product_scope=smart_website
+hit=true
 ```
+
+If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail` with
+`fallback_reason=rag_miss` and `result_count=0`, **do not place the Gate 3 call**
+— fix RAG knowledge ingestion first. Gate 3 failed on v1.34.3 for this reason
+(`call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`); use v1.34.4+ after Codex review.
 
 Also verify the raw runtime env without printing secrets:
 
@@ -747,6 +756,40 @@ SELECT COUNT(*) FROM voice.call_summaries WHERE call_session_id = '<CALL_SESSION
 SELECT event_type FROM voice.call_events
 WHERE call_session_id = '<CALL_SESSION_ID>'::uuid AND event_type = 'post_call_summary_created';
 ```
+
+### G.3i Gate 3 combined inquiry with RAG fallback (Phase 10AC)
+
+During Gate 3, use the same combined Smart Website utterance as G.3h. If RAG retrieval
+misses (`rag_retrieval_failed`, `fallback_reason=rag_miss`), the caller must still hear
+definition + value + scope-based pricing via playbook fallback — not generic explanation only.
+
+**Preflight (required before call):**
+
+```bash
+docker exec technolohit-voice-bridge npm run rag:retrieve-preflight
+```
+
+Abort if `rag_retrieve_preflight=fail` or `result_count=0`.
+
+```sql
+SELECT created_at, event_type,
+       payload->>'fallback_reason' AS fallback_reason,
+       payload->>'rag_result_count' AS rag_result_count,
+       payload->>'rag_product_scope' AS rag_product_scope,
+       payload->>'rag_used' AS rag_used,
+       payload->>'rag_fallback_used' AS rag_fallback_used,
+       payload->>'plan_reason' AS plan_reason,
+       payload->>'response_type' AS response_type
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN ('rag_retrieval_failed', 'rag_retrieval_completed', 'response_plan_created')
+ORDER BY created_at;
+```
+
+**Pass on RAG miss (v1.34.4+):** `rag_fallback_used=true`, `plan_reason=combined_product_inquiry`,
+caller hears pricing language; no `collect_sales_context` on combined turn.
+
+**Pass on RAG hit:** `rag_used=true`, `rag_product_scope=smart_website`, scoped answer heard.
 
 ### G.4 Session close + privacy-oriented payload scan
 

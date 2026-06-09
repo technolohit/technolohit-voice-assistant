@@ -25,6 +25,12 @@ import {
   filterRagChunksByProductScope,
   resolveRagProductScope
 } from "./rag-product-scope.js";
+import {
+  buildPlaybookCombinedProductAnswer,
+  buildPlaybookShortAnswer,
+  COMBINED_LIVE_TTS_CHAR_LIMIT,
+  detectShortFollowUpCategory
+} from "./playbook-short-answer.js";
 
 const MAX_ANSWER_CHARS = 220;
 const PHONE_IN_TEXT = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
@@ -193,6 +199,39 @@ function firstQualifyingQuestion(productId) {
 
 export function fallbackToPlaybook({ productId, transcript = "", agentConfig = null } = {}) {
   const product = productId ? getProductById(agentConfig, productId) : null;
+  const combined = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
+  if (combined) {
+    const answer = trimBoundedAnswer(combined, COMBINED_LIVE_TTS_CHAR_LIMIT);
+    const safety = validateRagAnswerSafety(answer, agentConfig);
+    return {
+      ok: true,
+      answer,
+      next_question: firstQualifyingQuestion(productId),
+      used_rag: false,
+      fallback_reason: "playbook_combined_inquiry",
+      creates_lead: false,
+      safety_ok: safety.ok,
+      evidence: { hit: false, hit_count: 0 }
+    };
+  }
+
+  const category = detectShortFollowUpCategory(transcript);
+  if (category && productId) {
+    const scoped = buildPlaybookShortAnswer(agentConfig, productId, category);
+    const answer = trimBoundedAnswer(scoped);
+    const safety = validateRagAnswerSafety(answer, agentConfig);
+    return {
+      ok: true,
+      answer,
+      next_question: firstQualifyingQuestion(productId),
+      used_rag: false,
+      fallback_reason: category === "pricing" ? "playbook_pricing" : `playbook_${category}`,
+      creates_lead: false,
+      safety_ok: safety.ok,
+      evidence: { hit: false, hit_count: 0 }
+    };
+  }
+
   const explanation =
     buildSalesProductExplanation(productId) ||
     (product ? `${product.display_name} unterstützt Sichtbarkeit und Anfragen.` : "Gerne erkläre ich das kurz.");
@@ -240,12 +279,19 @@ export async function retrieveV4RagAnswer({
 } = {}) {
   const guard = ragAnswerMustNotCreateLead(true);
   const productId = resolveRagProductScope(memory);
+  const thresholdDefault = Number(config?.rag?.minScore ?? 0.72);
   const playbookFallback = () =>
     fallbackToPlaybook({ productId, transcript, agentConfig });
-  const scopedFallback = (extra = {}) => ({
+  const scopedFallback = (extra = {}, payloadMeta = null) => ({
     ...playbookFallback(),
     rag_product_scope: productId,
-    result_count: 0,
+    result_count: Number(extra?.result_count ?? extra?.evidence?.hit_count ?? 0),
+    min_score: extra?.min_score ?? payloadMeta?.min_score ?? thresholdDefault,
+    top_score: extra?.top_score ?? extra?.evidence?.top_score ?? null,
+    payload_tenant_id: payloadMeta?.tenant_id ?? null,
+    payload_agent_id: payloadMeta?.agent_id ?? null,
+    rag_http_status: extra?.rag_http_status ?? null,
+    rag_error_reason: extra?.rag_error_reason ?? null,
     ...extra
   });
 
@@ -279,8 +325,7 @@ export async function retrieveV4RagAnswer({
     };
   }
 
-  const threshold =
-    minScore ?? payload.min_score ?? Number(config?.rag?.minScore ?? 0.72);
+  const threshold = minScore ?? payload.min_score ?? thresholdDefault;
   const timeoutMs = Math.max(100, Number(config?.rag?.timeoutMs ?? 700));
 
   let ragResult;
@@ -294,21 +339,34 @@ export async function retrieveV4RagAnswer({
   }
 
   if (!ragResult?.ok) {
-    return {
-      ...scopedFallback(),
-      fallback_reason: ragResult?.reason ?? "rag_unavailable",
-      latency_ms: ragResult?.latencyMs ?? null,
-      evidence: summarizeRagEvidence(ragResult)
-    };
+    const evidence = summarizeRagEvidence(ragResult);
+    return scopedFallback(
+      {
+        fallback_reason: ragResult?.reason ?? "rag_unavailable",
+        latency_ms: ragResult?.latencyMs ?? null,
+        rag_http_status: ragResult?.status ?? null,
+        rag_error_reason: ragResult?.reason ?? "rag_unavailable",
+        evidence,
+        top_score: evidence.top_score,
+        result_count: evidence.hit_count
+      },
+      payload
+    );
   }
 
   if (!ragResult.hit || ragResult.hitCount === 0) {
-    return {
-      ...scopedFallback(),
-      fallback_reason: "rag_miss",
-      latency_ms: ragResult.latencyMs ?? null,
-      evidence: summarizeRagEvidence(ragResult)
-    };
+    const evidence = summarizeRagEvidence(ragResult);
+    return scopedFallback(
+      {
+        fallback_reason: "rag_miss",
+        latency_ms: ragResult.latencyMs ?? null,
+        rag_http_status: ragResult?.status ?? 200,
+        evidence,
+        top_score: evidence.top_score,
+        result_count: evidence.hit_count
+      },
+      payload
+    );
   }
 
   const scopedChunks = filterRagChunksByProductScope(
@@ -316,40 +374,63 @@ export async function retrieveV4RagAnswer({
     productId
   );
   if (productId && scopedChunks.length === 0) {
-    return {
-      ...scopedFallback(),
-      fallback_reason: "rag_wrong_product_scope",
-      latency_ms: ragResult.latencyMs ?? null,
-      evidence: summarizeRagEvidence(ragResult)
-    };
+    const evidence = summarizeRagEvidence(ragResult);
+    return scopedFallback(
+      {
+        fallback_reason: "rag_wrong_product_scope",
+        latency_ms: ragResult.latencyMs ?? null,
+        rag_http_status: ragResult?.status ?? 200,
+        evidence,
+        top_score: evidence.top_score,
+        result_count: 0
+      },
+      payload
+    );
   }
 
   if (Number.isFinite(ragResult.topScore) && ragResult.topScore < threshold) {
-    return {
-      ...scopedFallback(),
-      fallback_reason: "rag_low_score",
-      latency_ms: ragResult.latencyMs ?? null,
-      evidence: summarizeRagEvidence(ragResult)
-    };
+    const evidence = summarizeRagEvidence(ragResult);
+    return scopedFallback(
+      {
+        fallback_reason: "rag_low_score",
+        latency_ms: ragResult.latencyMs ?? null,
+        rag_http_status: ragResult?.status ?? 200,
+        min_score: threshold,
+        evidence,
+        top_score: evidence.top_score,
+        result_count: evidence.hit_count
+      },
+      payload
+    );
   }
 
   const scopedData = { ...(ragResult.data ?? {}), answer_context: scopedChunks };
   const built = buildAnswerFromChunks(productId, scopedData, agentConfig);
   if (!built) {
-    return {
-      ...scopedFallback(),
-      fallback_reason: "rag_unsafe_or_empty",
-      latency_ms: ragResult.latencyMs ?? null,
-      evidence: summarizeRagEvidence(ragResult)
-    };
+    const evidence = summarizeRagEvidence(ragResult);
+    return scopedFallback(
+      {
+        fallback_reason: "rag_unsafe_or_empty",
+        latency_ms: ragResult.latencyMs ?? null,
+        rag_http_status: ragResult?.status ?? 200,
+        evidence,
+        top_score: evidence.top_score,
+        result_count: evidence.hit_count
+      },
+      payload
+    );
   }
 
+  const evidence = summarizeRagEvidence(ragResult);
   return {
     ...built,
     latency_ms: ragResult.latencyMs ?? null,
-    evidence: summarizeRagEvidence(ragResult),
+    evidence,
     rag_product_scope: productId,
     result_count: scopedChunks.length,
+    rag_http_status: ragResult?.status ?? 200,
+    min_score: threshold,
+    top_score: evidence.top_score,
     payload_tenant_id: payload.tenant_id,
     payload_agent_id: payload.agent_id,
     creates_lead: guard.createsLead

@@ -289,6 +289,7 @@ export async function decideNextAction(orchestrator, input = {}) {
       });
     }
 
+    const ragEvidence = ragResult?.evidence ?? {};
     bufferEvent(
       orchestrator,
       ragResult?.used_rag ? "rag_retrieval_completed" : "rag_retrieval_failed",
@@ -297,10 +298,17 @@ export async function decideNextAction(orchestrator, input = {}) {
         rag_enabled: ragEnabled,
         rag_sales_answerer_enabled: ragSalesAnswererEnabled,
         rag_product_scope: ragResult?.rag_product_scope ?? ragProductScope,
-        rag_result_count: Number(ragResult?.result_count ?? ragResult?.evidence?.hit_count ?? 0),
+        rag_result_count: Number(ragResult?.result_count ?? ragEvidence.hit_count ?? 0),
         rag_fallback_used: !Boolean(ragResult?.used_rag),
         fallback_reason: ragResult?.fallback_reason ?? null,
-        rag_reason: ragGate.reason
+        rag_reason: ragGate.reason,
+        rag_http_status: ragResult?.rag_http_status ?? null,
+        rag_error_reason: ragResult?.rag_error_reason ?? ragResult?.fallback_reason ?? null,
+        rag_latency_ms: ragResult?.latency_ms ?? ragEvidence.latency_ms ?? null,
+        min_score: ragResult?.min_score ?? null,
+        top_score: ragResult?.top_score ?? ragEvidence.top_score ?? null,
+        payload_tenant_id: ragResult?.payload_tenant_id ?? null,
+        payload_agent_id: ragResult?.payload_agent_id ?? null
       },
       ragResult?.latency_ms ?? null
     );

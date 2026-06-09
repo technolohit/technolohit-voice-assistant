@@ -2,7 +2,7 @@
 
 Date: 2026-06-03  
 Target release: `voice-bridge-v1.30.0`  
-Status: **Implementation complete; RAG-on canary blocked until Phase 10V Gate 1 and Gate 2 pass**
+Status: **Gate 2 PASS (v1.34.3). Gate 3 FAIL (v1.34.3, `call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`). Phase 10AC fixes fallback + adds `rag:retrieve-preflight`. No second Gate 3 until v1.34.4+ and retrieve preflight passes.**
 
 ## Objective
 
@@ -56,6 +56,11 @@ The assistant continues with a bounded non-RAG product answer when retrieval:
 - produces an unsafe or forbidden answer.
 
 The fallback does not restart intake or enter `collect_sales_context` unless the caller explicitly asks for contact, callback, or project discussion.
+
+**Phase 10AC (v1.34.4):** On RAG miss/timeout, combined Smart Website inquiries fall back to the
+Gate 2 combined playbook answer (definition + value + scope-based pricing). Scoped pricing
+follow-ups (`Was kostet das?`) use pricing playbook with Umfang language. Run
+`npm run rag:retrieve-preflight` before Gate 3 — health-only `rag:canary-preflight` is insufficient.
 
 ### Telemetry and response-plan evidence
 
