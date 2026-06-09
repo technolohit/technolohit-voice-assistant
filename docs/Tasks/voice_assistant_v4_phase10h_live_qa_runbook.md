@@ -810,6 +810,12 @@ caller hears pricing language; no `collect_sales_context` on combined turn.
 
 **Pass on RAG hit:** `rag_used=true`, `rag_product_scope=smart_website`, scoped answer heard.
 
+**Phase 10AF / v1.34.7+ live timeout retry:** If the first live retrieve attempt hits the
+700 ms boundary, the v4 live path retries once on `timeout` only. A successful retry should
+produce `rag_retrieval_completed` with `rag_attempt_count=2`, `rag_timeout_count=1`,
+and `rag_attempt_fallback_reasons` containing `timeout`. Do not classify Gate 3 as full
+RAG pass unless the live call has `rag_retrieval_completed` / `rag_used=true`.
+
 ### G.4 Session close + privacy-oriented payload scan
 
 ```sql
@@ -951,14 +957,19 @@ SELECT
   payload->>'rag_result_count' AS rag_result_count,
   payload->>'used_rag' AS used_rag,
   payload->>'rag_fallback_used' AS rag_fallback_used,
-  payload->>'fallback_reason' AS fallback_reason
+  payload->>'fallback_reason' AS fallback_reason,
+  payload->>'rag_attempt_count' AS rag_attempt_count,
+  payload->>'rag_success_count' AS rag_success_count,
+  payload->>'rag_timeout_count' AS rag_timeout_count,
+  payload->>'rag_attempt_fallback_reasons' AS rag_attempt_fallback_reasons,
+  payload->>'rag_total_latency_ms' AS rag_total_latency_ms
 FROM voice.call_quality_events
 WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
   AND event_type IN ('rag_retrieval_started', 'rag_retrieval_completed', 'rag_retrieval_failed')
 ORDER BY created_at;
 ```
 
-**Pass:** product scope matches the active product, completed rows have bounded latency, and failed rows use a safe fallback. Payloads must not contain raw query or transcript text.
+**Pass:** product scope matches the active product, completed rows have bounded latency, and failed rows use a safe fallback. For Gate 3 RAG-on acceptance, at least one live turn must show `rag_retrieval_completed`, `used_rag=true`, and `rag_result_count > 0`. Payloads must not contain raw query or transcript text.
 
 ### G.9 Response-plan RAG evidence (Phase 10U)
 

@@ -268,6 +268,65 @@ function buildAnswerFromChunks(productId, ragData, agentConfig) {
   };
 }
 
+const LIVE_RAG_MAX_ATTEMPTS = 2;
+
+function finiteLatencyMs(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
+function summarizeLiveRagAttempts(attempts = []) {
+  const safeAttempts = attempts.filter(Boolean);
+  const successCount = safeAttempts.filter((entry) => entry?.ok && entry?.hit).length;
+  const timeoutCount = safeAttempts.filter((entry) => entry?.reason === "timeout").length;
+  const fallbackReasons = [
+    ...new Set(
+      safeAttempts
+        .filter((entry) => !entry?.ok)
+        .map((entry) => String(entry?.reason ?? "rag_unavailable"))
+        .filter(Boolean)
+    )
+  ];
+  return {
+    attempt_count: safeAttempts.length,
+    success_count: successCount,
+    timeout_count: timeoutCount,
+    attempt_fallback_reasons: fallbackReasons,
+    total_latency_ms: safeAttempts.reduce(
+      (sum, entry) => sum + finiteLatencyMs(entry?.latencyMs),
+      0
+    )
+  };
+}
+
+async function retrieveWithLiveTimeoutRetry({ config, payload, retrieveFn, timeoutMs }) {
+  const attempts = [];
+  for (let index = 0; index < LIVE_RAG_MAX_ATTEMPTS; index += 1) {
+    let ragResult;
+    try {
+      ragResult = await retrieveFn(config, { ...payload, timeoutMs });
+    } catch {
+      return {
+        ragResult: null,
+        meta: summarizeLiveRagAttempts(attempts),
+        thrown: true
+      };
+    }
+
+    attempts.push(ragResult);
+    if (ragResult?.ok || ragResult?.reason !== "timeout") {
+      break;
+    }
+  }
+
+  const selected = attempts.find((entry) => entry?.ok && entry?.hit) ?? attempts[attempts.length - 1] ?? null;
+  return {
+    ragResult: selected,
+    meta: summarizeLiveRagAttempts(attempts),
+    thrown: false
+  };
+}
+
 export async function retrieveV4RagAnswer({
   config,
   agentConfig = null,
@@ -328,12 +387,24 @@ export async function retrieveV4RagAnswer({
   const threshold = minScore ?? payload.min_score ?? thresholdDefault;
   const timeoutMs = Math.max(100, Number(config?.rag?.timeoutMs ?? 700));
 
-  let ragResult;
-  try {
-    ragResult = await retrieveFn(config, { ...payload, timeoutMs });
-  } catch {
+  const { ragResult, meta: attemptMeta, thrown } = await retrieveWithLiveTimeoutRetry({
+    config,
+    payload,
+    retrieveFn,
+    timeoutMs
+  });
+  const withAttemptMeta = (extra = {}) => ({
+    ...extra,
+    rag_attempt_count: attemptMeta.attempt_count,
+    rag_success_count: attemptMeta.success_count,
+    rag_timeout_count: attemptMeta.timeout_count,
+    rag_attempt_fallback_reasons: attemptMeta.attempt_fallback_reasons,
+    rag_total_latency_ms: attemptMeta.total_latency_ms || null
+  });
+
+  if (thrown) {
     return {
-      ...scopedFallback(),
+      ...scopedFallback(withAttemptMeta()),
       fallback_reason: "rag_request_failed"
     };
   }
@@ -341,15 +412,15 @@ export async function retrieveV4RagAnswer({
   if (!ragResult?.ok) {
     const evidence = summarizeRagEvidence(ragResult);
     return scopedFallback(
-      {
+      withAttemptMeta({
         fallback_reason: ragResult?.reason ?? "rag_unavailable",
-        latency_ms: ragResult?.latencyMs ?? null,
+        latency_ms: attemptMeta.total_latency_ms || (ragResult?.latencyMs ?? null),
         rag_http_status: ragResult?.status ?? null,
         rag_error_reason: ragResult?.reason ?? "rag_unavailable",
         evidence,
         top_score: evidence.top_score,
         result_count: evidence.hit_count
-      },
+      }),
       payload
     );
   }
@@ -357,14 +428,14 @@ export async function retrieveV4RagAnswer({
   if (!ragResult.hit || ragResult.hitCount === 0) {
     const evidence = summarizeRagEvidence(ragResult);
     return scopedFallback(
-      {
+      withAttemptMeta({
         fallback_reason: "rag_miss",
-        latency_ms: ragResult.latencyMs ?? null,
+        latency_ms: attemptMeta.total_latency_ms || (ragResult.latencyMs ?? null),
         rag_http_status: ragResult?.status ?? 200,
         evidence,
         top_score: evidence.top_score,
         result_count: evidence.hit_count
-      },
+      }),
       payload
     );
   }
@@ -376,14 +447,14 @@ export async function retrieveV4RagAnswer({
   if (productId && scopedChunks.length === 0) {
     const evidence = summarizeRagEvidence(ragResult);
     return scopedFallback(
-      {
+      withAttemptMeta({
         fallback_reason: "rag_wrong_product_scope",
-        latency_ms: ragResult.latencyMs ?? null,
+        latency_ms: attemptMeta.total_latency_ms || (ragResult.latencyMs ?? null),
         rag_http_status: ragResult?.status ?? 200,
         evidence,
         top_score: evidence.top_score,
         result_count: 0
-      },
+      }),
       payload
     );
   }
@@ -391,15 +462,15 @@ export async function retrieveV4RagAnswer({
   if (Number.isFinite(ragResult.topScore) && ragResult.topScore < threshold) {
     const evidence = summarizeRagEvidence(ragResult);
     return scopedFallback(
-      {
+      withAttemptMeta({
         fallback_reason: "rag_low_score",
-        latency_ms: ragResult.latencyMs ?? null,
+        latency_ms: attemptMeta.total_latency_ms || (ragResult.latencyMs ?? null),
         rag_http_status: ragResult?.status ?? 200,
         min_score: threshold,
         evidence,
         top_score: evidence.top_score,
         result_count: evidence.hit_count
-      },
+      }),
       payload
     );
   }
@@ -409,14 +480,14 @@ export async function retrieveV4RagAnswer({
   if (!built) {
     const evidence = summarizeRagEvidence(ragResult);
     return scopedFallback(
-      {
+      withAttemptMeta({
         fallback_reason: "rag_unsafe_or_empty",
-        latency_ms: ragResult.latencyMs ?? null,
+        latency_ms: attemptMeta.total_latency_ms || (ragResult.latencyMs ?? null),
         rag_http_status: ragResult?.status ?? 200,
         evidence,
         top_score: evidence.top_score,
         result_count: evidence.hit_count
-      },
+      }),
       payload
     );
   }
@@ -424,7 +495,8 @@ export async function retrieveV4RagAnswer({
   const evidence = summarizeRagEvidence(ragResult);
   return {
     ...built,
-    latency_ms: ragResult.latencyMs ?? null,
+    ...withAttemptMeta(),
+    latency_ms: attemptMeta.total_latency_ms || (ragResult.latencyMs ?? null),
     evidence,
     rag_product_scope: productId,
     result_count: scopedChunks.length,
