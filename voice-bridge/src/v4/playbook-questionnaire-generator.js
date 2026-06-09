@@ -29,7 +29,7 @@ export const QUESTIONNAIRE_BLOCK_REASONS = Object.freeze({
 /** Hardcoded defaults when playbook has no questionnaire_policy (or runtime flag off). */
 export const HARDCODED_QUESTIONNAIRE_DEFAULTS = Object.freeze({
   max_question_chars: MAX_PHONE_QUESTION_CHARS,
-  soft_prefix: "Wenn Sie möchten, ",
+  soft_prefix: "Wenn Sie möchten: ",
   generic_project_context:
     "Worum geht es kurz bei Ihrem Projekt, damit unser Team gezielter antworten kann?",
   products: Object.freeze({

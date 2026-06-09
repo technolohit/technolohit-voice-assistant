@@ -39,6 +39,7 @@ test("10AQ: Smart Website questionnaire asks project-context question after answ
   assert.equal(result.mode, "project_context");
   assert.equal(result.questions.length, 1);
   assert.match(result.questions[0].text, /Website|Relaunch|Ziele/i);
+  assert.doesNotMatch(result.questions[0].text, /möchten,\s+[A-ZÄÖÜ]/);
   assert.equal(result.questions[0].asks_pii, false);
   assert.ok(result.questions[0].text.length <= MAX_PHONE_QUESTION_CHARS);
 });

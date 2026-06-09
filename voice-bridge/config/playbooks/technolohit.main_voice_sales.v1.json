@@ -157,7 +157,7 @@
   "questionnaire_policy": {
     "answer_before_intake": true,
     "max_question_chars": 120,
-    "soft_prefix": "Wenn Sie möchten, ",
+    "soft_prefix": "Wenn Sie möchten: ",
     "generic_project_context_question": "Worum geht es kurz bei Ihrem Projekt, damit unser Team gezielter antworten kann?",
     "contact_preference_question": "Möchten Sie telefonisch oder per E-Mail starten?",
     "products": {
