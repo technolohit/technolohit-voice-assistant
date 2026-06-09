@@ -5,10 +5,11 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): Gate 3 BLOCKED.** v1.34.4 deployed safely; retrieve preflight failed
-with `rag_retrieve_timeout` (705 ms at 700 ms budget). No live Gate 3 call was placed.
-**No Gate 3 canary** until `rag:retrieve-preflight` passes at runtime timeout.
-If preflight fails with timeout, run `rag:retrieve-diagnostics` before any retry decision.
+**Phase 10O-B (RAG-on): Gate 3 BLOCKED pending v1.34.6 preflight.** v1.34.4 deployed safely;
+retrieve preflight failed with `rag_retrieve_timeout` (705 ms at 700 ms budget). v1.34.5 diagnostics
+then showed Smart Website retrieval was present and fast across repeated attempts. No live Gate 3
+call was placed. **No Gate 3 canary** until v1.34.6+ `rag:retrieve-preflight` passes at runtime
+timeout with majority success.
 Gate 2 remains **PASS** (v4/RAG-off).
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
@@ -46,7 +47,7 @@ Gate 3 is invalid unless **all three** checks pass immediately before the call:
    report `rag_enabled=true` and `rag_sales_answerer_enabled=true`.
 3. `docker exec technolohit-voice-bridge npm run rag:retrieve-preflight` — must
    report `rag_retrieve_preflight=pass`, `product_scope=smart_website`, `hit=true`,
-   and `result_count>0`. **Abort Gate 3** on any failure.
+   `result_count>0`, and `success_count>=required_success_count`. **Abort Gate 3** on any failure.
 4. If step 3 fails with `fallback_reason=rag_retrieve_timeout`, run
    `docker exec technolohit-voice-bridge npm run rag:retrieve-diagnostics`.
    - `classification=latency_budget_issue` → team decision on canary `VOICE_RAG_TIMEOUT_MS`; still no Gate 3 until preflight passes.

@@ -35,12 +35,12 @@ Last updated: 2026-06-03
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AD — RAG retrieve timeout diagnostics (Gate 3 readiness hardening)** |
+| **Current completed phase** | **Phase 10AE - RAG retrieve preflight jitter guard** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 blocked** — v1.34.4 retrieve preflight failed with `rag_retrieve_timeout` (705 ms at 700 ms budget); no live Gate 3 call placed |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 blocked pending v1.34.6+ preflight** - v1.34.5 diagnostics showed Smart Website retrieval is present; no live Gate 3 call placed |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Deploy **`voice-bridge-v1.34.5`** after Codex review. Run `rag:retrieve-diagnostics` when preflight times out. **No Gate 3 call** until `rag:retrieve-preflight` passes at runtime timeout. Team decision required if diagnostics show `latency_budget_issue`. Production stays v3/RAG-off. |
+| **Next step** | Deploy **`voice-bridge-v1.34.6`** after Codex review. Run `rag:canary-preflight` and jitter-guarded `rag:retrieve-preflight`. **No Gate 3 call** until retrieve preflight passes with majority success. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A–10Y plus 10Z/10AA/10AB/10AC/10AD implemented** (route, VAD, STT, dialogue, TTS, barge-in, quality flush, live PSTN QA, env ownership, post-call handoff, combined inquiry, RAG fallback, retrieve preflight, timeout diagnostics); **Gate 2 passed on v1.34.3+**; **Gate 3 blocked** — retrieve preflight timeout on v1.34.4, no live call placed
+- Phase 10 live AudioSocket wiring: **10A-10Y plus 10Z/10AA/10AB/10AC/10AD/10AE implemented** (route, VAD, STT, dialogue, TTS, barge-in, quality flush, live PSTN QA, env ownership, post-call handoff, combined inquiry, RAG fallback, retrieve preflight, timeout diagnostics, jitter guard); **Gate 2 passed on v1.34.3+**; **Gate 3 blocked pending v1.34.6+ preflight**, no live call placed
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -1140,6 +1140,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AB supervised Gate 2 live validation on `voice-bridge-v1.34.3` proves the caller hears definition + value + scoped pricing, post-call summary is created, barge-in/context is preserved, privacy scan passes, and rollback succeeds (`call_session_id=9b7e2019-4211-46af-b4ce-16dc575dfa61`).
 - [x] Successful: Phase 10AC RAG fallback + retrieve preflight — transcript-aware playbook fallback on RAG miss, `rag:retrieve-preflight` blocks Gate 3 when Smart Website knowledge is not retrievable — [report](./voice_assistant_v4_phase10ac_rag_retrieval_and_fallback_fix_report.md) — v1.34.4. Gate 3 failed on v1.34.3 (`call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`).
 - [x] Successful: Phase 10AD retrieve timeout diagnostics — `rag:retrieve-diagnostics` classifies timeout vs miss vs latency budget issue; preflight failure reasons explicit — [report](./voice_assistant_v4_phase10ad_rag_retrieve_timeout_diagnostics_report.md) — target v1.34.5. v1.34.4 correctly aborted Gate 3 on `rag_retrieve_timeout`.
+- [x] Successful: Phase 10AE retrieve preflight jitter guard - `rag:retrieve-preflight` uses bounded retry and requires majority success at the configured runtime timeout - [report](./voice_assistant_v4_phase10ae_rag_retrieve_preflight_jitter_guard_report.md) - target v1.34.6.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).

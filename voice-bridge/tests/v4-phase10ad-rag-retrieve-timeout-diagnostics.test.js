@@ -105,6 +105,17 @@ const timeoutRetrieveFn = async (_config, payload) => ({
   latencyMs: Number(payload?.timeoutMs ?? 700) + 5,
 });
 
+function flakyOnceThenHitRetrieveFn() {
+  let calls = 0;
+  return async () => {
+    calls += 1;
+    if (calls === 1) {
+      return { ok: false, reason: "timeout", latencyMs: 706 };
+    }
+    return hitRetrieveFn();
+  };
+}
+
 test("10AD: retrieve preflight distinguishes timeout from rag_miss", async () => {
   await withEnv(ragEnv(), async () => {
     const timeoutResult = await runRagRetrievePreflight(loadConfig(), {
@@ -126,7 +137,7 @@ test("10AD: retrieve preflight distinguishes timeout from rag_miss", async () =>
   });
 });
 
-test("10AD: retrieve preflight remains strict on configured runtime timeout", async () => {
+test("10AD: retrieve preflight remains strict when runtime timeout repeats", async () => {
   await withEnv(ragEnv({ VOICE_RAG_TIMEOUT_MS: "700" }), async () => {
     const result = await runRagRetrievePreflight(loadConfig(), {
       skipCanary: true,
@@ -135,6 +146,22 @@ test("10AD: retrieve preflight remains strict on configured runtime timeout", as
     assert.equal(result.ok, false);
     assert.equal(result.fallback_reason, "rag_retrieve_timeout");
     assert.equal(result.timeout_ms, 700);
+  });
+});
+
+test("10AE: retrieve preflight tolerates one-off jitter but requires majority success", async () => {
+  await withEnv(ragEnv({ VOICE_RAG_TIMEOUT_MS: "700" }), async () => {
+    const result = await runRagRetrievePreflight(loadConfig(), {
+      skipCanary: true,
+      retrieveFn: flakyOnceThenHitRetrieveFn(),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.attempt_count, 3);
+    assert.equal(result.success_count, 2);
+    assert.equal(result.required_success_count, 2);
+    assert.equal(result.timeout_count, 1);
+    assert.equal(result.fallback_reason, null);
+    assert.equal(result.hit, true);
   });
 });
 
@@ -219,6 +246,8 @@ test("10AD: preflight output contains no raw query", async () => {
     );
     assert.match(output, /fallback_reason=rag_retrieve_timeout/);
     assert.match(output, /failures=rag_retrieve_timeout/);
+    assert.match(output, /attempt_count=3/);
+    assert.match(output, /success_count=0/);
     assert.doesNotMatch(output, /Was ist Smart Website/);
   });
 });

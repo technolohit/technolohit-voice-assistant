@@ -377,9 +377,15 @@ failure_count=0
 rag_retrieve_preflight=pass
 product_scope=smart_website
 hit=true
+result_count>0
+success_count>=required_success_count
 ```
 
 If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail`, **do not place the Gate 3 call**.
+
+Phase 10AE / v1.34.6 makes `rag:retrieve-preflight` resilient to one-off jitter by running
+three retrieve attempts at the configured `VOICE_RAG_TIMEOUT_MS`. It still blocks Gate 3 unless
+the majority succeeds. Do not compensate for a failed preflight by placing a live call.
 
 | `fallback_reason` | Action |
 |-------------------|--------|
@@ -392,6 +398,8 @@ If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail`, **do not plac
 v1.34.4 correctly aborted Gate 3 on `rag_retrieve_timeout` (705 ms at 700 ms budget).
 Use v1.34.5+ for explicit diagnostics. Gate 3 live failure on v1.34.3 was a separate
 fallback issue fixed in 10AC (`call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`).
+v1.34.5 diagnostics showed Smart Website retrieval was present and fast across repeated attempts;
+use v1.34.6+ for jitter-guarded retrieve preflight.
 
 Also verify the raw runtime env without printing secrets:
 

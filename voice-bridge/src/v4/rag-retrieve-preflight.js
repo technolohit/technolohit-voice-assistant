@@ -18,6 +18,39 @@ function safeBoolean(value) {
   return value ? "true" : "false";
 }
 
+const DEFAULT_PREFLIGHT_ATTEMPTS = 3;
+
+function resolvePreflightAttemptCount(options = {}) {
+  const raw = Number(options.attemptCount ?? process.env.VOICE_RAG_RETRIEVE_PREFLIGHT_ATTEMPTS ?? DEFAULT_PREFLIGHT_ATTEMPTS);
+  if (!Number.isFinite(raw)) return DEFAULT_PREFLIGHT_ATTEMPTS;
+  return Math.max(1, Math.min(5, Math.trunc(raw)));
+}
+
+function summarizeAttemptResults(attempts = [], payload = {}) {
+  const outcomes = attempts.map((entry) => ({
+    ragResult: entry.ragResult,
+    outcome: classifyRetrieveOutcome(entry.ragResult, payload)
+  }));
+  const hits = outcomes.filter((entry) => entry.outcome.hit);
+  const requiredSuccessCount = Math.max(1, Math.ceil(outcomes.length / 2));
+  const selected = hits[0] ?? outcomes[outcomes.length - 1] ?? {
+    ragResult: null,
+    outcome: classifyRetrieveOutcome(null, payload)
+  };
+  const fallbackReasons = [
+    ...new Set(outcomes.map((entry) => entry.outcome.fallback_reason).filter(Boolean))
+  ];
+  return {
+    selected,
+    attempt_count: outcomes.length,
+    success_count: hits.length,
+    required_success_count: requiredSuccessCount,
+    timeout_count: outcomes.filter((entry) => entry.outcome.fallback_reason === "rag_retrieve_timeout").length,
+    fallback_reasons: fallbackReasons,
+    passed: hits.length >= requiredSuccessCount
+  };
+}
+
 export async function runRagRetrievePreflight(config, options = {}) {
   const retrieveFn = options.retrieveFn ?? retrieveRagContext;
   const agentConfig = options.agentConfig ?? loadAgentConfig(config);
@@ -94,36 +127,26 @@ export async function runRagRetrievePreflight(config, options = {}) {
     };
   }
 
-  let ragResult;
-  try {
-    ragResult = await retrieveFn(config, {
-      ...payload,
-      timeoutMs: runtimeTimeout
-    });
-  } catch {
-    failures.push("rag_unavailable");
-    return {
-      ok: false,
-      checks,
-      failures,
-      canary,
-      retrieve: { ok: false, reason: "request_failed" },
-      product_scope: PROBE_PRODUCT_SCOPE,
-      result_count: 0,
-      hit: false,
-      top_score: null,
-      fallback_reason: "rag_unavailable",
-      payload_tenant_id: payload.tenant_id,
-      payload_agent_id: payload.agent_id,
-      timeout_ms: runtimeTimeout,
-      min_score: payload.min_score ?? null
-    };
+  const attemptCount = resolvePreflightAttemptCount(options);
+  const attempts = [];
+  for (let index = 0; index < attemptCount; index += 1) {
+    try {
+      const ragResult = await retrieveFn(config, {
+        ...payload,
+        timeoutMs: runtimeTimeout
+      });
+      attempts.push({ ragResult });
+    } catch {
+      attempts.push({ ragResult: { ok: false, reason: "request_failed", latencyMs: null } });
+    }
   }
 
-  const outcome = classifyRetrieveOutcome(ragResult, payload);
+  const summary = summarizeAttemptResults(attempts, payload);
+  const { ragResult, outcome } = summary.selected;
   checks.rag_retrieve_ok = Boolean(ragResult?.ok);
   checks.rag_retrieve_parseable = ragResult != null && typeof ragResult === "object";
-  if (outcome.failure) failures.push(outcome.failure);
+  checks.rag_retrieve_success_count = summary.success_count >= summary.required_success_count;
+  if (!summary.passed) failures.push(outcome.failure ?? "rag_retrieve_failed");
 
   return {
     ok: failures.length === 0,
@@ -139,6 +162,11 @@ export async function runRagRetrievePreflight(config, options = {}) {
       latency_ms: ragResult?.latencyMs ?? null,
       fallback_reason: outcome.fallback_reason
     },
+    attempt_count: summary.attempt_count,
+    success_count: summary.success_count,
+    required_success_count: summary.required_success_count,
+    timeout_count: summary.timeout_count,
+    attempt_fallback_reasons: summary.fallback_reasons,
     product_scope: PROBE_PRODUCT_SCOPE,
     result_count: outcome.result_count,
     hit: outcome.hit,
@@ -166,6 +194,11 @@ export function formatRagRetrievePreflightLines(result) {
     `rag_http_status=${retrieve.rag_http_status ?? "none"}`,
     `rag_latency_ms=${retrieve.latency_ms ?? 0}`,
     `timeout_ms=${result?.timeout_ms ?? 0}`,
+    `attempt_count=${result?.attempt_count ?? 0}`,
+    `success_count=${result?.success_count ?? 0}`,
+    `required_success_count=${result?.required_success_count ?? 0}`,
+    `timeout_count=${result?.timeout_count ?? 0}`,
+    `attempt_fallback_reasons=${result?.attempt_fallback_reasons?.join(",") || "none"}`,
     `min_score=${result?.min_score ?? "none"}`,
     `failure_count=${result?.failures?.length ?? 0}`,
     `failures=${result?.failures?.join(",") || "none"}`
