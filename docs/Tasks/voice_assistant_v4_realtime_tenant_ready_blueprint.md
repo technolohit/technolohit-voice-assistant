@@ -35,12 +35,12 @@ Last updated: 2026-06-09
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AK - Closing / Stop Intent Focused Fix implemented (non-live QA passed; awaiting Codex review)** |
+| **Current completed phase** | **Phase 10AK - Closing / Stop Intent Focused Fix accepted** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11: live RAG used successfully, Smart Website combined inquiry accepted by human QA, safe answer/RAG/context previews present, privacy scan passed, rollback passed. |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12: closing phrase produced goodbye only; no RAG/fallback/lead/product continuation after closing; post-call/privacy/rollback passed. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Codex review of Phase 10AK, release `voice-bridge-v1.34.12`, then optional small supervised live closing canary. Production stays v3/RAG-off. |
+| **Next step** | **Phase 10AM - First TechnoloHit Structured Playbook**. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A-10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH/10AI/10AJ implemented**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; focused closing/stop intent fix remains before broader production-readiness canary.
+- Phase 10 live AudioSocket wiring: **10A-10AK implemented and accepted**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; **closing/stop intent canary passed on v1.34.12**.
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -79,7 +79,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 - Live AudioSocket -> v4 Canary Wiring          [in progress - Gate 2 and Gate 3 RAG/content passed; closing/stop intent follow-up pending]
+Phase 10 - Live AudioSocket -> v4 Canary Wiring          [completed through 10AK - Gate 2, Gate 3 RAG/content, and closing canary passed]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -556,9 +556,9 @@ Status:
 - [x] Successful: post-call summary created.
 - [x] Successful: privacy scan passed.
 - [x] Successful: rollback to v3/RAG-off completed.
-- [ ] Successful: closing / stop intent priority fixed and validated.
+- [x] Successful: closing / stop intent priority fixed and validated on `voice-bridge-v1.34.12` (`call_session_id=b18cd9c4-c427-4ffa-92f4-967f9b9aa713`).
 
-Classification: **Gate 3 RAG/content PASS with minor conversational blocker.**
+Classification: **Gate 3 RAG/content PASS. Closing / stop intent follow-up PASS.**
 
 #### Phase 10AK - Closing / Stop Intent Focused Fix
 
@@ -570,8 +570,10 @@ Goal: fix closing priority without starting a large redesign.
 - [x] Successful: tests for closing phrases are added (`tests/v4-phase10ak-closing-stop-intent.test.js`).
 - [x] Successful: tests for context-aware "Stopp" are added (bare "Stopp" stays barge-in/interruption wait; "Stopp" + danke/tschüss closes).
 - [x] Successful: non-live QA scenarios pass (492 voice-bridge tests, 26 v3 dialogue scenarios, rag-api pytest).
-- [ ] Successful: one small supervised live closing canary runs only if needed.
-- [ ] Successful: v3/RAG-off is restored after any live test.
+- [x] Successful: one small supervised live closing canary passed on `voice-bridge-v1.34.12`.
+- [x] Successful: v3/RAG-off restored after live test.
+- [x] Successful: no further live calls are needed for Phase 10AK.
+- [ ] Follow-up (low priority): investigate duplicate closing `response_plan_created` rows (`turn_index=2` and `turn_index=3`) and dedupe if useful for QA/observability. This is **not** a Phase 10AK blocker because both rows carried the correct closing response and no bad plan/RAG occurred after the latest closing row.
 
 #### Phase 10AL - Blueprint Agent Behavior Architecture
 
@@ -1568,7 +1570,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AH live RAG path equivalence — `rag:live-path-preflight` uses `retrieveV4RagAnswer()`; filter-stage diagnostics on live RAG events — [report](./voice_assistant_v4_phase10ah_live_rag_path_equivalence_report.md) — target v1.34.9.
 - [x] Successful: Phase 10AI RAG content extraction hotfix — live-path preflight showed retrieve/filter pass but `rag_unsafe_or_empty`; voice-bridge now reads RAG API `content` chunks — [report](./voice_assistant_v4_phase10ai_rag_content_extraction_hotfix_report.md) — target v1.34.10.
 - [x] Successful: Phase 10AJ RAG answer quality and QA evidence - Gate 3 RAG/content canary passed on v1.34.11 with live RAG used, accepted Smart Website combined inquiry, safe response/RAG/context previews, post-call summary, privacy pass, and rollback - [report](./voice_assistant_v4_phase10aj_rag_answer_quality_and_qa_evidence_report.md).
-- [x] Successful: Phase 10AK closing / stop intent focused fix - closing phrases override RAG, fallback, product continuation, interrupt follow-up, and lead capture — [report](./voice_assistant_v4_phase10ak_closing_stop_intent_fix_report.md) — target v1.34.12 (live closing canary optional, pending).
+- [x] Successful: Phase 10AK closing / stop intent focused fix - closing phrases override RAG, fallback, product continuation, interrupt follow-up, and lead capture; supervised live closing canary passed on `voice-bridge-v1.34.12` (`call_session_id=b18cd9c4-c427-4ffa-92f4-967f9b9aa713`) — [report](./voice_assistant_v4_phase10ak_closing_stop_intent_fix_report.md).
 - [x] Successful: Phase 10AL Agent Behavior Architecture documented in this blueprint - role boundary, conversation priority contract, tenant playbook direction, eval scenarios, and questionnaire-to-playbook direction.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
@@ -1632,8 +1634,8 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **10A-10AK implemented**; Gate 2 passed; Gate 3 RAG/content canary passed on v1.34.11; Phase 10AK closing/stop intent fix implemented (target v1.34.12); production v4 **not globally enabled**.
-- **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, broader supervised PSTN QA/repeatability, closing/stop intent validation, and explicit production approval.
+- Phase 10 live AudioSocket wiring: **10A-10AK implemented and accepted**; Gate 2 passed; Gate 3 RAG/content canary passed on v1.34.11; Phase 10AK closing/stop intent canary passed on v1.34.12; production v4 **not globally enabled**.
+- **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, broader supervised PSTN QA/repeatability, and explicit production approval.
 
 ### Phase 10H — Supervised live PSTN QA (documentation)
 

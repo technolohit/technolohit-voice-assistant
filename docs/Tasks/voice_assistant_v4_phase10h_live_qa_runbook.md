@@ -470,6 +470,7 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E5h | Post-interrupt latency (10P) | SQL: `interrupt_followup_latency_metrics` row with non-null `barge_in_detected_to_followup_speech_start_ms` when follow-up completes |
 | E5i | Combined Smart Website inquiry (10AB) | Ask **Was ist Smart Website, was macht sie und was kostet sie?** — caller hears definition + value + scoped pricing without truncation; G.3h shows `combined_product_inquiry` |
 | E5j | RAG answer quality evidence (10AJ) | Gate 3 RAG-on combined inquiry: caller hears a natural Smart Website answer with definition + value + scoped pricing; SQL shows `rag_used=true`, `assistant_response_preview`, `rag_answer_preview`, and `answer_context_preview`; post-call summary must not use **Danke, das reicht erstmal** as `caller_need` |
+| E5k | Closing priority (10AK) | After a successful Smart Website answer, say **Danke, das reicht erstmal** — caller hears only **Sehr gerne. Dann wünsche ich Ihnen noch einen schönen Tag. Auf Wiederhören.**; no RAG/fallback/lead/product continuation after closing |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -873,6 +874,54 @@ LIMIT 1;
 
 **Pass:** closing-only phrases such as `Danke, das reicht erstmal` are not stored as
 `caller_need`.
+
+### G.3k Closing priority evidence (Phase 10AK)
+
+After the Smart Website combined answer, say **Danke, das reicht erstmal**.
+
+**Expected spoken answer:**
+
+```text
+Sehr gerne. Dann wünsche ich Ihnen noch einen schönen Tag. Auf Wiederhören.
+```
+
+SQL evidence:
+
+```sql
+SELECT created_at,
+       payload->>'turn_index' AS turn_index,
+       payload->>'response_type' AS response_type,
+       payload->>'plan_reason' AS plan_reason,
+       payload->>'assistant_response_preview' AS assistant_response_preview
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'response_plan_created'
+ORDER BY created_at;
+```
+
+Pass criteria:
+
+- At least one row after the closing phrase has `response_type=closing`.
+- The closing row has `plan_reason=closing_intent`.
+- `assistant_response_preview` contains the expected polite goodbye.
+- No later row has `response_type IN ('fallback_clarification', 'collect_sales_context', 'product_question_answer', 'lead_ready')`.
+- No `rag_retrieval_started` occurs after the latest closing row.
+
+Known accepted Phase 10AK result:
+
+- `voice-bridge-v1.34.12`
+- `call_session_id=b18cd9c4-c427-4ffa-92f4-967f9b9aa713`
+- human QA: PASS
+- post-call summary: PASS
+- privacy scan: PASS
+- rollback: PASS
+
+Low-priority follow-up:
+
+Two closing `response_plan_created` rows may appear for the same closing intent. This is
+not a Phase 10AK failure if both rows contain the correct closing response and no bad
+plan/RAG occurs after the latest closing row. Treat possible dedupe as QA/observability
+cleanup only.
 
 ### G.4 Session close + privacy-oriented payload scan
 

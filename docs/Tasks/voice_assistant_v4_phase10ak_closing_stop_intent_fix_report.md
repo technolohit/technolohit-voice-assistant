@@ -1,8 +1,9 @@
 # Phase 10AK — Closing / Stop Intent Focused Fix Report
 
 Date: 2026-06-09
-Target release: `voice-bridge-v1.34.12` (after Codex review; not committed/tagged yet)
+Release: `voice-bridge-v1.34.12`
 Production status: **v3 / RAG-off unchanged**. No production env, deployment, or Dockerfile changes.
+Final status: **PASS / accepted** after supervised live closing canary.
 
 ## Goal
 
@@ -166,11 +167,111 @@ Not changed: production env files, deployment files, Dockerfiles, `turn-assistan
 
 - Gate 2: PASS (unchanged).
 - Gate 3 RAG/content: PASS on v1.34.11 (unchanged).
-- Phase 10AK closing fix: implemented and verified non-live. One small supervised live
-  closing canary may run after Codex review and v1.34.12 release, only if needed; restore
-  v3/RAG-off afterwards.
+- Phase 10AK closing fix: **PASS** on `voice-bridge-v1.34.12`.
 
-## Commit/tag readiness
+## Supervised live canary result
 
-Ready for Codex review. Do not commit, tag, push, or publish until review approval.
-Expected release after approval: `voice-bridge-v1.34.12`.
+Date: 2026-06-09
+
+Release tested:
+
+- `voice-bridge`: `thnhit/technhvoice:voice-bridge-v1.34.12`
+- `rag-api`: unchanged (`thnhit/technhvoice:rag-api-gate5-semantic-lokalki-hotfix-v5-20260522-1212`)
+
+Preflight:
+
+- Baseline v3/RAG-off confirmed first.
+- Asterisk active calls: 0.
+- Gate 3 v4/RAG-on window enabled only for the supervised canary.
+- compose/runtime preflight: PASS.
+- `rag:canary-preflight`: PASS.
+- `rag:retrieve-preflight`: PASS.
+- `rag:live-path-preflight`: PASS.
+- `used_rag=true`, `product_scope=smart_website`, `fallback_reason=none`, `failure_count=0`.
+
+Call evidence:
+
+- `gate3_marker_utc=2026-06-09 21:38:13+0000`
+- Asterisk processed count: `198 -> 199` (`delta=1`)
+- `new_session_count=1`
+- `call_session_id=b18cd9c4-c427-4ffa-92f4-967f9b9aa713`
+- `status=completed`
+- `duration_seconds=55`
+
+Human QA:
+
+1. Caller asked: "Was ist Smart Website, was macht sie und was kostet sie?"
+2. Assistant answered the Smart Website combined inquiry correctly with live RAG.
+3. Caller said: "Danke, das reicht erstmal."
+4. Assistant answered exactly the expected closing:
+
+```text
+Sehr gerne. Dann wünsche ich Ihnen noch einen schönen Tag. Auf Wiederhören.
+```
+
+Response plan evidence:
+
+- First response:
+  - `response_type=product_question_answer`
+  - `plan_reason=combined_product_inquiry`
+  - `current_product_context=smart_website`
+  - `matched_product=smart_website`
+  - `rag_enabled=true`
+  - `rag_used=true`
+  - `rag_fallback_used=false`
+  - `response_chars=251`
+- Closing response:
+  - `response_type=closing`
+  - `plan_reason=closing_intent`
+  - `assistant_response_preview=Sehr gerne. Dann wünsche ich Ihnen noch einen schönen Tag. Auf Wiederhören.`
+
+Blocking checks:
+
+- No `fallback_clarification` after closing: PASS.
+- No `collect_sales_context` after closing: PASS.
+- No `product_question_answer` after closing: PASS.
+- No `lead_ready` after closing: PASS.
+- No RAG retrieval after closing: PASS.
+
+RAG evidence:
+
+- `rag_retrieval_started=1`
+- `rag_retrieval_completed=1`
+- `rag_product_scope=smart_website`
+- `rag_result_count=1`
+- `rag_latency_ms=215`
+- `rag_used=true`
+- `rag_attempt_count=1`
+- `rag_timeout_count=0`
+- `rag_success_count=1`
+
+Post-call and privacy:
+
+- `summary_count=1`
+- `post_call_summary_created=1`
+- `post_call_lead_processed=guard_not_met`
+- `post_call_notification_processed=ok`
+- `email_like_payload_rows=0`
+- `phone_like_payload_rows=0`
+
+Rollback:
+
+- Runtime restored to `VOICE_RUNTIME_VERSION=v3`.
+- RAG restored to disabled (`VOICE_RAG_ENABLED=false`, `VOICE_RAG_SALES_ANSWERER_ENABLED=false`).
+- v4 live/canary/barge-in flags disabled.
+- STT/TTS providers restored to `mock`.
+- Asterisk active calls: 0.
+
+### Optional follow-up
+
+The call produced two closing `response_plan_created` rows (`turn_index=2` and `turn_index=3`).
+This is **not** a Phase 10AK blocker because both rows contained the correct closing response,
+no bad response plan occurred after the latest closing row, no RAG retrieval occurred after
+closing, and human QA passed.
+
+Track as a low-priority QA/observability improvement: dedupe duplicate closing plan rows if
+that makes live evidence cleaner.
+
+## Commit/tag status
+
+Committed, tagged, pushed, and Docker-published as `voice-bridge-v1.34.12`.
