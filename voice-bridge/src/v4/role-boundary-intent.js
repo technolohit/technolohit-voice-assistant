@@ -34,6 +34,8 @@ const CALLBACK_REQUEST_PATTERNS = [
   /\b(zurückrufen|zurueckrufen|zuruckrufen|rückruf|rueckruf|ruckruf)\b/i,
   /\b(rückruf erhalten|zurückgerufen|mich zurückrufen|zurück melden lassen)\b/i,
   /\b(können sie mich|könnten sie mich|kann mich jemand)\b.*\b(zurück|rufen|melden)\b/i,
+  /\b(bitte\s+)?rufen sie mich\b.*\b(zurück|zurueck|zuruck)\b/i,
+  /\b(telefonisch|per telefon)\b.*\b(mit (dem )?team sprechen|kontakt aufnehmen|beratung)\b/i,
 ];
 
 export function mentionsTechnoloHitProduct(transcript = "", agentConfig = null) {

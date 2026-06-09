@@ -115,6 +115,22 @@ test("10AP: callback request enters safe lead-capture path without bypassing val
   assert.doesNotMatch(plan.text, /\b(sofort verbinden|jetzt weiterleiten|live transfer)\b/i);
 });
 
+test("10AP: explicit callback request with phone wording is not shadowed by contact preference", () => {
+  const transcript = "Bitte rufen Sie mich telefonisch zurueck.";
+  assert.equal(isCallbackLeadCaptureRequest(transcript), true);
+  assert.equal(detectTranscriptIntent(transcript), "callback_request");
+
+  const plan = buildResponsePlan(basePlanArgs(transcript));
+  assert.equal(plan.response_type, RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE);
+  assert.equal(plan.plan_reason, "callback_request_intent");
+  assert.equal(plan.lead_transition_allowed, false);
+
+  assert.equal(
+    detectTranscriptIntent("telefonisch", { current_state: "collecting_contact_preference" }),
+    "contact_phone"
+  );
+});
+
 test("10AP: closing overrides out-of-scope, technical escalation, and callback paths", () => {
   const agent = loadAgentConfig(loadConfig());
   const closing = "Danke, das reicht erstmal.";

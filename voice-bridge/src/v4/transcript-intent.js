@@ -136,9 +136,17 @@ export function detectTranscriptIntent(
   if (/\b(neukunde|neu kunde|bestandskunde|eigene firma|unternehmen)\b/i.test(lower)) {
     return "sales_customer_type";
   }
+  const collectingContactPreference =
+    memory?.current_state === "collecting_contact_preference" ||
+    memory?.current_state === "collecting_callback_permission";
+  // Phase 10AP follow-up: explicit callback/contact requests should not be
+  // shadowed by words like "telefonisch" unless the assistant is already
+  // asking for the caller's contact-channel preference.
+  if (!collectingContactPreference && isCallbackLeadCaptureRequest(transcript)) {
+    return "callback_request";
+  }
   if (/\b(e-?mail|email|per mail)\b/i.test(lower)) return "contact_email";
   if (/\b(telefon|telefonisch|anruf|anrufen)\b/i.test(lower)) return "contact_phone";
-  // Phase 10AP: explicit callback/contact requests (#4) before unclear fallback.
   if (isCallbackLeadCaptureRequest(transcript)) return "callback_request";
   if (/\b(ja|einverstanden|gerne|ok)\b/i.test(lower) && memory?.contact_preference) {
     return "callback_permission_granted";
