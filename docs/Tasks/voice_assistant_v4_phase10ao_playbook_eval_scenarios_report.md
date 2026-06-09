@@ -1,7 +1,7 @@
 # Phase 10AO — Eval Scenarios From Playbook Report
 
 Date: 2026-06-10
-Commit: _(filled after push)_
+Commit: `4f358c1`
 Production status: **v3 / RAG-off unchanged**. Playbook runtime remains **opt-in/default-off**. Draft playbook **not production-active**.
 
 > Phase 10AO introduces a non-live eval scenario layer from the structured playbook.
@@ -123,7 +123,7 @@ routing. Pending categories explicitly avoid faking runtime passes.
 
 | Check | Result |
 |---|---|
-| `cd voice-bridge && npm test` | **PASS** — _(updated count after run)_ |
+| `cd voice-bridge && npm test` | **PASS** — 524/524 (8 new 10AO tests) |
 | `python -m pytest rag-api/tests` | **PASS** — 7/7 |
 | `node --check` changed JS | **PASS** |
 | `git diff --check` | **PASS** |
