@@ -272,7 +272,7 @@ function summarizeRagFilterStages(ragResult = {}, productId = null) {
 function buildAnswerFromChunks(productId, ragData, agentConfig) {
   const chunks = filterRagChunksByProductScope(ragData?.answer_context, productId);
   if (!chunks.length) return null;
-  const snippet = normalizeText(chunks[0]?.snippet || chunks[0]?.text || "");
+  const snippet = normalizeText(chunks[0]?.snippet || chunks[0]?.text || chunks[0]?.content || "");
   if (!snippet) return null;
   const answer = trimBoundedAnswer(snippet, 180);
   const safety = validateRagAnswerSafety(answer, agentConfig);

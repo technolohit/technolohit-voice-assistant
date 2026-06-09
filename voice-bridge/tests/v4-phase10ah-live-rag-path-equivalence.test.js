@@ -80,6 +80,23 @@ const scopedHitFn = async () => ({
   },
 });
 
+const contentOnlyScopedHitFn = async () => ({
+  ok: true,
+  hit: true,
+  hitCount: 1,
+  topScore: 0.78,
+  status: 200,
+  latencyMs: 347,
+  data: {
+    answer_context: [{
+      content: "Smart Website ist eine moderne Firmenwebsite mit klaren Leistungsseiten.",
+      score: 0.78,
+      metadata: { product_id: "smart_website" },
+      source_uri: "kb://products.technolohit.json#smart_website",
+    }],
+  },
+});
+
 const wrongProductHitFn = async () => ({
   ok: true,
   hit: true,
@@ -127,6 +144,20 @@ test("10AH: live-path preflight passes when retrieveV4RagAnswer would use RAG", 
     assert.ok(result.top_score >= 0.72);
     assert.match(formatRagLivePathPreflightLines(result), /rag_live_path_preflight=pass/);
     assert.doesNotMatch(formatRagLivePathPreflightLines(result), /Was ist Smart Website/);
+  });
+});
+
+test("10AI: live-path preflight accepts rag-api content-only chunks", async () => {
+  await withEnv(ragEnv(), async () => {
+    const result = await runRagLivePathPreflight(loadConfig(), {
+      skipCanary: true,
+      retrieveFn: contentOnlyScopedHitFn,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.used_rag, true);
+    assert.equal(result.result_count, 1);
+    assert.equal(result.result_count_after_product_filter, 1);
+    assert.equal(result.fallback_reason, null);
   });
 });
 

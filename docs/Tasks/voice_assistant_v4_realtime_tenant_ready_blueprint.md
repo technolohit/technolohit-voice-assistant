@@ -35,12 +35,12 @@ Last updated: 2026-06-03
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AH — live RAG path equivalence and miss diagnostics** |
+| **Current completed phase** | **Phase 10AI — RAG content extraction hotfix after live-path preflight** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 partial on v1.34.8** — raw retrieve preflight passed but live RAG missed (`rag_result_count=0`, 347 ms); v1.34.9 adds live-path preflight |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 pending retry** — v1.34.9 proved retrieve/filter pass but exposed content extraction mismatch (`rag_unsafe_or_empty`); v1.34.10 reads RAG API `content` chunks |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release **`voice-bridge-v1.34.9`** after Codex review. Gate 3 requires `rag:canary-preflight`, `rag:retrieve-preflight`, and **`rag:live-path-preflight`**. Production stays v3/RAG-off. |
+| **Next step** | Release **`voice-bridge-v1.34.10`** after Codex review. Gate 3 requires `rag:canary-preflight`, `rag:retrieve-preflight`, and **`rag:live-path-preflight`**. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A–10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH implemented**; **Gate 2 passed**; **Gate 3 partial on v1.34.8** — live-path preflight equivalence fix in v1.34.9
+- Phase 10 live AudioSocket wiring: **10A–10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH/10AI implemented**; **Gate 2 passed**; **Gate 3 pending retry on v1.34.10** after live-path preflight exposed RAG API `content` extraction mismatch
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -1145,6 +1145,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AF live RAG timeout retry - valid v1.34.6 Gate 3 call was partial because live RAG timed out at about 702 ms; v1.34.7 adds one timeout-only live retry plus safe retry diagnostics - [report](./voice_assistant_v4_phase10af_live_rag_timeout_retry_report.md).
 - [x] Successful: Phase 10AG retrieve-specific timeout/max-attempt config — [report](./voice_assistant_v4_phase10ag_rag_retrieve_timeout_config_report.md) — v1.34.8 Gate 3 live call valid but RAG-on criteria failed (raw preflight false positive).
 - [x] Successful: Phase 10AH live RAG path equivalence — `rag:live-path-preflight` uses `retrieveV4RagAnswer()`; filter-stage diagnostics on live RAG events — [report](./voice_assistant_v4_phase10ah_live_rag_path_equivalence_report.md) — target v1.34.9.
+- [x] Successful: Phase 10AI RAG content extraction hotfix — live-path preflight showed retrieve/filter pass but `rag_unsafe_or_empty`; voice-bridge now reads RAG API `content` chunks — [report](./voice_assistant_v4_phase10ai_rag_content_extraction_hotfix_report.md) — target v1.34.10.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).
