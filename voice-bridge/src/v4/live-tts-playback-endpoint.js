@@ -202,6 +202,14 @@ function resolveLiveSocket(ctx, runtime) {
   return ctx?.v4LiveSocket ?? runtime?.liveSocket ?? null;
 }
 
+function isClosingPlayback(runtime, planCandidate) {
+  return (
+    planCandidate?.response_type === "closing" ||
+    Boolean(runtime?.runtimeContext?.memory?.call_closing) ||
+    runtime?.runtimeContext?.stateMachine?.state === V4_STATES.COMPLETED
+  );
+}
+
 /**
  * Synthesize and play assistant response for a successful dialogue plan (v4_canary only).
  */
@@ -352,7 +360,9 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
       used_fallback: prepared.usedFallback,
       atMs: Date.now()
     };
-    ensureListeningAfterPlayback(runtime);
+    if (!isClosingPlayback(runtime, planCandidate)) {
+      ensureListeningAfterPlayback(runtime);
+    }
     return { ok: false, reason: "socket_not_writable", ttsMs, synthesized: true };
   }
 
@@ -411,7 +421,9 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
     };
   }
 
-  ensureListeningAfterPlayback(runtime);
+  if (!isClosingPlayback(runtime, planCandidate)) {
+    ensureListeningAfterPlayback(runtime);
+  }
 
   console.log(
     `[v4-live] playback_completed frames=${playbackResult.framesSent ?? 0} bytes=${playbackResult.bytesSent ?? 0} playback_ms=${playbackResult.playbackMs ?? 0} state=${runtime.runtimeContext?.stateMachine?.state ?? "unknown"} ${liveLogIds(ctx)}`
@@ -441,7 +453,8 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
   const playbackStartedAt = Date.now();
   runtime.audioSession = markPlaybackStarted(runtime.audioSession, playbackStartedAt);
 
-  if (runtime.runtimeContext?.stateMachine) {
+  const closingPlayback = isClosingPlayback(runtime, planCandidate);
+  if (runtime.runtimeContext?.stateMachine && !closingPlayback) {
     runtime.runtimeContext.stateMachine = transitionState(
       runtime.runtimeContext.stateMachine,
       V4_STATES.SPEAKING,
@@ -454,6 +467,15 @@ async function streamLiveAssistantPlayback(config, ctx, runtime, socket, chunks,
     };
     if (runtime.orchestrator) {
       runtime.orchestrator.stateMachine = runtime.runtimeContext.stateMachine;
+      runtime.orchestrator.memory = runtime.runtimeContext.memory;
+    }
+  } else if (runtime.runtimeContext?.memory && closingPlayback) {
+    runtime.runtimeContext.memory = {
+      ...runtime.runtimeContext.memory,
+      current_state: V4_STATES.COMPLETED,
+      updated_at: Date.now()
+    };
+    if (runtime.orchestrator) {
       runtime.orchestrator.memory = runtime.runtimeContext.memory;
     }
   }

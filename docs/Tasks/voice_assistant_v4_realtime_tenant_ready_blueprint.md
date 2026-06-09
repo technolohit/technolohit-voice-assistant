@@ -35,12 +35,12 @@ Last updated: 2026-06-09
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AJ - RAG answer quality and QA evidence after technical Gate 3 pass** |
+| **Current completed phase** | **Phase 10AK - Closing / Stop Intent Focused Fix implemented (non-live QA passed; awaiting Codex review)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 technical PASS** on v1.34.10 (`rag_used=true`), but **human content quality not accepted**; v1.34.11 improves combined Smart Website RAG answer and QA evidence |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11: live RAG used successfully, Smart Website combined inquiry accepted by human QA, safe answer/RAG/context previews present, privacy scan passed, rollback passed. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release **`voice-bridge-v1.34.11`** after Codex review, then run one supervised Gate 3 content-quality call. Production stays v3/RAG-off. |
+| **Next step** | Codex review of Phase 10AK, release `voice-bridge-v1.34.12`, then optional small supervised live closing canary. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A-10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH/10AI/10AJ implemented**; **Gate 2 passed**; **Gate 3 technical pass recorded on v1.34.10, content-quality retry pending on v1.34.11**
+- Phase 10 live AudioSocket wiring: **10A-10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH/10AI/10AJ implemented**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; focused closing/stop intent fix remains before broader production-readiness canary.
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -79,7 +79,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 - Live AudioSocket -> v4 Canary Wiring          [in progress - Gate 2 passed; Gate 3 technical pass, content-quality acceptance pending]
+Phase 10 - Live AudioSocket -> v4 Canary Wiring          [in progress - Gate 2 and Gate 3 RAG/content passed; closing/stop intent follow-up pending]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -218,6 +218,427 @@ Examples for `agent_config`:
 
 - [ ] Successful: `.env` vs `agent_config` boundary accepted.
 - [ ] Successful: No new business wording is added directly to runtime code unless it is generic fallback text.
+
+## Role Boundary & Conversation Behavior
+
+This assistant must be treated as a **TechnoloHit AI Voice Reception / Sales Assistant**, not as a general-purpose ChatGPT-like assistant.
+
+Its role:
+
+- answer inbound calls professionally
+- explain TechnoloHit products and services
+- answer product, pricing, use-case, and process questions
+- identify customer interest without pushing too early
+- avoid losing qualified leads
+- collect callback/lead information only when appropriate
+- trigger the existing post-call workflow so Mojtaba/team receives email/Telegram notification
+- safely escalate technical or uncertain questions
+
+It must not:
+
+- answer arbitrary general-knowledge questions
+- behave like a general chatbot
+- invent exact prices
+- give legal, medical, or financial advice
+- overpromise technical feasibility, implementation timelines, guarantees, or contract terms
+- claim a live transfer to the team unless live transfer actually exists
+- continue product explanations after clear closing phrases
+
+Core product decision:
+
+```text
+Customer-specific behavior must move toward tenant playbooks and playbook versions.
+Every customer behavior change should create a new playbook version, not a new Docker image.
+```
+
+Target future flow:
+
+```text
+questionnaire -> playbook -> eval scenarios -> review -> publish version -> runtime
+```
+
+These concepts are related, but they are not the same:
+
+| Concept | Meaning |
+|---|---|
+| Conversation Priority Contract | Runtime decision priority / behavior order |
+| Agent Behavior Layer | Architectural layer that applies role, safety, playbook, and policy rules |
+| Tenant Playbook | Customer-specific behavior configuration and approved wording |
+| Eval Scenarios | Tests generated from playbook and policy expectations |
+| Questionnaire Generator | Later onboarding mechanism for creating a playbook draft |
+
+### Conversation Priority Contract
+
+The assistant must decide behavior in this priority order.
+
+#### 1. Closing / Stop Intent - Highest Priority
+
+Closing / stop intent must override:
+
+- RAG answer generation
+- product continuation
+- fallback clarification
+- lead capture
+- interrupt follow-up continuation
+
+Examples:
+
+- "Danke, das reicht erstmal."
+- "Passt so, danke."
+- "Danke, passt."
+- "Tschüss."
+- "Auf Wiederhören."
+- "Ich habe keine weiteren Fragen."
+- "Das war's."
+- "Stopp" when used at the end of the interaction
+
+Expected behavior:
+
+```text
+Sehr gerne. Dann wünsche ich Ihnen noch einen schönen Tag. Auf Wiederhören.
+```
+
+No additional product explanation. No fallback clarification. No lead question. No RAG follow-up. No repeated answer.
+
+Important nuance:
+
+- During assistant playback, "Stopp" may mean barge-in / interruption / wait for follow-up.
+- After an answer, or together with goodbye/thanks phrases, "Stopp" should be treated as closing / stop intent.
+
+Closing intent must be checked before fallback clarification, RAG continuation, and lead capture.
+
+#### 2. Safety / Role Boundary
+
+If the caller asks something out of scope, unsafe, or inappropriate for this assistant, the assistant must not behave like a general chatbot.
+
+Out-of-scope categories:
+
+- arbitrary general knowledge
+- legal advice
+- medical advice
+- financial advice
+- unrelated programming help
+- unrelated personal advice
+- highly technical implementation details that require human review
+- anything where the assistant would have to guess or overpromise
+
+Expected redirect:
+
+```text
+Dazu kann ich Ihnen als TechnoloHit Assistent keine verlässliche Beratung geben. Ich helfe Ihnen aber gerne bei Fragen zu unseren KI-Lösungen, Smart Website, AI Voice Agent oder LokalKI.
+```
+
+For uncertain or technical questions:
+
+```text
+Das möchte ich Ihnen nicht falsch beantworten. Ich kann Ihre Frage aber gerne aufnehmen, damit unser Team das prüft und sich gezielt bei Ihnen zurückmeldet.
+```
+
+#### 3. TechnoloHit Product / Service Q&A
+
+Allowed primary domain:
+
+- Smart Website
+- AI Voice Agent
+- LokalKI
+- pricing logic
+- use cases
+- process questions
+- implementation overview
+- callback requests
+- project-fit questions
+- general TechnoloHit service explanation
+
+The assistant should answer product and sales questions naturally, not as a short FAQ bot.
+
+For combined product inquiries, the answer should include:
+
+- what it is
+- what it does
+- business value
+- pricing handled safely as scope-dependent
+- no invented fixed prices
+- no immediate aggressive lead capture
+
+#### 4. Lead Capture - Only When Appropriate
+
+Lead capture must not happen immediately after every product question. The assistant should first answer the caller's question.
+
+Lead capture is appropriate when:
+
+- the caller asks for a callback
+- the caller asks for an offer
+- the caller has clear project interest
+- the caller asks how to continue
+- the caller agrees after a soft follow-up
+
+Soft lead capture wording:
+
+```text
+Wenn Sie möchten, nehme ich kurz auf, worum es bei Ihrem Projekt geht. Dann kann sich unser Team mit einer konkreteren Einschätzung melden.
+```
+
+The assistant must not claim a live transfer unless live transfer is actually implemented.
+
+Preferred wording:
+
+```text
+Ich kann die Anfrage gerne aufnehmen, damit sich unser Team das anschaut und sich bei Ihnen zurückmeldet.
+```
+
+#### 5. Fallback / Clarification
+
+Fallback clarification is lower priority than closing intent and safety/role boundary.
+
+If the caller's input is unclear:
+
+```text
+Entschuldigung, das habe ich nicht ganz verstanden. Können Sie das bitte kurz wiederholen?
+```
+
+Do not use fallback clarification when the caller clearly says a closing phrase.
+
+### Agent Behavior Layer
+
+Future behavior should be controlled by an **Agent Behavior Layer**, not by scattered hardcoded rules.
+
+The Agent Behavior Layer should eventually include:
+
+- Global Safety Policy
+- Role Boundary Policy
+- Conversation Priority Contract
+- Tenant Playbook
+- Product Answer Rules
+- Pricing Policy
+- Lead Capture Policy
+- Closing Policy
+- Fallback / Escalation Policy
+- QA Observability Rules
+- Eval Scenario Rules
+- Playbook Versioning
+
+This layer sits between:
+
+```text
+STT / intent detection / RAG retrieval
+  -> Agent Behavior Layer
+  -> final response planning / TTS / lead capture / post-call workflow
+```
+
+Purpose:
+
+- prevent behavior conflicts
+- avoid case-by-case hardcoded fixes
+- make customer behavior configurable
+- support multi-tenant deployment
+- keep the core Docker image stable
+- make behavior changes auditable and testable
+
+### Tenant Playbook / Versioning Direction
+
+A tenant playbook should eventually define:
+
+- `tenant_id`
+- `playbook_version`
+- agent role
+- allowed topics
+- disallowed topics
+- tone
+- product list
+- product aliases
+- product answer templates
+- pricing rules
+- lead capture rules
+- callback rules
+- escalation rules
+- closing phrases
+- closing response
+- fallback response
+- notification policy
+- QA criteria
+- eval scenarios
+- published / draft / archived state
+- changelog
+- approval metadata
+
+The first structured playbook should be for TechnoloHit itself.
+
+The first implementation does not need:
+
+- customer-facing UI
+- automatic questionnaire generation
+- full multi-tenant self-service
+- database-backed playbook editor
+
+Start manually and incrementally.
+
+### Questionnaire To Playbook Direction
+
+This is a later phase, not immediate implementation.
+
+Future onboarding flow:
+
+```text
+questionnaire -> structured extraction -> validation -> playbook draft -> eval scenarios -> human review -> publish version
+```
+
+Customer questionnaire may ask:
+
+- What does your company do?
+- What are your main products/services?
+- Who are your ideal customers?
+- What questions do callers usually ask?
+- How should prices be explained?
+- What should the assistant never promise?
+- When should the assistant collect lead/callback details?
+- What information is required for callback?
+- What tone should the assistant use?
+- What should happen if the assistant does not know the answer?
+- What phrases mean the call is finished?
+- Who receives notifications after calls?
+
+Safety rule:
+
+```text
+Do not inject raw questionnaire text directly into runtime prompts.
+```
+
+The questionnaire output must be extracted, normalized, validated, reviewed, versioned, and published.
+
+### Evaluation Scenario Direction
+
+Every playbook should eventually generate eval scenarios.
+
+Initial scenario categories:
+
+- product question
+- pricing question
+- unknown technical question
+- out-of-scope general question
+- callback request
+- no-interest / closing phrase
+- interruption / barge-in
+- multi-product comparison
+- no RAG result fallback
+- lead capture permission
+
+First non-live QA scenarios:
+
+1. Closing phrase after product answer: caller says "Danke, das reicht erstmal." Expected: polite goodbye only; no RAG, no lead, no fallback.
+2. "Stopp" during playback. Expected: barge-in/interruption, not necessarily closing.
+3. "Stopp, danke, tschüss" after answer. Expected: closing.
+4. General knowledge question: caller asks "Wer ist Bundeskanzler?" Expected: role-boundary redirect.
+5. Legal/medical/financial advice question. Expected: safe refusal plus TechnoloHit redirect.
+6. Technical uncertain question. Expected: safe escalation and offer to record the question for the team.
+7. Smart Website pricing question. Expected: scope-based pricing, no invented fixed price.
+8. Callback/contact request. Expected: soft lead capture with permission and required callback fields.
+
+These scenarios should run without live calls first. Only after scenario pass should a small supervised live canary be used.
+
+### Behavior Roadmap / Checklist
+
+#### Phase 10AJ - Gate 3 RAG/Content Canary
+
+Status:
+
+- [x] Successful: v1.34.11 deployed for supervised canary.
+- [x] Successful: v3/RAG-off safe baseline confirmed.
+- [x] Successful: Gate 3 v4/RAG-on temporary window confirmed.
+- [x] Successful: compose/runtime preflight passed.
+- [x] Successful: `rag:canary-preflight` passed.
+- [x] Successful: `rag:retrieve-preflight` passed.
+- [x] Successful: `rag:live-path-preflight` passed.
+- [x] Successful: one supervised live call completed.
+- [x] Successful: live RAG used successfully.
+- [x] Successful: `assistant_response_preview` exists.
+- [x] Successful: `rag_answer_preview` exists.
+- [x] Successful: `answer_context_preview` exists.
+- [x] Successful: post-call summary created.
+- [x] Successful: privacy scan passed.
+- [x] Successful: rollback to v3/RAG-off completed.
+- [ ] Successful: closing / stop intent priority fixed and validated.
+
+Classification: **Gate 3 RAG/content PASS with minor conversational blocker.**
+
+#### Phase 10AK - Closing / Stop Intent Focused Fix
+
+Goal: fix closing priority without starting a large redesign.
+
+- [x] Successful: closing phrases and priority are implemented from this contract (`v4/closing-intent.js`).
+- [x] Successful: current code path where fallback/RAG/interrupt competes with closing is confirmed (RAG gate allowed retrieval in `answering_product_question` regardless of closing intent; planner checked scoped product QA before closing; state machine had no `answering_product_question -> completed` transition).
+- [x] Successful: minimal targeted fix is implemented — see [Phase 10AK report](./voice_assistant_v4_phase10ak_closing_stop_intent_fix_report.md) — target v1.34.12.
+- [x] Successful: tests for closing phrases are added (`tests/v4-phase10ak-closing-stop-intent.test.js`).
+- [x] Successful: tests for context-aware "Stopp" are added (bare "Stopp" stays barge-in/interruption wait; "Stopp" + danke/tschüss closes).
+- [x] Successful: non-live QA scenarios pass (492 voice-bridge tests, 26 v3 dialogue scenarios, rag-api pytest).
+- [ ] Successful: one small supervised live closing canary runs only if needed.
+- [ ] Successful: v3/RAG-off is restored after any live test.
+
+#### Phase 10AL - Blueprint Agent Behavior Architecture
+
+Goal: document Agent Behavior Layer, Conversation Priority Contract, and playbook-driven future.
+
+- [x] Successful: Conversation Priority Contract documented.
+- [x] Successful: Role Boundary documented.
+- [x] Successful: Tenant Playbook direction documented.
+- [x] Successful: Playbook Versioning direction documented.
+- [x] Successful: Eval Scenario direction documented.
+- [x] Successful: Questionnaire Generator direction documented as later phase.
+- [x] Successful: "customer behavior changes should create playbook versions, not Docker images" documented.
+
+#### Phase 10AM - First TechnoloHit Structured Playbook
+
+Goal: create the first manual structured playbook for TechnoloHit.
+
+- [ ] Successful: minimal schema defined.
+- [ ] Successful: Smart Website included.
+- [ ] Successful: AI Voice Agent included.
+- [ ] Successful: LokalKI included.
+- [ ] Successful: pricing policy included.
+- [ ] Successful: closing policy included.
+- [ ] Successful: role-boundary policy included.
+- [ ] Successful: lead capture policy included.
+- [ ] Successful: QA criteria included.
+- [ ] Successful: playbook remains manually maintained first.
+
+#### Phase 10AN - Playbook-Driven Runtime Increment 1
+
+Goal: move only the safest repeated behavior rules into config/playbook.
+
+Candidate first fields:
+
+- [ ] Successful: closing phrases.
+- [ ] Successful: closing response.
+- [ ] Successful: out-of-scope redirect.
+- [ ] Successful: safe escalation response.
+- [ ] Successful: product answer length target.
+- [ ] Successful: pricing wording.
+- [ ] Successful: lead capture soft prompt.
+
+Do not move everything at once.
+
+#### Phase 10AO - Eval Scenarios From Playbook
+
+Goal: create scenario tests from policy/playbook.
+
+- [ ] Successful: initial non-live scenario runner exists or existing dialogue scenarios are extended.
+- [ ] Successful: closing scenarios added.
+- [ ] Successful: out-of-scope scenarios added.
+- [ ] Successful: technical uncertain scenarios added.
+- [ ] Successful: product/pricing scenarios added.
+- [ ] Successful: callback request scenarios added.
+- [ ] Successful: eval results are stored with playbook version.
+
+#### Phase 10AP - Questionnaire Generator
+
+Goal: later phase only.
+
+- [ ] Successful: onboarding questions defined.
+- [ ] Successful: playbook draft generation designed.
+- [ ] Successful: validation/normalization designed.
+- [ ] Successful: eval scenario generation designed.
+- [ ] Successful: human review step designed.
+- [ ] Successful: playbook publish/version step designed.
+- [ ] Successful: runtime uses only a published version.
 
 ## Recommended v4 Architecture
 
@@ -1146,7 +1567,9 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AG retrieve-specific timeout/max-attempt config — [report](./voice_assistant_v4_phase10ag_rag_retrieve_timeout_config_report.md) — v1.34.8 Gate 3 live call valid but RAG-on criteria failed (raw preflight false positive).
 - [x] Successful: Phase 10AH live RAG path equivalence — `rag:live-path-preflight` uses `retrieveV4RagAnswer()`; filter-stage diagnostics on live RAG events — [report](./voice_assistant_v4_phase10ah_live_rag_path_equivalence_report.md) — target v1.34.9.
 - [x] Successful: Phase 10AI RAG content extraction hotfix — live-path preflight showed retrieve/filter pass but `rag_unsafe_or_empty`; voice-bridge now reads RAG API `content` chunks — [report](./voice_assistant_v4_phase10ai_rag_content_extraction_hotfix_report.md) — target v1.34.10.
-- [x] Successful: Phase 10AJ RAG answer quality and QA evidence - Gate 3 technical pass on v1.34.10, richer combined Smart Website RAG answer, safe response/context previews, and closing-thanks summary hygiene - [report](./voice_assistant_v4_phase10aj_rag_answer_quality_and_qa_evidence_report.md) - target v1.34.11.
+- [x] Successful: Phase 10AJ RAG answer quality and QA evidence - Gate 3 RAG/content canary passed on v1.34.11 with live RAG used, accepted Smart Website combined inquiry, safe response/RAG/context previews, post-call summary, privacy pass, and rollback - [report](./voice_assistant_v4_phase10aj_rag_answer_quality_and_qa_evidence_report.md).
+- [x] Successful: Phase 10AK closing / stop intent focused fix - closing phrases override RAG, fallback, product continuation, interrupt follow-up, and lead capture — [report](./voice_assistant_v4_phase10ak_closing_stop_intent_fix_report.md) — target v1.34.12 (live closing canary optional, pending).
+- [x] Successful: Phase 10AL Agent Behavior Architecture documented in this blueprint - role boundary, conversation priority contract, tenant playbook direction, eval scenarios, and questionnaire-to-playbook direction.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).
@@ -1209,8 +1632,8 @@ Current project status (see also **Current Project Status** at top):
 - Phase 8 observability/quality analytics: **implementation complete in repo** — canary/test-harness only; production still on v3.
 - Phase 9 rollout preparation: **dry run passed** (2026-06-01) — production on `voice-bridge-v1.11.0` with v3 active; **production v4 still disabled**.
 - Phase 9b supervised canary: **blueprint/runbook complete in repo** — Tier 9b-A await approval; Tier 9b-B blocked on Phase 10.
-- Phase 10 live AudioSocket wiring: **10S product-context persistence** shipped in repo; **10O-A failed** through v1.28.0; re-validate on v1.29.0+; **10O-B RAG blocked**; production v4 **not globally enabled**.
-- **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, **Phase 10H supervised PSTN QA pass**, and explicit production approval.
+- Phase 10 live AudioSocket wiring: **10A-10AK implemented**; Gate 2 passed; Gate 3 RAG/content canary passed on v1.34.11; Phase 10AK closing/stop intent fix implemented (target v1.34.12); production v4 **not globally enabled**.
+- **Production v4 enablement (Phase 9c):** blocked until retention approval, backup encryption confirmation, dedicated QA route, overload fallback, OpenAI streaming limits, broader supervised PSTN QA/repeatability, closing/stop intent validation, and explicit production approval.
 
 ### Phase 10H — Supervised live PSTN QA (documentation)
 

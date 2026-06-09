@@ -21,6 +21,7 @@ import {
   isPostContactProductQuestion
 } from "./transcript-intent.js";
 import { ragAnswerMustNotCreateLead } from "./lead-validator.js";
+import { isClosingIntent } from "./closing-intent.js";
 import {
   filterRagChunksByProductScope,
   resolveRagProductScope
@@ -68,6 +69,12 @@ export {
 export function shouldUseRagForTurn({ config = null, state, intent, memory = {}, transcript = "" } = {}) {
   const resolvedState = String(state ?? memory?.current_state ?? "").trim();
   const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory);
+
+  // Phase 10AK: closing / stop intent overrides RAG in every state, including
+  // ANSWERING_PRODUCT_QUESTION right after a product answer.
+  if (resolvedIntent === "closing" || isClosingIntent(transcript)) {
+    return { allowed: false, reason: "closing_intent", state: resolvedState };
+  }
 
   if (
     config &&

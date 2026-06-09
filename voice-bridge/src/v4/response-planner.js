@@ -314,6 +314,24 @@ export function buildResponsePlan({
       rag_allowed: false
     });
   }
+  // Phase 10AK: closing / stop intent is highest priority and must be planned
+  // before scoped product QA, RAG, interrupt follow-up, and lead capture.
+  if (resolvedIntent === "closing") {
+    return planBase(RESPONSE_TYPES.CLOSING, {
+      text: sanitizeResponseText(getWarmGoodbyeResponseText()),
+      next_state: V4_STATES.COMPLETED,
+      memory_patch: {
+        current_state: V4_STATES.COMPLETED,
+        call_closing: true,
+        interruption_context: null
+      },
+      quality_event_type: "turn_started",
+      plan_reason: "closing_intent",
+      rag_allowed: false,
+      lead_transition_allowed: false
+    });
+  }
+
   const gate =
     ragGate ??
     shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
@@ -340,19 +358,6 @@ export function buildResponsePlan({
       ragGate: effectiveRagGate,
       ragResult,
       planReason: interruptionRecovery ? "interrupt_scoped_product_qa" : "scoped_product_qa",
-    });
-  }
-
-  if (resolvedIntent === "closing") {
-    return planBase(RESPONSE_TYPES.CLOSING, {
-      text: sanitizeResponseText(getWarmGoodbyeResponseText()),
-      next_state: V4_STATES.COMPLETED,
-      memory_patch: {
-        current_state: V4_STATES.COMPLETED,
-        call_closing: true,
-        interruption_context: null
-      },
-      quality_event_type: "turn_started"
     });
   }
 

@@ -5,6 +5,7 @@
 import { normalizeText } from "./redaction.js";
 import { matchProductAlias } from "./agent-config.js";
 import { isGenericScopedProductQuestion } from "./product-context-persistence.js";
+import { CLOSING_RESPONSE_TEXT, isClosingIntent } from "./closing-intent.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -63,14 +64,17 @@ export function isDefiniteCallerGoodbye(transcript = "") {
 }
 
 export function getWarmGoodbyeResponseText() {
-  return "Vielen Dank für Ihren Anruf. Auf Wiederhören.";
+  return CLOSING_RESPONSE_TEXT;
 }
 
 export function detectTranscriptIntent(transcript = "", memory = {}, agentConfig = null) {
   const lower = normalizeText(transcript).toLowerCase();
   if (!lower) return "empty";
 
-  if (isDefiniteCallerGoodbye(transcript) || memory?.call_closing) {
+  // Phase 10AK: closing / stop intent has highest priority (Conversation
+  // Priority Contract #1) and overrides interrupt follow-up, product
+  // continuation, lead capture, and fallback clarification.
+  if (isClosingIntent(transcript) || memory?.call_closing) {
     return "closing";
   }
 

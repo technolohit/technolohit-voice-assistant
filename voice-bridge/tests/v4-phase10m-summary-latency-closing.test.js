@@ -199,7 +199,7 @@ test("10M: definite German goodbye uses warm closing text", () => {
   });
 
   assert.equal(plan.response_type, RESPONSE_TYPES.CLOSING);
-  assert.match(plan.text, /Vielen Dank für Ihren Anruf/i);
+  assert.match(plan.text, /Sehr gerne/i);
   assert.match(plan.text, /Wiederhören/i);
   assert.ok(!plan.text.includes("Gibt es noch etwas"));
   assert.ok(!/\b(rückruf|rueckruf)\b/i.test(plan.text));

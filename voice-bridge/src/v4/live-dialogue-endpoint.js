@@ -71,6 +71,14 @@ function createLiveDialogueQualitySink(runtime) {
   };
 }
 
+function isClosingPlan(plan) {
+  return (
+    plan?.response_type === "closing" ||
+    plan?.next_state === V4_STATES.COMPLETED ||
+    Boolean(plan?.memory_patch?.call_closing)
+  );
+}
+
 export function ensureLiveDialogueOrchestrator(config, ctx, runtime) {
   if (runtime?.orchestrator) {
     return runtime.orchestrator;
@@ -184,7 +192,9 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     }
 
     const committed = commitAssistantPlanWithoutPlayback(orchestrator, prepared.text, action.plan);
-    completeTurn(orchestrator);
+    if (!isClosingPlan(action.plan)) {
+      completeTurn(orchestrator);
+    }
 
     runtime.runtimeContext.memory = orchestrator.memory;
     runtime.runtimeContext.stateMachine = orchestrator.stateMachine;

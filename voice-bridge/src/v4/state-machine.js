@@ -42,12 +42,16 @@ const ALLOWED = {
     V4_STATES.VALIDATING_CONTACT,
     V4_STATES.SPEAKING,
     V4_STATES.LISTENING,
+    // Phase 10AK: closing intent may complete the call from any turn.
+    V4_STATES.COMPLETED,
     V4_STATES.ERROR
   ],
   [V4_STATES.ANSWERING_PRODUCT_QUESTION]: [
     V4_STATES.SPEAKING,
     V4_STATES.LISTENING,
     V4_STATES.COLLECTING_SALES_CONTEXT,
+    // Phase 10AK: closing phrase right after a product answer completes the call.
+    V4_STATES.COMPLETED,
     V4_STATES.ERROR
   ],
   [V4_STATES.COLLECTING_SALES_CONTEXT]: [
@@ -93,6 +97,8 @@ const ALLOWED = {
     V4_STATES.LISTENING,
     V4_STATES.THINKING,
     V4_STATES.TRANSCRIBING,
+    // Phase 10AK: closing intent overrides interrupt follow-up continuation.
+    V4_STATES.COMPLETED,
     V4_STATES.ERROR
   ],
   [V4_STATES.CLOSING]: [V4_STATES.COMPLETED, V4_STATES.LISTENING, V4_STATES.ERROR],
