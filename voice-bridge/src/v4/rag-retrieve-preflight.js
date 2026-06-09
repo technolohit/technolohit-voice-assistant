@@ -5,23 +5,17 @@
 
 import { retrieveRagContext } from "../rag-client.js";
 import { loadAgentConfig } from "./agent-config.js";
-import { buildV4RagQuery } from "./rag-orchestrator.js";
 import { runRagCanaryPreflight } from "./rag-canary-preflight.js";
-import { createCallSessionMemory, setSelectedProduct } from "./call-session-memory.js";
-import { V4_STATES } from "./state-machine.js";
-
-const PREFLIGHT_PRODUCT_SCOPE = "smart_website";
-const PREFLIGHT_QUERY = "Was ist Smart Website und was kostet sie?";
-const EMAIL_IN_TEXT = /\b[\w.+-]+@[\w.-]+\.\w{2,}\b/i;
-const PHONE_IN_TEXT = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
+import {
+  PROBE_PRODUCT_SCOPE,
+  buildSmartWebsiteRetrievePayload,
+  classifyRetrieveOutcome,
+  runtimeRetrieveTimeoutMs,
+  validateRetrievePayload
+} from "./rag-retrieve-probe.js";
 
 function safeBoolean(value) {
   return value ? "true" : "false";
-}
-
-function payloadContainsPrivateData(payload) {
-  const serialized = JSON.stringify(payload ?? {});
-  return EMAIL_IN_TEXT.test(serialized) || PHONE_IN_TEXT.test(serialized);
 }
 
 export async function runRagRetrievePreflight(config, options = {}) {
@@ -33,6 +27,7 @@ export async function runRagRetrievePreflight(config, options = {}) {
 
   const failures = [...(canary.failures ?? [])];
   const checks = { ...(canary.checks ?? {}) };
+  const runtimeTimeout = runtimeRetrieveTimeoutMs(config);
 
   if (!canary.ok) {
     return {
@@ -41,29 +36,21 @@ export async function runRagRetrievePreflight(config, options = {}) {
       failures,
       canary,
       retrieve: null,
-      product_scope: PREFLIGHT_PRODUCT_SCOPE,
+      product_scope: PROBE_PRODUCT_SCOPE,
       result_count: 0,
       hit: false,
       top_score: null,
-      fallback_reason: "canary_preflight_failed"
+      fallback_reason: "canary_preflight_failed",
+      timeout_ms: runtimeTimeout
     };
   }
 
-  const buildQuery = options.buildV4RagQueryFn ?? buildV4RagQuery;
   let payload;
   try {
-    const memory = setSelectedProduct(
-      createCallSessionMemory({ bridgeCallId: "rag-retrieve-preflight" }),
-      PREFLIGHT_PRODUCT_SCOPE
-    );
-    memory.current_product_context = PREFLIGHT_PRODUCT_SCOPE;
-    payload = buildQuery({
-      config,
+    ({ payload } = buildSmartWebsiteRetrievePayload(config, {
       agentConfig,
-      transcript: PREFLIGHT_QUERY,
-      memory,
-      stateMachine: { state: V4_STATES.THINKING }
-    });
+      buildV4RagQueryFn: options.buildV4RagQueryFn
+    }));
   } catch (err) {
     failures.push(`rag_payload_build_${String(err?.message ?? "failed").slice(0, 40)}`);
     return {
@@ -72,38 +59,38 @@ export async function runRagRetrievePreflight(config, options = {}) {
       failures,
       canary,
       retrieve: null,
-      product_scope: PREFLIGHT_PRODUCT_SCOPE,
+      product_scope: PROBE_PRODUCT_SCOPE,
       result_count: 0,
       hit: false,
       top_score: null,
-      fallback_reason: "payload_invalid"
+      fallback_reason: "payload_invalid",
+      timeout_ms: runtimeTimeout
     };
   }
 
-  checks.payload_tenant_id = payload.tenant_id === "technolohit";
-  checks.payload_agent_id = payload.agent_id === "main_voice_sales";
-  checks.payload_product_scope = payload.context?.product_scope === PREFLIGHT_PRODUCT_SCOPE;
-  checks.payload_privacy_safe = !payloadContainsPrivateData(payload);
-
-  if (!checks.payload_tenant_id) failures.push("payload_tenant_id_not_technolohit");
-  if (!checks.payload_agent_id) failures.push("payload_agent_id_not_main_voice_sales");
-  if (!checks.payload_product_scope) failures.push("payload_product_scope_not_smart_website");
-  if (!checks.payload_privacy_safe) failures.push("payload_contains_private_data");
+  const payloadValidation = validateRetrievePayload(payload);
+  Object.assign(checks, payloadValidation.checks);
+  failures.push(...payloadValidation.failures);
 
   if (failures.length > 0) {
+    const primaryFailure = payloadValidation.failures.includes("wrong_product_scope")
+      ? "wrong_product_scope"
+      : "payload_invalid";
     return {
       ok: false,
       checks,
       failures,
       canary,
       retrieve: null,
-      product_scope: PREFLIGHT_PRODUCT_SCOPE,
+      product_scope: PROBE_PRODUCT_SCOPE,
       result_count: 0,
       hit: false,
       top_score: null,
-      fallback_reason: "payload_invalid",
+      fallback_reason: primaryFailure,
       payload_tenant_id: payload.tenant_id,
-      payload_agent_id: payload.agent_id
+      payload_agent_id: payload.agent_id,
+      timeout_ms: runtimeTimeout,
+      min_score: payload.min_score ?? null
     };
   }
 
@@ -111,39 +98,32 @@ export async function runRagRetrievePreflight(config, options = {}) {
   try {
     ragResult = await retrieveFn(config, {
       ...payload,
-      timeoutMs: Math.max(100, Number(config?.rag?.timeoutMs ?? 700))
+      timeoutMs: runtimeTimeout
     });
   } catch {
-    failures.push("rag_retrieve_unreachable");
+    failures.push("rag_unavailable");
     return {
       ok: false,
       checks,
       failures,
       canary,
       retrieve: { ok: false, reason: "request_failed" },
-      product_scope: PREFLIGHT_PRODUCT_SCOPE,
+      product_scope: PROBE_PRODUCT_SCOPE,
       result_count: 0,
       hit: false,
       top_score: null,
-      fallback_reason: "rag_retrieve_unreachable",
+      fallback_reason: "rag_unavailable",
       payload_tenant_id: payload.tenant_id,
-      payload_agent_id: payload.agent_id
+      payload_agent_id: payload.agent_id,
+      timeout_ms: runtimeTimeout,
+      min_score: payload.min_score ?? null
     };
   }
 
-  const resultCount = Number(ragResult?.hitCount ?? ragResult?.data?.answer_context?.length ?? 0);
-  const hit = Boolean(ragResult?.ok && ragResult?.hit && resultCount > 0);
-  const topScore = Number.isFinite(ragResult?.topScore) ? ragResult.topScore : null;
-  const fallbackReason = !ragResult?.ok
-    ? ragResult?.reason ?? "rag_unavailable"
-    : hit
-      ? null
-      : "rag_miss";
-
+  const outcome = classifyRetrieveOutcome(ragResult, payload);
   checks.rag_retrieve_ok = Boolean(ragResult?.ok);
   checks.rag_retrieve_parseable = ragResult != null && typeof ragResult === "object";
-  if (!checks.rag_retrieve_ok) failures.push(`rag_retrieve_${ragResult?.reason ?? "failed"}`);
-  if (checks.rag_retrieve_ok && !hit) failures.push("rag_miss");
+  if (outcome.failure) failures.push(outcome.failure);
 
   return {
     ok: failures.length === 0,
@@ -152,21 +132,22 @@ export async function runRagRetrievePreflight(config, options = {}) {
     canary,
     retrieve: {
       ok: Boolean(ragResult?.ok),
-      hit,
-      result_count: resultCount,
-      top_score: topScore,
+      hit: outcome.hit,
+      result_count: outcome.result_count,
+      top_score: outcome.top_score,
       rag_http_status: ragResult?.status ?? null,
       latency_ms: ragResult?.latencyMs ?? null,
-      fallback_reason: fallbackReason
+      fallback_reason: outcome.fallback_reason
     },
-    product_scope: PREFLIGHT_PRODUCT_SCOPE,
-    result_count: resultCount,
-    hit,
-    top_score: topScore,
-    fallback_reason: fallbackReason,
+    product_scope: PROBE_PRODUCT_SCOPE,
+    result_count: outcome.result_count,
+    hit: outcome.hit,
+    top_score: outcome.top_score,
+    fallback_reason: outcome.fallback_reason,
     payload_tenant_id: payload.tenant_id,
     payload_agent_id: payload.agent_id,
-    min_score: payload.min_score ?? null
+    min_score: payload.min_score ?? null,
+    timeout_ms: runtimeTimeout
   };
 }
 
@@ -174,7 +155,7 @@ export function formatRagRetrievePreflightLines(result) {
   const retrieve = result?.retrieve ?? {};
   const lines = [
     `rag_retrieve_preflight=${result?.ok ? "pass" : "fail"}`,
-    `product_scope=${result?.product_scope ?? PREFLIGHT_PRODUCT_SCOPE}`,
+    `product_scope=${result?.product_scope ?? PROBE_PRODUCT_SCOPE}`,
     `result_count=${result?.result_count ?? 0}`,
     `hit=${safeBoolean(result?.hit)}`,
     `top_score=${result?.top_score ?? "none"}`,
@@ -184,6 +165,7 @@ export function formatRagRetrievePreflightLines(result) {
     `rag_retrieve_ok=${safeBoolean(retrieve.ok)}`,
     `rag_http_status=${retrieve.rag_http_status ?? "none"}`,
     `rag_latency_ms=${retrieve.latency_ms ?? 0}`,
+    `timeout_ms=${result?.timeout_ms ?? 0}`,
     `min_score=${result?.min_score ?? "none"}`,
     `failure_count=${result?.failures?.length ?? 0}`,
     `failures=${result?.failures?.join(",") || "none"}`

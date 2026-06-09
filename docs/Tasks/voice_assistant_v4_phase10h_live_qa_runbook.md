@@ -356,6 +356,8 @@ docker run --rm --user 0:0 \
 GATE3_PREFLIGHT
 docker exec technolohit-voice-bridge npm run rag:canary-preflight
 docker exec technolohit-voice-bridge npm run rag:retrieve-preflight
+# If retrieve preflight fails with rag_retrieve_timeout:
+docker exec technolohit-voice-bridge npm run rag:retrieve-diagnostics
 ```
 
 **Abort Gate 3 unless every step exits zero and output includes all of:**
@@ -377,10 +379,19 @@ product_scope=smart_website
 hit=true
 ```
 
-If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail` with
-`fallback_reason=rag_miss` and `result_count=0`, **do not place the Gate 3 call**
-— fix RAG knowledge ingestion first. Gate 3 failed on v1.34.3 for this reason
-(`call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`); use v1.34.4+ after Codex review.
+If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail`, **do not place the Gate 3 call**.
+
+| `fallback_reason` | Action |
+|-------------------|--------|
+| `rag_retrieve_timeout` | Run `npm run rag:retrieve-diagnostics`. If `classification=latency_budget_issue` (passes at 1200 ms, fails at 700 ms), classify as **latency budget issue** — team decides canary `VOICE_RAG_TIMEOUT_MS`. Gate 3 only after preflight passes at chosen budget. |
+| `rag_miss` | Fix RAG knowledge ingestion (`result_count=0` at runtime timeout). |
+| `wrong_product_scope` | Fix agent/scope config. |
+| `rag_unavailable` | Fix RAG API connectivity. |
+| `low_score` | Tune content or `VOICE_RAG_MIN_SCORE`. |
+
+v1.34.4 correctly aborted Gate 3 on `rag_retrieve_timeout` (705 ms at 700 ms budget).
+Use v1.34.5+ for explicit diagnostics. Gate 3 live failure on v1.34.3 was a separate
+fallback issue fixed in 10AC (`call_session_id=c00a2c38-8ff8-43a0-aed8-85cd1d3e441f`).
 
 Also verify the raw runtime env without printing secrets:
 

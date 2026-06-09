@@ -13,6 +13,7 @@
     "stt:preflight": "node scripts/openai-stt-preflight.js",
     "rag:canary-preflight": "node scripts/rag-canary-preflight.js",
     "rag:retrieve-preflight": "node scripts/rag-retrieve-preflight.js",
+    "rag:retrieve-diagnostics": "node scripts/rag-retrieve-diagnostics.js",
     "compose:runtime-preflight": "node scripts/compose-runtime-preflight.js",
     "compose:baseline-preflight": "node scripts/compose-runtime-preflight.js --baseline",
     "test:intelligence": "node --test tests/intelligence-upgrade.test.js",

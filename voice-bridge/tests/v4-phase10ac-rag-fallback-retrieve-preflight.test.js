@@ -300,7 +300,7 @@ test("10AC E: retrieve preflight fails when product_scope is wrong in payload", 
       },
     });
     assert.equal(result.ok, false);
-    assert.match(result.failures.join(","), /payload_product_scope/);
+    assert.match(result.failures.join(","), /wrong_product_scope/);
   });
 });
 

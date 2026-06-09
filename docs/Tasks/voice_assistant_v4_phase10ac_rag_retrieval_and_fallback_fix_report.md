@@ -159,3 +159,7 @@ ORDER BY created_at;
 - No rag-api image change (voice-bridge only)
 - Privacy rules unchanged
 - RAG does not create leads or callback permission
+
+## Gate status update (Phase 10AD)
+
+v1.34.4 deployed safely. Retrieve preflight failed with `rag_retrieve_timeout` (705 ms at 700 ms budget). No live Gate 3 call was placed. See [Phase 10AD report](./voice_assistant_v4_phase10ad_rag_retrieve_timeout_diagnostics_report.md).
