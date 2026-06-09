@@ -99,6 +99,16 @@ export function detectTranscriptIntent(
     return "technical_escalation";
   }
 
+  const collectingContactPreference =
+    memory?.current_state === "collecting_contact_preference" ||
+    memory?.current_state === "collecting_callback_permission";
+  // Conversation Priority Contract #3: explicit callback/contact requests must
+  // beat interruption recovery and product Q&A. Otherwise a known product
+  // context can keep answering product questions and lose a qualified lead.
+  if (!collectingContactPreference && isCallbackLeadCaptureRequest(transcript)) {
+    return "callback_request";
+  }
+
   const inInterruption = Boolean(memory?.interruption_context);
 
   if (agentConfig && isTopicRepairPhrase(transcript)) {
@@ -135,15 +145,6 @@ export function detectTranscriptIntent(
   }
   if (/\b(neukunde|neu kunde|bestandskunde|eigene firma|unternehmen)\b/i.test(lower)) {
     return "sales_customer_type";
-  }
-  const collectingContactPreference =
-    memory?.current_state === "collecting_contact_preference" ||
-    memory?.current_state === "collecting_callback_permission";
-  // Phase 10AP follow-up: explicit callback/contact requests should not be
-  // shadowed by words like "telefonisch" unless the assistant is already
-  // asking for the caller's contact-channel preference.
-  if (!collectingContactPreference && isCallbackLeadCaptureRequest(transcript)) {
-    return "callback_request";
   }
   if (/\b(e-?mail|email|per mail)\b/i.test(lower)) return "contact_email";
   if (/\b(telefon|telefonisch|anruf|anrufen)\b/i.test(lower)) return "contact_phone";

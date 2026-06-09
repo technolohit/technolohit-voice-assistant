@@ -131,6 +131,57 @@ test("10AP: explicit callback request with phone wording is not shadowed by cont
   );
 });
 
+test("10AP: callback request wins over known product context and scoped product QA", () => {
+  const transcript = "Bitte rufen Sie mich telefonisch zurueck.";
+  const memory = {
+    current_state: "answering_product_question",
+    selected_product_id: "smart_website",
+    current_product_context: "smart_website",
+  };
+
+  assert.equal(detectTranscriptIntent(transcript, memory), "callback_request");
+
+  const plan = buildResponsePlan(basePlanArgs(transcript, {
+    memory,
+    stateMachine: { state: "answering_product_question" },
+    v4PathActive: true,
+    ragGate: { allowed: true, used_rag: false },
+  }));
+
+  assert.equal(plan.response_type, RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE);
+  assert.equal(plan.plan_reason, "callback_request_intent");
+  assert.equal(plan.rag_allowed, false);
+  assert.equal(plan.lead_transition_allowed, false);
+  assert.notEqual(plan.response_type, RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER);
+});
+
+test("10AP: callback request after interruption wins over interrupt scoped product QA", () => {
+  const transcript = "Stopp. Bitte rufen Sie mich telefonisch zurueck.";
+  const memory = {
+    current_state: "answering_product_question",
+    selected_product_id: "smart_website",
+    current_product_context: "smart_website",
+    interruption_context: {
+      interrupted_product_id: "smart_website",
+      cancellation_reason: "inbound_speech_detected",
+    },
+  };
+
+  assert.equal(detectTranscriptIntent(transcript, memory), "callback_request");
+
+  const plan = buildResponsePlan(basePlanArgs(transcript, {
+    memory,
+    stateMachine: { state: "answering_product_question" },
+    interruptionRecovery: { recoveryAction: "product_question", context: memory.interruption_context },
+    v4PathActive: true,
+    ragGate: { allowed: true, used_rag: false },
+  }));
+
+  assert.equal(plan.response_type, RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE);
+  assert.equal(plan.plan_reason, "callback_request_intent");
+  assert.equal(plan.rag_allowed, false);
+});
+
 test("10AP: closing overrides out-of-scope, technical escalation, and callback paths", () => {
   const agent = loadAgentConfig(loadConfig());
   const closing = "Danke, das reicht erstmal.";

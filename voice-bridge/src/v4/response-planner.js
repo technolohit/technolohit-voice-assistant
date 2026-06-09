@@ -383,6 +383,24 @@ function buildResponsePlanCore({
     });
   }
 
+  // Conversation Priority Contract #3: explicit callback/contact requests must
+  // start soft lead capture before scoped product QA, RAG, interruption repair,
+  // or questionnaire logic can continue the product explanation.
+  if (resolvedIntent === "callback_request") {
+    return planBase(RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE, {
+      text: sanitizeResponseText(getCallbackLeadCaptureResponse(behaviorPolicy)),
+      next_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+      memory_patch: {
+        current_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+        lead_ready: false,
+      },
+      quality_event_type: "turn_started",
+      plan_reason: "callback_request_intent",
+      rag_allowed: false,
+      lead_transition_allowed: false,
+    });
+  }
+
   const gate =
     ragGate ??
     shouldUseRagForTurn({ state, intent: resolvedIntent, memory, transcript });
@@ -701,22 +719,6 @@ function buildResponsePlanCore({
         current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION
       },
       quality_event_type: "turn_started"
-    });
-  }
-
-  // Phase 10AP: explicit callback request (#4) — soft lead capture, validator unchanged.
-  if (resolvedIntent === "callback_request") {
-    return planBase(RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE, {
-      text: sanitizeResponseText(getCallbackLeadCaptureResponse(behaviorPolicy)),
-      next_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
-      memory_patch: {
-        current_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
-        lead_ready: false,
-      },
-      quality_event_type: "turn_started",
-      plan_reason: "callback_request_intent",
-      rag_allowed: false,
-      lead_transition_allowed: false,
     });
   }
 

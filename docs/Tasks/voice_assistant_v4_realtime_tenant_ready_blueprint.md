@@ -31,16 +31,16 @@ Phase 1 must not build a full SaaS platform. It must build a high-quality Techno
 
 ## Current Project Status
 
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AR - Opt-In v4 Questionnaire Runtime Wiring (default-off; production v3/RAG-off unchanged)** |
+| **Current completed phase** | **Phase 10AS - Callback Priority After Questionnaire Canary (implementation ready; supervised v1.35.1 canary required)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12: closing phrase produced goodbye only; no RAG/fallback/lead/product continuation after closing; post-call/privacy/rollback passed. |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12. **v1.35.0 questionnaire canary PARTIAL/FAIL** because callback request was shadowed by product Q&A; Phase 10AS fixes priority and awaits v1.35.1 live validation. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Supervised v4 canary with questionnaire flag on (allowlist only) after review, or further playbook runtime increments. Production stays v3/RAG-off. |
+| **Next step** | Release `voice-bridge-v1.35.1`, run one supervised v4/RAG-on/questionnaire canary focused on callback/contact priority, then roll back to v3/RAG-off. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A-10AK implemented and accepted**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; **closing/stop intent canary passed on v1.34.12**.
+- Phase 10 live AudioSocket wiring: **10A-10AK implemented and accepted**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; **closing/stop intent canary passed on v1.34.12**; **10AS callback priority fix implemented after v1.35.0 questionnaire canary partial/fail**.
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -79,7 +79,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 - Live AudioSocket -> v4 Canary Wiring          [completed through 10AK - Gate 2, Gate 3 RAG/content, and closing canary passed]
+Phase 10 - Live AudioSocket -> v4 Canary Wiring          [completed through 10AS implementation - v1.35.1 callback-priority canary pending]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -681,6 +681,20 @@ Status: **implemented** — `questionnaire-runtime.js`, planner wrapper, orchest
 - [x] Successful: closing / role boundary / callback / RAG-unsafe / duplicate / length blocks.
 - [x] Successful: flag off leaves response plan unchanged (equivalence-tested).
 - [x] Successful: lead validator unchanged; playbook eval suite 16/16 pass.
+
+#### Phase 10AS - Callback Priority After Questionnaire Canary
+
+Goal: fix the `v1.35.0` supervised canary failure where a callback request after a good Smart Website answer was shadowed by scoped product Q&A.
+
+Status: **implemented, not live-accepted yet** — explicit callback/contact requests now run before interruption repair, scoped product Q&A, RAG, and questionnaire; production defaults unchanged — [report](./voice_assistant_v4_phase10as_callback_priority_after_questionnaire_report.md).
+
+- [x] Successful: `detectTranscriptIntent()` resolves callback requests before product/product-question branches unless already collecting contact preference.
+- [x] Successful: `buildResponsePlanCore()` resolves `callback_request` before scoped product Q&A/RAG/interruption/questionnaire.
+- [x] Successful: tests prove callback request wins with known `smart_website` context.
+- [x] Successful: tests prove callback request after interruption does not become `interrupt_scoped_product_qa`.
+- [x] Successful: contact preference follow-up (`telefonisch`) still maps to `contact_phone` while collecting contact preference.
+- [x] Successful: local verification passed (`voice-bridge` 568/568, `rag-api` 7/7, dialogue QA 26/26).
+- [ ] Successful: supervised `voice-bridge-v1.35.1` v4/RAG-on/questionnaire canary proves callback/contact priority live.
 
 ## Recommended v4 Architecture
 
