@@ -7,6 +7,7 @@
  *
  * Out-of-scope redirect, technical escalation, and callback lead-capture paths are
  * runtime-consumed in Phase 10AP (planner/orchestrator harness, no live network).
+ * Questionnaire/lead-intake generation is non-live in Phase 10AQ (generator module only).
  */
 
 import { loadConfig } from "../config.js";
@@ -35,6 +36,10 @@ import { createRuntimeContext } from "./runtime-context.js";
 import { createQualityEventSink } from "./quality-event-sink.js";
 import { createCallSessionMemory, setSelectedProduct } from "./call-session-memory.js";
 import { COMBINED_LIVE_TTS_CHAR_LIMIT } from "./playbook-short-answer.js";
+import {
+  generatePlaybookQuestionnaire,
+  assertQuestionnaireExpectations,
+} from "./playbook-questionnaire-generator.js";
 import { V4_STATES } from "./state-machine.js";
 
 /** Categories with a live v4 planner/orchestrator consumer today. */
@@ -47,6 +52,7 @@ export const RUNTIME_IMPLEMENTED_EVAL_CATEGORIES = new Set([
   "out_of_scope",
   "technical_escalation",
   "callback",
+  "questionnaire",
 ]);
 
 /** Reserved for future categories without a runtime consumer yet. */
@@ -67,7 +73,13 @@ export const PENDING_SCENARIO_REASON = "documented_playbook_ready_runtime_consum
 
 export function loadPlaybookEvalScenarios(playbook) {
   const scenarios = Array.isArray(playbook?.eval_scenarios) ? playbook.eval_scenarios : [];
-  return scenarios.filter((scenario) => scenario?.id && scenario?.category && scenario?.caller);
+  return scenarios.filter((scenario) => {
+    if (!scenario?.id || !scenario?.category) return false;
+    if (scenario.category === "questionnaire") {
+      return Boolean(scenario.caller_intent && scenario.expected);
+    }
+    return Boolean(scenario.caller);
+  });
 }
 
 export function validatePlaybookEvalScenarios(playbook) {
@@ -312,6 +324,31 @@ export async function runEvalScenario({
     };
   }
 
+  if (scenario.category === "questionnaire") {
+    const questionnaire = generatePlaybookQuestionnaire({
+      productId: scenario.product_id ?? null,
+      callerIntent: scenario.caller_intent,
+      playbook: playbook ?? null,
+      productAnswered:
+        scenario.caller_intent === "product_question_answered" ||
+        scenario.caller_intent === "pricing_answered",
+      pricingAnswered: scenario.caller_intent === "pricing_answered",
+      callClosing: scenario.caller_intent === "closing",
+      callerRequestedContact: scenario.caller_intent === "callback_request",
+      memory: buildEvalScenarioMemory(scenario),
+    });
+    const failures = assertQuestionnaireExpectations(questionnaire, scenario.expected ?? {});
+    return {
+      ...baseResult,
+      status: failures.length ? "fail" : "pass",
+      reason: failures.length ? failures.join(";") : "questionnaire_pass",
+      runtime_mode: "questionnaire_generator",
+      response_type: questionnaire.blocked ? "questionnaire_blocked" : "questionnaire_ready",
+      plan_reason: questionnaire.block_reason ?? questionnaire.mode ?? null,
+      question_count: questionnaire.question_count ?? 0,
+    };
+  }
+
   const resolvedConfig = config ?? loadConfig();
   const resolvedAgent = agentConfig ?? loadAgentConfig(resolvedConfig);
   const resolvedPolicy = behaviorPolicy ?? resolveBehaviorPolicy({ config: resolvedConfig });
@@ -483,7 +520,7 @@ export function formatEvalSuiteSnapshot(suiteResult) {
     agent_id: suiteResult.agent_id,
     ok: suiteResult.ok,
     summary: suiteResult.summary,
-    results: (suiteResult.results ?? []).map(({ id, category, status, reason, runtime_mode, response_type, plan_reason, caller_chars, response_chars }) => ({
+    results: (suiteResult.results ?? []).map(({ id, category, status, reason, runtime_mode, response_type, plan_reason, caller_chars, response_chars, question_count }) => ({
       id,
       category,
       status,
@@ -493,6 +530,7 @@ export function formatEvalSuiteSnapshot(suiteResult) {
       plan_reason,
       caller_chars,
       response_chars,
+      question_count,
     })),
   });
 }

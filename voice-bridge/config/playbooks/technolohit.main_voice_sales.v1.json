@@ -154,6 +154,24 @@
       "kein Festpreis ohne Qualifikation (forbidden_claims des Agent-Configs)"
     ]
   },
+  "questionnaire_policy": {
+    "answer_before_intake": true,
+    "max_question_chars": 120,
+    "soft_prefix": "Wenn Sie möchten, ",
+    "generic_project_context_question": "Worum geht es kurz bei Ihrem Projekt, damit unser Team gezielter antworten kann?",
+    "contact_preference_question": "Möchten Sie telefonisch oder per E-Mail starten?",
+    "products": {
+      "smart_website": "Geht es um eine neue Website oder einen Relaunch, und welche Ziele haben Sie?",
+      "voice_agent": "Welche Anrufe oder Anliegen sollen telefonisch abgedeckt werden?",
+      "lokalki": "Geht es vor allem um interne Dokumente oder lokale Sichtbarkeit?"
+    },
+    "never_when": [
+      "closing",
+      "out_of_scope",
+      "technical_escalation",
+      "before_product_or_pricing_answer"
+    ]
+  },
   "lead_capture_policy": {
     "answer_first": true,
     "capture_only_when_appropriate": true,
@@ -338,6 +356,79 @@
         "requires_valid_phone": true,
         "requires_permission": true,
         "no_live_transfer_claim": true
+      }
+    },
+    {
+      "id": "questionnaire_smart_website_after_answer",
+      "category": "questionnaire",
+      "product_id": "smart_website",
+      "caller_intent": "product_question_answered",
+      "expected": {
+        "behavior": "project_context_question",
+        "response_contains": "Website|Relaunch|Ziele",
+        "no_pii_prompt": true,
+        "no_fixed_price": true,
+        "question_count": 1
+      }
+    },
+    {
+      "id": "questionnaire_voice_agent_after_answer",
+      "category": "questionnaire",
+      "product_id": "voice_agent",
+      "caller_intent": "product_question_answered",
+      "expected": {
+        "behavior": "project_context_question",
+        "response_contains": "Anruf|Anliegen|telefonisch",
+        "question_count": 1
+      }
+    },
+    {
+      "id": "questionnaire_lokalki_after_answer",
+      "category": "questionnaire",
+      "product_id": "lokalki",
+      "caller_intent": "product_question_answered",
+      "expected": {
+        "behavior": "project_context_question",
+        "response_contains": "Dokument|lokal|Sichtbarkeit",
+        "question_count": 1
+      }
+    },
+    {
+      "id": "questionnaire_blocked_by_closing",
+      "category": "questionnaire",
+      "caller_intent": "closing",
+      "expected": {
+        "behavior": "blocked",
+        "block_reason": "closing_blocks_intake"
+      }
+    },
+    {
+      "id": "questionnaire_blocked_out_of_scope",
+      "category": "questionnaire",
+      "caller_intent": "out_of_scope",
+      "expected": {
+        "behavior": "blocked",
+        "block_reason": "role_boundary_blocks_intake"
+      }
+    },
+    {
+      "id": "questionnaire_blocked_technical_escalation",
+      "category": "questionnaire",
+      "caller_intent": "technical_escalation",
+      "expected": {
+        "behavior": "blocked",
+        "block_reason": "role_boundary_blocks_intake"
+      }
+    },
+    {
+      "id": "questionnaire_callback_contact_preference",
+      "category": "questionnaire",
+      "caller_intent": "callback_request",
+      "expected": {
+        "behavior": "contact_preference_only",
+        "no_lead_ready": true,
+        "no_live_transfer_claim": true,
+        "question_count": 1
       }
     }
   ],

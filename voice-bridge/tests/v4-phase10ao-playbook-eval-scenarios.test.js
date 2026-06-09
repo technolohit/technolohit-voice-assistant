@@ -66,7 +66,7 @@ test("10AO: implemented scenarios pass through planner/orchestrator harness", as
   assert.equal(suite.playbook_version, loaded.playbook.playbook_version);
   assert.equal(suite.ok, true);
   assert.equal(suite.summary.fail, 0);
-  assert.ok(suite.summary.pass >= 9, "expected all playbook eval scenarios to pass");
+  assert.ok(suite.summary.pass >= 9, "expected all core playbook eval scenarios to pass");
 
   const closing = suite.results.find((entry) => entry.id === "closing_after_product_answer");
   assert.equal(closing.status, "pass");

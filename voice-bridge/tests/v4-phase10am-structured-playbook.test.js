@@ -130,7 +130,11 @@ test("10AM: eval scenarios cover required categories", () => {
   }
   for (const scenario of playbook.eval_scenarios) {
     assert.ok(scenario.id, "scenario missing id");
-    assert.ok(scenario.caller, `scenario missing caller transcript: ${scenario.id}`);
+    if (scenario.category === "questionnaire") {
+      assert.ok(scenario.caller_intent, `scenario missing caller_intent: ${scenario.id}`);
+    } else {
+      assert.ok(scenario.caller, `scenario missing caller transcript: ${scenario.id}`);
+    }
     assert.ok(scenario.expected, `scenario missing expected: ${scenario.id}`);
   }
 });
