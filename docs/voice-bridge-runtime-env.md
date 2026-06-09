@@ -105,6 +105,24 @@ VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
 
 Production may override agent config via `VOICE_AGENT_CONFIG_PATH` or mount a replacement file. The voice-bridge Docker image includes the default seed at `/app/config/agents/technolohit.main_voice_sales.v4.json`.
 
+### Phase 10AN — playbook-driven behavior (default off)
+
+Opt-in only. With defaults unchanged, runtime behavior is identical to the hardcoded Phase 10AK values and the playbook file is never loaded at call time. The Phase 10AM draft playbook is **not** production-active.
+
+```env
+VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=false
+VOICE_V4_PLAYBOOK_PATH=/app/config/playbooks/technolohit.main_voice_sales.v1.json
+VOICE_V4_PLAYBOOK_ALLOW_DRAFT=false
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` | `false` | Master switch for playbook-sourced closing/fallback wording (increment 1 scope only). |
+| `VOICE_V4_PLAYBOOK_PATH` | empty (resolver falls back to repo default playbook path) | Absolute or package-relative path to a structured tenant playbook JSON file. |
+| `VOICE_V4_PLAYBOOK_ALLOW_DRAFT` | `false` | Explicit test/canary override to allow a `status=draft` playbook. Never enable in production. |
+
+Safety: missing/invalid/unapproved/inactive playbooks fail closed to hardcoded defaults. Draft playbooks are rejected unless `VOICE_V4_PLAYBOOK_ALLOW_DRAFT=true`.
+
 Production RAG URL from voice-bridge host network:
 
 ```env

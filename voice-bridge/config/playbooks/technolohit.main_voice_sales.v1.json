@@ -321,6 +321,15 @@
       }
     },
     {
+      "id": "fallback_clarification_unclear",
+      "category": "fallback",
+      "caller": "blub gnarf zwirbel",
+      "expected": {
+        "response_type": "fallback_clarification",
+        "response_contains": "nicht ganz verstanden"
+      }
+    },
+    {
       "id": "callback_request",
       "category": "callback",
       "caller": "Können Sie mich zurückrufen lassen?",

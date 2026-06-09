@@ -125,7 +125,7 @@ test("10AM: lead capture policy answers first and captures only when appropriate
 test("10AM: eval scenarios cover required categories", () => {
   const playbook = loadPlaybookOrThrow();
   const categories = new Set(playbook.eval_scenarios.map((scenario) => scenario.category));
-  for (const category of ["closing", "out_of_scope", "technical_escalation", "pricing", "callback"]) {
+  for (const category of ["closing", "out_of_scope", "technical_escalation", "pricing", "callback", "fallback"]) {
     assert.ok(categories.has(category), `missing eval scenario category: ${category}`);
   }
   for (const scenario of playbook.eval_scenarios) {
