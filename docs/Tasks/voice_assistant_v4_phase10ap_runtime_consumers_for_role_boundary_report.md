@@ -1,6 +1,7 @@
 # Phase 10AP — Runtime Consumers For Pending Playbook Eval Categories Report
 
 Date: 2026-06-10
+Commit: `7c7dfa5`
 Production status: **v3 / RAG-off unchanged**. Playbook runtime remains **opt-in/default-off**. Draft playbook **not production-active**.
 
 > Phase 10AP wires minimal, safe v4 runtime consumers for the three Phase 10AO pending
