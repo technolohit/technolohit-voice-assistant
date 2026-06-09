@@ -134,7 +134,35 @@ Smart Website ist eine moderne Firmenwebsite mit Leistungsseiten und lokaler Sic
 | Stage A | PASS |
 | Gate 1 v3/RAG-off | PASS |
 | Gate 2 infra | PASS |
-| Gate 2 functional | Pending **v1.34.3** live re-test after Codex review |
-| Gate 3 | Blocked |
+| Gate 2 functional | **PASS on v1.34.3** |
+| Gate 3 | Allowed only as one supervised RAG-on canary after compose/runtime and `rag:canary-preflight` pass |
 
 Production remains **v3 / RAG-off** between windows.
+
+## Supervised Gate 2 Result (2026-06-09)
+
+Release tested:
+
+- `thnhit/technhvoice:voice-bridge-v1.34.3`
+- Commit: `d2e68a1fce0097790f0d6e40be5f58286f7ceb1c`
+- `rag-api` unchanged
+
+Call:
+
+- `call_session_id=9b7e2019-4211-46af-b4ce-16dc575dfa61`
+- `handler=v4_canary`
+- `VOICE_RAG_ENABLED=false`
+- `VOICE_RAG_SALES_ANSWERER_ENABLED=false`
+
+Result: **PASS**
+
+- Caller heard the combined Smart Website answer with definition, value, and scope-based pricing.
+- No mid-sentence cut-off observed.
+- No immediate `Neukunde` / customer-type / callback qualification.
+- Barge-in worked and product context remained `smart_website`.
+- `quality_flush_completed inserted_count=87 failed_count=0`.
+- `response_plan_created` showed `response_type=product_question_answer`, `plan_reason=combined_product_inquiry`, `current_product_context=smart_website`, `matched_product=smart_website`.
+- `summary_count=1`; `post_call_summary_created` present; no `summary_not_created`.
+- Privacy scan: `email_like_payload_rows=0`, `phone_like_payload_rows=0`.
+- No new stale active session; Asterisk active calls returned to `0`.
+- Final rollback restored v3 / RAG-off with v4 canary flags disabled.

@@ -37,10 +37,10 @@ Last updated: 2026-06-03
 |------|--------|
 | **Current completed phase** | **Phase 10AB — live-heard combined Smart Website inquiry (Gate 2 functional)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | Gate 2 **infra mostly PASS** (Stage A, STT/TTS, barge-in, quality flush); post-call summary fix shipped in v1.34.1 but still requires live DB evidence; Gate 2 **functional FAIL on v1.34.2** (TTS trim); fix is release-ready in **v1.34.3** |
+| **v4 live canary** | **Gate 2 PASS on v1.34.3**: v4/RAG-off, OpenAI STT/TTS, barge-in/context, combined Smart Website inquiry, quality flush, privacy scan, post-call summary, and rollback all passed |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Deploy **`voice-bridge-v1.34.3`** for a supervised Gate 2 v4/RAG-off functional re-test — [10AB report](./voice_assistant_v4_phase10ab_live_heard_combined_inquiry_fix_report.md). Gate 3 blocked. Production stays v3/RAG-off. |
+| **Next step** | Run **one supervised Gate 3 v4/RAG-on canary** using `voice-bridge-v1.34.3` after compose/runtime + `rag:canary-preflight` pass. Production stays v3/RAG-off outside the window. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A–10Y plus 10Z/10AA/10AB implemented** (route, VAD, STT, dialogue, TTS, barge-in, quality flush, live PSTN QA, env ownership, post-call handoff, combined inquiry); Gate 2 functional validation pending **v1.34.3**
+- Phase 10 live AudioSocket wiring: **10A–10Y plus 10Z/10AA/10AB implemented** (route, VAD, STT, dialogue, TTS, barge-in, quality flush, live PSTN QA, env ownership, post-call handoff, combined inquiry); **Gate 2 passed on v1.34.3**
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -79,7 +79,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 — Live AudioSocket → v4 Canary Wiring          [in progress — 10A–10AB; Gate 2 functional pending v1.34.3]
+Phase 10 — Live AudioSocket → v4 Canary Wiring          [in progress — Gate 2 passed; Gate 3 RAG-on canary next]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -1137,7 +1137,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10Z v4 live post-call summary handoff for Gate 2 — [report](./voice_assistant_v4_phase10z_gate2_post_call_summary_fix_report.md).
 - [x] Successful: Phase 10AA combined inquiry planner (superseded by 10AB TTS-length fix) — [report](./voice_assistant_v4_phase10aa_gate2_combined_inquiry_fix_report.md).
 - [x] Successful: Phase 10AB implementation keeps the RAG-off combined inquiry within the default live TTS limit and preserves first-turn product scope for later RAG-on retrieval — [report](./voice_assistant_v4_phase10ab_live_heard_combined_inquiry_fix_report.md) — target v1.34.3.
-- [ ] Successful: Phase 10AB supervised Gate 2 live validation proves the caller hears definition + value + scoped pricing and post-call summary is created.
+- [x] Successful: Phase 10AB supervised Gate 2 live validation on `voice-bridge-v1.34.3` proves the caller hears definition + value + scoped pricing, post-call summary is created, barge-in/context is preserved, privacy scan passes, and rollback succeeds (`call_session_id=9b7e2019-4211-46af-b4ce-16dc575dfa61`).
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).
