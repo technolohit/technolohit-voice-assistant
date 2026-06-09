@@ -1,6 +1,7 @@
 # Phase 10AQ — Playbook Questionnaire Generator / Lead Intake Design Report
 
 Date: 2026-06-10
+Commit: `0050b83`
 Production status: **v3 / RAG-off unchanged**. Playbook runtime remains **opt-in/default-off**. Draft playbook **not production-active**.
 
 > Phase 10AQ introduces a deterministic, non-live questionnaire/lead-intake generator from
