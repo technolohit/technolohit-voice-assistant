@@ -135,12 +135,16 @@ async function synthesizeLiveSpeech(ttsAdapter, speechText, options = {}) {
   return ttsAdapter.synthesizeSentenceChunk(speechText, options);
 }
 
-export function maxLiveResponseChars(config) {
+export function maxLiveResponseChars(config, options = {}) {
+  const override = Number(options?.maxChars ?? NaN);
+  if (Number.isFinite(override) && override > 0) {
+    return Math.max(80, Math.min(320, override));
+  }
   return Math.max(80, Number(config?.assistant?.maxResponseChars ?? 180));
 }
 
-export function trimLiveResponseText(text, config) {
-  const maxChars = maxLiveResponseChars(config);
+export function trimLiveResponseText(text, config, options = {}) {
+  const maxChars = maxLiveResponseChars(config, options);
   const normalized = normalizeText(text);
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars).trim()}…`;
@@ -162,12 +166,12 @@ export function containsUnsafeTtsText(text) {
   return { unsafe: false, reason: null };
 }
 
-export function prepareLiveAssistantSpeechText(config, rawText) {
+export function prepareLiveAssistantSpeechText(config, rawText, options = {}) {
   const sanitized = sanitizeResponseText(rawText);
   const redacted = redactPhoneLikeText(sanitized);
   const safety = containsUnsafeTtsText(redacted);
   if (safety.unsafe) {
-    const fallback = trimLiveResponseText(SAFE_TTS_FALLBACK, config);
+    const fallback = trimLiveResponseText(SAFE_TTS_FALLBACK, config, options);
     return {
       ok: true,
       reason: safety.reason,
@@ -176,7 +180,7 @@ export function prepareLiveAssistantSpeechText(config, rawText) {
       response_chars: fallback.length
     };
   }
-  const trimmed = trimLiveResponseText(redacted, config);
+  const trimmed = trimLiveResponseText(redacted, config, options);
   if (!trimmed) {
     return { ok: false, reason: "empty_text", text: null, usedFallback: false, response_chars: 0 };
   }
@@ -225,7 +229,9 @@ export async function runLiveTtsAndPlayback(config, ctx, runtime, dialogueResult
       ? String(hookText)
       : String(orchestrator?.lastAssistantText ?? orchestrator?.lastPlan?.text ?? "");
 
-  const prepared = prepareLiveAssistantSpeechText(config, rawText);
+  const prepared = prepareLiveAssistantSpeechText(config, rawText, {
+    maxChars: orchestrator?.lastPlan?.max_spoken_chars ?? null
+  });
   if (!prepared.ok) {
     logTtsFailed(ctx, prepared.reason ?? "unsafe_text");
     bufferQualityEvent(

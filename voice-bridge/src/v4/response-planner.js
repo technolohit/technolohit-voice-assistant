@@ -108,6 +108,7 @@ function planScopedProductAnswer({
     allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
     rag_allowed: gateUsesRag(ragGate),
     plan_reason: resolved.planReason,
+    max_spoken_chars: resolved.maxSpokenChars ?? null,
     lead_transition_allowed: false,
   });
 }
@@ -173,6 +174,7 @@ function planInterruptionFollowUp({
       allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
       rag_allowed: gateUsesRag(ragGate),
       plan_reason: resolved.planReason,
+      max_spoken_chars: resolved.maxSpokenChars ?? null,
     });
   }
 
@@ -198,6 +200,7 @@ function planInterruptionFollowUp({
       allowed_tools: gateUsesRag(ragGate) ? ["rag"] : [],
       rag_allowed: gateUsesRag(ragGate),
       plan_reason: resolved.planReason,
+      max_spoken_chars: resolved.maxSpokenChars ?? null,
     });
   }
 
@@ -238,22 +241,24 @@ function resolveRagAwareProductAnswer({
     return {
       text: sanitizeResponseText(ragAnswer),
       planReason: combined ? "combined_product_inquiry" : planReason,
+      maxSpokenChars: ragResult?.max_spoken_chars ?? null,
     };
   }
 
   if (combined) {
-    return { text: combined, planReason: "combined_product_inquiry" };
+    return { text: combined, planReason: "combined_product_inquiry", maxSpokenChars: null };
   }
 
   if (category && productId) {
     return {
       text: sanitizeResponseText(buildPlaybookShortAnswer(agentConfig, productId, category)),
       planReason: category === "pricing" ? "product_pricing_fallback" : planReason,
+      maxSpokenChars: null,
     };
   }
 
   if (ragAnswer) {
-    return { text: sanitizeResponseText(ragAnswer), planReason };
+    return { text: sanitizeResponseText(ragAnswer), planReason, maxSpokenChars: ragResult?.max_spoken_chars ?? null };
   }
 
   const product = productId ? getProductById(agentConfig, productId) : null;
@@ -268,6 +273,7 @@ function resolveRagAwareProductAnswer({
           : "Gerne. Was möchten Sie dazu wissen?"),
     ),
     planReason,
+    maxSpokenChars: null,
   };
 }
 
@@ -518,6 +524,7 @@ export function buildResponsePlan({
       quality_event_type: gateUsesRag(effectiveRagGate) ? "rag_retrieval_completed" : "turn_started",
       allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
       rag_allowed: gateUsesRag(effectiveRagGate),
+      max_spoken_chars: ragResult?.max_spoken_chars ?? null,
       lead_transition_allowed: false
     });
   }
@@ -542,6 +549,7 @@ export function buildResponsePlan({
       allowed_tools: gateUsesRag(effectiveRagGate) ? ["rag"] : [],
       rag_allowed: gateUsesRag(effectiveRagGate),
       plan_reason: resolved.planReason,
+      max_spoken_chars: resolved.maxSpokenChars ?? null,
       lead_transition_allowed: false,
     });
   }

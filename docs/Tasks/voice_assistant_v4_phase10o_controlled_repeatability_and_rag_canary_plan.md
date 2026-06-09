@@ -5,10 +5,11 @@ Prerequisite: [Phase 10N report](./voice_assistant_v4_phase10n_interruption_sema
 
 **Phase 10O-A status: FAILED (stopped).** Repeatability failed through v1.28.0. **v1.28.0 / 10R:** PARTIAL/STRONG on interrupts. **10S** addresses post-switch generic Q&A (`Was kostet das?` scoped to `smart_website`). See [10R](./voice_assistant_v4_phase10r_repeated_interruption_stability_report.md), [10S](./voice_assistant_v4_phase10s_product_context_after_interruption_report.md).
 
-**Phase 10O-B (RAG-on): Gate 3 PARTIAL on v1.34.8.** Valid supervised live call; human quality
-passed. Raw `rag:retrieve-preflight` passed but live RAG missed (`rag_used=false`,
-`rag_result_count=0`, 347 ms, no timeout). **Do not classify as full Gate 3 PASS.**
-v1.34.9 adds `rag:live-path-preflight` (same path as `retrieveV4RagAnswer()`).
+**Phase 10O-B (RAG-on): Gate 3 technical PASS on v1.34.10, content quality NOT accepted.**
+The live call proved `rag_used=true`, `rag_result_count=1`, and safe rollback, but the
+answer was too short/robotic and SQL lacked safe answer/context previews. **v1.34.11**
+adds richer Smart Website combined RAG synthesis, safe QA previews, and closing-thanks
+summary hygiene. Do not classify Gate 3 as accepted until the content-quality retry passes.
 Gate 2 remains **PASS** (v4/RAG-off).
 
 **Production v4 remains off.** This phase extends evidence; it does **not** enable global production v4.
@@ -36,7 +37,7 @@ Gate 2 remains **PASS** (v4/RAG-off).
 
 1. Gate 1: v3 baseline health and known-product pricing sanity. Do not test `Stopp` or barge-in on v3.
 2. Gate 2: v4/RAG-off control call. This is the required interactive comparison and must prove interruption/product-context behavior. The first known-product opening response must be neither `fallback_clarification` nor `collect_sales_context`.
-3. Gate 3: v4/RAG-on canary. Gate 2 passed on v1.34.3; v1.34.6 live call was partial due to live RAG timeout. Retest on v1.34.8+ only, run one supervised call, and roll back immediately after evidence collection.
+3. Gate 3: v4/RAG-on canary. Gate 2 passed on v1.34.3; v1.34.10 technically passed RAG usage but failed human content quality. Retest on v1.34.11+ only, run one supervised call, and roll back immediately after evidence collection.
 
 Gate 3 is invalid unless **all four** checks pass immediately before the call:
 

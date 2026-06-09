@@ -6,6 +6,15 @@ function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function isClosingOnlyCallerText(text) {
+  const lower = normalizeText(text).toLowerCase();
+  if (!lower) return false;
+  return (
+    /^danke[.!]?$/.test(lower) ||
+    /\b(danke[, ]+das reicht|das reicht erstmal|reicht erstmal|danke[, ]+das war alles|das war alles|auf wiederh[oö]ren|auf wiedersehen|tsch[uü]ss|tschuess|sch[oö]nen tag)\b/i.test(lower)
+  );
+}
+
 function metadataField(metadata, key) {
   if (!metadata || typeof metadata !== "object") return "";
   return normalizeText(metadata[key]);
@@ -35,8 +44,12 @@ function latestAssistantMetadata(turnRows) {
 function firstCallerNeed(turnRows) {
   const callerRows = turnRows.filter((row) => String(row.speaker ?? "") === "caller");
   if (!callerRows.length) return "";
-  const candidate = normalizeText(callerRows[0].text);
-  return candidate.slice(0, 220);
+  for (const row of callerRows) {
+    const candidate = normalizeText(row.text);
+    if (!candidate || isClosingOnlyCallerText(candidate)) continue;
+    return candidate.slice(0, 220);
+  }
+  return "";
 }
 
 function findLastIntent(turnRows) {
@@ -142,15 +155,20 @@ function buildSummaryText(fields) {
   ].join("\n");
 }
 
-function callerNeedFromV4Metadata(v4Metadata) {
+export function callerNeedFromV4Metadata(v4Metadata) {
   const memory = v4Metadata?.v4_memory_snapshot;
   if (memory && typeof memory === "object") {
-    const fromMemory = normalizeText(
-      memory.use_case_summary || memory.current_problem || memory.last_user_utterance
-    );
-    if (fromMemory) return fromMemory.slice(0, 220);
+    for (const value of [
+      memory.use_case_summary,
+      memory.current_problem,
+      memory.last_user_utterance
+    ]) {
+      const fromMemory = normalizeText(value);
+      if (fromMemory && !isClosingOnlyCallerText(fromMemory)) return fromMemory.slice(0, 220);
+    }
   }
-  return normalizeText(v4Metadata?.caller_need).slice(0, 220);
+  const fromMetadata = normalizeText(v4Metadata?.caller_need);
+  return isClosingOnlyCallerText(fromMetadata) ? "" : fromMetadata.slice(0, 220);
 }
 
 function productInterestFromV4Metadata(v4Metadata) {

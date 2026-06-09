@@ -469,6 +469,7 @@ Use one supervised call for scenarios 2–11 where possible. Mark pass/fail in t
 | E5g | Interrupt listen window (10P) | After **Stopp** only: logs show `interrupt_followup_waiting` — **no** immediate `dialogue_plan_created` / TTS until continuation or timeout (~2.2s) |
 | E5h | Post-interrupt latency (10P) | SQL: `interrupt_followup_latency_metrics` row with non-null `barge_in_detected_to_followup_speech_start_ms` when follow-up completes |
 | E5i | Combined Smart Website inquiry (10AB) | Ask **Was ist Smart Website, was macht sie und was kostet sie?** — caller hears definition + value + scoped pricing without truncation; G.3h shows `combined_product_inquiry` |
+| E5j | RAG answer quality evidence (10AJ) | Gate 3 RAG-on combined inquiry: caller hears a natural Smart Website answer with definition + value + scoped pricing; SQL shows `rag_used=true`, `assistant_response_preview`, `rag_answer_preview`, and `answer_context_preview`; post-call summary must not use **Danke, das reicht erstmal** as `caller_need` |
 | E6 | Dialogue plan | `[v4-live] dialogue_plan_created` |
 | E7 | OpenAI TTS playback | `[v4-live] tts_completed` + `playback_started`; speech intelligible; no choppy overlap (see `silence_writer_paused` / `silence_writer_resumed`) |
 | E8 | Barge-in | During assistant playback, caller speaks; `barge_in_detected`, `playback_cancelled` |
@@ -833,6 +834,45 @@ first successful hit. A successful retry should produce `rag_retrieval_completed
 `rag_attempt_count > 1`, `rag_timeout_count >= 1`, and `rag_attempt_fallback_reasons`
 containing `timeout`. Do not classify Gate 3 as full RAG pass unless the live call has
 `rag_retrieval_completed` / `rag_used=true`.
+
+### G.3j Gate 3 RAG answer quality evidence (Phase 10AJ)
+
+Gate 3 technical pass is not enough. The caller must hear a natural Smart Website answer
+with definition, value, and scope-based pricing. SQL must include safe previews for QA.
+
+```sql
+SELECT created_at,
+       event_type,
+       payload->>'rag_used' AS rag_used,
+       payload->>'rag_product_scope' AS rag_product_scope,
+       payload->>'rag_answer_preview' AS rag_answer_preview,
+       payload->>'answer_context_preview' AS answer_context_preview,
+       payload->>'rag_source_title_preview' AS rag_source_title_preview,
+       payload->>'assistant_response_preview' AS assistant_response_preview,
+       payload->>'response_type' AS response_type,
+       payload->>'plan_reason' AS plan_reason
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type IN ('rag_retrieval_completed', 'response_plan_created')
+ORDER BY created_at;
+```
+
+**Pass:** `rag_used=true`, `rag_product_scope=smart_website`,
+`response_type=product_question_answer`, `plan_reason=combined_product_inquiry`, and
+the response preview contains definition + value + scope-based pricing.
+
+**Post-call summary hygiene:**
+
+```sql
+SELECT metadata->>'caller_need' AS caller_need
+FROM voice.call_summaries
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+**Pass:** closing-only phrases such as `Danke, das reicht erstmal` are not stored as
+`caller_need`.
 
 ### G.4 Session close + privacy-oriented payload scan
 

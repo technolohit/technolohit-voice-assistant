@@ -3,7 +3,7 @@
  * Never includes raw query, transcript, snippets, phone, email, or secrets.
  */
 
-import { normalizeText } from "./redaction.js";
+import { normalizeText, redactPhoneLikeText } from "./redaction.js";
 import {
   detectCombinedProductInquiry,
   detectShortFollowUpCategory,
@@ -18,6 +18,17 @@ export function resolveNormalizedQueryType(transcript = "") {
   return "product_question";
 }
 
+const EMAIL_LIKE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+
+export function buildSafeTextPreview(text = "", maxChars = 220) {
+  const redacted = redactPhoneLikeText(normalizeText(text)).replace(EMAIL_LIKE, "[email_redacted]");
+  if (!redacted) return null;
+  if (redacted.length <= maxChars) return redacted;
+  const slice = redacted.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > 80 ? slice.slice(0, lastSpace) : slice).trim();
+}
+
 export function buildSafeRagEventDiagnostics({
   config = null,
   transcript = "",
@@ -27,6 +38,9 @@ export function buildSafeRagEventDiagnostics({
   agentId = null,
 } = {}) {
   const normalized = normalizeText(transcript);
+  const answerPreview = buildSafeTextPreview(ragResult?.answer, 240);
+  const contextPreview = buildSafeTextPreview(ragResult?.answer_context_preview, 240);
+  const titlePreview = buildSafeTextPreview(ragResult?.rag_source_title_preview, 120);
   return {
     normalized_query_type: resolveNormalizedQueryType(transcript),
     query_chars: normalized.length,
@@ -49,5 +63,8 @@ export function buildSafeRagEventDiagnostics({
     rag_timeout_count: ragResult?.rag_timeout_count ?? null,
     rag_success_count: ragResult?.rag_success_count ?? null,
     rag_attempt_fallback_reasons: ragResult?.rag_attempt_fallback_reasons ?? [],
+    ...(answerPreview ? { rag_answer_preview: answerPreview } : {}),
+    ...(contextPreview ? { answer_context_preview: contextPreview } : {}),
+    ...(titlePreview ? { rag_source_title_preview: titlePreview } : {}),
   };
 }

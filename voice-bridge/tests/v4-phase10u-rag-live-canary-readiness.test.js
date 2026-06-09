@@ -153,7 +153,9 @@ test("10U: first named Smart Website combined inquiry is scoped before RAG retri
     assert.equal(action.ragResult.rag_product_scope, "smart_website");
     assert.equal(action.plan.rag_used, true);
     assert.equal(action.plan.rag_product_scope, "smart_website");
-    assert.equal(action.plan.text, "Smart Website Wissen aus dem Produktkontext.");
+    assert.equal(action.plan.plan_reason, "combined_product_inquiry");
+    assert.match(action.plan.text, /Smart Website/i);
+    assert.match(action.plan.text, /Preis h.+ngt vom Umfang/i);
   });
 });
 

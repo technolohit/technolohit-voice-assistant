@@ -31,16 +31,16 @@ Phase 1 must not build a full SaaS platform. It must build a high-quality Techno
 
 ## Current Project Status
 
-Last updated: 2026-06-03
+Last updated: 2026-06-09
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AI — RAG content extraction hotfix after live-path preflight** |
+| **Current completed phase** | **Phase 10AJ - RAG answer quality and QA evidence after technical Gate 3 pass** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 pending retry** — v1.34.9 proved retrieve/filter pass but exposed content extraction mismatch (`rag_unsafe_or_empty`); v1.34.10 reads RAG API `content` chunks |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 technical PASS** on v1.34.10 (`rag_used=true`), but **human content quality not accepted**; v1.34.11 improves combined Smart Website RAG answer and QA evidence |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release **`voice-bridge-v1.34.10`** after Codex review. Gate 3 requires `rag:canary-preflight`, `rag:retrieve-preflight`, and **`rag:live-path-preflight`**. Production stays v3/RAG-off. |
+| **Next step** | Release **`voice-bridge-v1.34.11`** after Codex review, then run one supervised Gate 3 content-quality call. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A–10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH/10AI implemented**; **Gate 2 passed**; **Gate 3 pending retry on v1.34.10** after live-path preflight exposed RAG API `content` extraction mismatch
+- Phase 10 live AudioSocket wiring: **10A-10Y plus 10Z/10AA/10AB/10AC/10AD/10AE/10AF/10AG/10AH/10AI/10AJ implemented**; **Gate 2 passed**; **Gate 3 technical pass recorded on v1.34.10, content-quality retry pending on v1.34.11**
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -79,7 +79,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 — Live AudioSocket → v4 Canary Wiring          [in progress — Gate 2 passed; Gate 3 RAG-on pending v1.34.8 retrieve-timeout retest]
+Phase 10 - Live AudioSocket -> v4 Canary Wiring          [in progress - Gate 2 passed; Gate 3 technical pass, content-quality acceptance pending]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -1146,6 +1146,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AG retrieve-specific timeout/max-attempt config — [report](./voice_assistant_v4_phase10ag_rag_retrieve_timeout_config_report.md) — v1.34.8 Gate 3 live call valid but RAG-on criteria failed (raw preflight false positive).
 - [x] Successful: Phase 10AH live RAG path equivalence — `rag:live-path-preflight` uses `retrieveV4RagAnswer()`; filter-stage diagnostics on live RAG events — [report](./voice_assistant_v4_phase10ah_live_rag_path_equivalence_report.md) — target v1.34.9.
 - [x] Successful: Phase 10AI RAG content extraction hotfix — live-path preflight showed retrieve/filter pass but `rag_unsafe_or_empty`; voice-bridge now reads RAG API `content` chunks — [report](./voice_assistant_v4_phase10ai_rag_content_extraction_hotfix_report.md) — target v1.34.10.
+- [x] Successful: Phase 10AJ RAG answer quality and QA evidence - Gate 3 technical pass on v1.34.10, richer combined Smart Website RAG answer, safe response/context previews, and closing-thanks summary hygiene - [report](./voice_assistant_v4_phase10aj_rag_answer_quality_and_qa_evidence_report.md) - target v1.34.11.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).
 - [ ] Successful: Tier 9b-B supervised canary executed on live PSTN (broader than single-call 10N pass).

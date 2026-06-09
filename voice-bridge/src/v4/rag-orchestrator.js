@@ -33,10 +33,12 @@ import {
   buildPlaybookCombinedProductAnswer,
   buildPlaybookShortAnswer,
   COMBINED_LIVE_TTS_CHAR_LIMIT,
+  detectCombinedProductInquiry,
   detectShortFollowUpCategory
 } from "./playbook-short-answer.js";
 
 const MAX_ANSWER_CHARS = 220;
+const MAX_COMBINED_RAG_ANSWER_CHARS = 260;
 const PHONE_IN_TEXT = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
 const GUARANTEE_PATTERN = /\b(garantie|garantiert|100\s*%|ranking.?garantie)\b|garantie|100\s*%/i;
 
@@ -269,17 +271,52 @@ function summarizeRagFilterStages(ragResult = {}, productId = null) {
   };
 }
 
-function buildAnswerFromChunks(productId, ragData, agentConfig) {
+function safePreview(text, maxChars = 220) {
+  const base = redactPhoneLikeText(normalizeText(text));
+  if (base.length <= maxChars) return base;
+  const slice = base.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > 80 ? slice.slice(0, lastSpace) : slice).trim();
+}
+
+function chunkText(chunk = {}) {
+  return normalizeText(chunk?.snippet || chunk?.text || chunk?.content || "");
+}
+
+function chunkTitle(chunk = {}) {
+  return normalizeText(chunk?.title || chunk?.metadata?.title || chunk?.source_title || "");
+}
+
+function buildCombinedRagAnswer(productId, transcript = "") {
+  const combined = detectCombinedProductInquiry(transcript);
+  if (!combined.isCombined) return null;
+  if (productId !== "smart_website") return null;
+  return sanitizeResponseText(
+    "Smart Website ist eine moderne Firmenwebsite mit Leistungsseiten und lokaler Sichtbarkeit. " +
+      "Sie erklaert Ihr Angebot, beantwortet erste Fragen und bereitet qualifizierte Anfragen vor. " +
+      "Der Preis haengt vom Umfang ab, etwa Seiten, Inhalte und lokale SEO."
+  );
+}
+
+function buildAnswerFromChunks(productId, ragData, agentConfig, transcript = "") {
   const chunks = filterRagChunksByProductScope(ragData?.answer_context, productId);
   if (!chunks.length) return null;
-  const snippet = normalizeText(chunks[0]?.snippet || chunks[0]?.text || chunks[0]?.content || "");
+  const snippet = chunkText(chunks[0]);
   if (!snippet) return null;
-  const answer = trimBoundedAnswer(snippet, 180);
+  const contextSafety = validateRagAnswerSafety(trimBoundedAnswer(snippet, 220), agentConfig);
+  if (!contextSafety.ok) return null;
+  const combinedAnswer = buildCombinedRagAnswer(productId, transcript);
+  const answer = combinedAnswer
+    ? trimBoundedAnswer(combinedAnswer, MAX_COMBINED_RAG_ANSWER_CHARS)
+    : trimBoundedAnswer(snippet, 180);
   const safety = validateRagAnswerSafety(answer, agentConfig);
   if (!safety.ok) return null;
   return {
     ok: true,
     answer,
+    answer_context_preview: safePreview(snippet, 220),
+    rag_source_title_preview: safePreview(chunkTitle(chunks[0]), 120) || null,
+    max_spoken_chars: combinedAnswer ? MAX_COMBINED_RAG_ANSWER_CHARS : null,
     next_question: firstQualifyingQuestion(productId),
     used_rag: true,
     fallback_reason: null,
@@ -503,7 +540,7 @@ export async function retrieveV4RagAnswer({
   }
 
   const scopedData = { ...(ragResult.data ?? {}), answer_context: scopedChunks };
-  const built = buildAnswerFromChunks(productId, scopedData, agentConfig);
+  const built = buildAnswerFromChunks(productId, scopedData, agentConfig, transcript);
   if (!built) {
     const evidence = summarizeRagEvidence(ragResult);
     return scopedFallback(

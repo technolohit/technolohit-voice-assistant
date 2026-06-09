@@ -30,7 +30,7 @@ import {
   shouldUseRagForTurn,
   retrieveV4RagAnswer
 } from "./rag-orchestrator.js";
-import { buildSafeRagEventDiagnostics } from "./rag-quality-diagnostics.js";
+import { buildSafeRagEventDiagnostics, buildSafeTextPreview } from "./rag-quality-diagnostics.js";
 import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
@@ -495,6 +495,7 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
   bufferEvent(orchestrator, "response_plan_created", {
     response_type: resolvedPlan?.response_type ?? null,
     response_chars: responseText.length,
+    assistant_response_preview: buildSafeTextPreview(responseText, 260),
     intent: resolvedPlan?.intent ?? null,
     next_state: toState,
     ...planContextQualityPayload(
