@@ -5,7 +5,8 @@
 import { normalizeText } from "./redaction.js";
 import { matchProductAlias } from "./agent-config.js";
 import { isGenericScopedProductQuestion } from "./product-context-persistence.js";
-import { CLOSING_RESPONSE_TEXT, isClosingIntent } from "./closing-intent.js";
+import { CLOSING_RESPONSE_TEXT } from "./closing-intent.js";
+import { isClosingIntentForPolicy } from "./behavior-policy.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -67,14 +68,21 @@ export function getWarmGoodbyeResponseText() {
   return CLOSING_RESPONSE_TEXT;
 }
 
-export function detectTranscriptIntent(transcript = "", memory = {}, agentConfig = null) {
+export function detectTranscriptIntent(
+  transcript = "",
+  memory = {},
+  agentConfig = null,
+  behaviorPolicy = null
+) {
   const lower = normalizeText(transcript).toLowerCase();
   if (!lower) return "empty";
 
   // Phase 10AK: closing / stop intent has highest priority (Conversation
   // Priority Contract #1) and overrides interrupt follow-up, product
   // continuation, lead capture, and fallback clarification.
-  if (isClosingIntent(transcript) || memory?.call_closing) {
+  // Phase 10AN: an opt-in playbook policy may extend (never replace) the
+  // hardcoded closing phrase set; with no policy this is identical to 10AK.
+  if (isClosingIntentForPolicy(transcript, behaviorPolicy) || memory?.call_closing) {
     return "closing";
   }
 

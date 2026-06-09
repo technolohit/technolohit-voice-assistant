@@ -35,12 +35,12 @@ Last updated: 2026-06-09
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AM - First TechnoloHit Structured Playbook (draft artifact, not runtime-active)** |
+| **Current completed phase** | **Phase 10AN - Playbook-Driven Runtime Increment 1 (guarded resolver, opt-in/default-off, draft playbook not production-active)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
 | **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12: closing phrase produced goodbye only; no RAG/fallback/lead/product continuation after closing; post-call/privacy/rollback passed. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | **Phase 10AN - Playbook-Driven Runtime Increment 1**. Production stays v3/RAG-off. |
+| **Next step** | **Phase 10AO - Eval Scenarios From Playbook**. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -609,15 +609,18 @@ Artifact: `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json` �
 
 Goal: move only the safest repeated behavior rules into config/playbook.
 
+Status: **implemented** via guarded resolver `voice-bridge/src/v4/behavior-policy.js` — opt-in (`VOICE_V4_PLAYBOOK_RUNTIME_ENABLED`, default **false**), fail-closed, equivalence-tested against Phase 10AK — [report](./voice_assistant_v4_phase10an_playbook_runtime_increment1_report.md). **Phase 10AN introduces a guarded resolver and tests only for safest repeated behavior. It does not make the draft playbook production-active.**
+
 Candidate first fields:
 
-- [ ] Successful: closing phrases.
-- [ ] Successful: closing response.
-- [ ] Successful: out-of-scope redirect.
-- [ ] Successful: safe escalation response.
-- [ ] Successful: product answer length target.
-- [ ] Successful: pricing wording.
-- [ ] Successful: lead capture soft prompt.
+- [x] Successful: closing phrases (playbook may extend, never replace, the hardcoded 10AK detection; wired into v4 intent detection).
+- [x] Successful: closing response (wired into v4 closing plan; hardcoded contract text with default env).
+- [x] Successful: out-of-scope redirect (resolver accessor provided; not yet wired to a runtime path).
+- [x] Successful: safe escalation response (resolver accessor provided; not yet wired to a runtime path).
+- [x] Successful: fallback clarification response (wired into the generic v4 fallback plan; hardcoded text with default env).
+- [ ] Successful: product answer length target (deferred — not in increment 1).
+- [ ] Successful: pricing wording (deferred — not in increment 1).
+- [ ] Successful: lead capture soft prompt (deferred — not in increment 1).
 
 Do not move everything at once.
 
@@ -1575,6 +1578,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AJ RAG answer quality and QA evidence - Gate 3 RAG/content canary passed on v1.34.11 with live RAG used, accepted Smart Website combined inquiry, safe response/RAG/context previews, post-call summary, privacy pass, and rollback - [report](./voice_assistant_v4_phase10aj_rag_answer_quality_and_qa_evidence_report.md).
 - [x] Successful: Phase 10AK closing / stop intent focused fix - closing phrases override RAG, fallback, product continuation, interrupt follow-up, and lead capture; supervised live closing canary passed on `voice-bridge-v1.34.12` (`call_session_id=b18cd9c4-c427-4ffa-92f4-967f9b9aa713`) — [report](./voice_assistant_v4_phase10ak_closing_stop_intent_fix_report.md).
 - [x] Successful: Phase 10AM first TechnoloHit structured playbook — draft artifact `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json`, non-runtime loader/validator, tests; **not runtime-active**; no runtime behavior change — [report](./voice_assistant_v4_phase10am_technolohit_structured_playbook_report.md).
+- [x] Successful: Phase 10AN playbook-driven runtime increment 1 — guarded `behavior-policy.js` resolver for closing phrases/response and fallback wording; opt-in `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` (default false), fail-closed, draft rejected without explicit override; default behavior equivalence-tested against 10AK — [report](./voice_assistant_v4_phase10an_playbook_runtime_increment1_report.md).
 - [x] Successful: Phase 10AL Agent Behavior Architecture documented in this blueprint - role boundary, conversation priority contract, tenant playbook direction, eval scenarios, and questionnaire-to-playbook direction.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).

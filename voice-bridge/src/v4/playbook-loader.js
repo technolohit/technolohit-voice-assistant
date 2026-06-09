@@ -1,10 +1,11 @@
 /**
- * Phase 10AM — tenant playbook loader/validator (NON-RUNTIME).
+ * Phase 10AM/10AN — tenant playbook loader/validator.
  *
- * This module is intentionally not imported by any live call path. It exists
- * so tests (and later Phase 10AN tooling) can parse and validate the draft
- * playbook artifact under config/playbooks/. The existing agent_config loader
- * (agent-config.js) remains the runtime source of truth.
+ * Phase 10AM introduced this as a test-only validator for the draft artifact
+ * under config/playbooks/. Phase 10AN consults it from behavior-policy.js,
+ * but ONLY when VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=true (default false). With
+ * the default env nothing here runs at call time. The existing agent_config
+ * loader (agent-config.js) remains the runtime source of truth.
  */
 
 import fs from "node:fs";
@@ -61,8 +62,14 @@ export function validatePlaybook(playbook) {
     errors.push(`invalid_status:${playbook.status}`);
   }
 
-  if (playbook.runtime_binding?.active === true) {
-    errors.push("runtime_binding_must_not_be_active_in_phase_10am");
+  // Phase 10AN: an active runtime binding is only valid for a published,
+  // runtime-approved playbook. Draft/unapproved playbooks must stay inactive.
+  if (
+    playbook.runtime_binding?.active === true &&
+    (playbook.status !== "published" ||
+      playbook.approval?.approved_for_runtime !== true)
+  ) {
+    errors.push("draft_playbook_must_not_be_runtime_active");
   }
 
   const products = Array.isArray(playbook.products) ? playbook.products : [];
@@ -92,19 +99,22 @@ export function validatePlaybook(playbook) {
   return { ok: errors.length === 0, errors };
 }
 
-export function loadTenantPlaybook(filename = DEFAULT_PLAYBOOK_FILENAME) {
-  const playbookPath = resolvePlaybookPath(filename);
-  if (!fs.existsSync(playbookPath)) {
-    return { ok: false, path: playbookPath, error: "playbook_not_found" };
+/** Load a playbook from an explicit (absolute or package-relative) path. */
+export function loadTenantPlaybookFromPath(playbookPath) {
+  const resolved = path.isAbsolute(playbookPath)
+    ? playbookPath
+    : path.join(packageRoot, playbookPath);
+  if (!fs.existsSync(resolved)) {
+    return { ok: false, path: resolved, error: "playbook_not_found" };
   }
 
   let parsed;
   try {
-    parsed = JSON.parse(fs.readFileSync(playbookPath, "utf8"));
+    parsed = JSON.parse(fs.readFileSync(resolved, "utf8"));
   } catch (err) {
     return {
       ok: false,
-      path: playbookPath,
+      path: resolved,
       error: "playbook_invalid_json",
       message: err?.message ?? "invalid JSON"
     };
@@ -114,11 +124,15 @@ export function loadTenantPlaybook(filename = DEFAULT_PLAYBOOK_FILENAME) {
   if (!validation.ok) {
     return {
       ok: false,
-      path: playbookPath,
+      path: resolved,
       error: "playbook_validation_failed",
       errors: validation.errors
     };
   }
 
-  return { ok: true, path: playbookPath, playbook: parsed };
+  return { ok: true, path: resolved, playbook: parsed };
+}
+
+export function loadTenantPlaybook(filename = DEFAULT_PLAYBOOK_FILENAME) {
+  return loadTenantPlaybookFromPath(resolvePlaybookPath(filename));
 }

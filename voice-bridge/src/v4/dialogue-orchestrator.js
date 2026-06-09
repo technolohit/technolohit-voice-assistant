@@ -26,6 +26,7 @@ import {
   detectTranscriptIntent,
   sanitizeResponseText
 } from "./response-planner.js";
+import { resolveBehaviorPolicy } from "./behavior-policy.js";
 import {
   shouldUseRagForTurn,
   retrieveV4RagAnswer
@@ -84,11 +85,15 @@ export function createDialogueOrchestrator({
   qualitySink = null,
   v4PathActive = false,
   callerPhoneNormalized = null,
-  callerPhoneRaw = null
+  callerPhoneRaw = null,
+  behaviorPolicy = null
 } = {}) {
   return {
     phase: "phase5_dialogue_orchestrator",
     config,
+    // Phase 10AN: resolved once per call; hardcoded defaults unless the
+    // opt-in playbook runtime flag is enabled (fail-closed resolver).
+    behaviorPolicy: behaviorPolicy ?? resolveBehaviorPolicy({ config }),
     runtimeContext,
     memory: memory ?? runtimeContext?.memory ?? null,
     stateMachine: stateMachine ?? runtimeContext?.stateMachine ?? null,
@@ -233,7 +238,12 @@ export async function decideNextAction(orchestrator, input = {}) {
 
   const intent =
     input.intent ??
-    detectTranscriptIntent(transcript, orchestrator.memory, orchestrator.agentConfig);
+    detectTranscriptIntent(
+      transcript,
+      orchestrator.memory,
+      orchestrator.agentConfig,
+      orchestrator.behaviorPolicy
+    );
   const interruptionRecovery = input.interruptionRecovery ?? null;
 
   const ragGate = shouldUseRagForTurn({
@@ -339,7 +349,8 @@ export async function decideNextAction(orchestrator, input = {}) {
     ragResult,
     interruptionRecovery,
     closedDomain,
-    interruptFollowupTimeout: Boolean(input.interruptFollowupTimeout)
+    interruptFollowupTimeout: Boolean(input.interruptFollowupTimeout),
+    behaviorPolicy: orchestrator.behaviorPolicy
   });
 
   const ragGuard = ragAnswerMustNotCreateLead(Boolean(plan.rag_allowed));

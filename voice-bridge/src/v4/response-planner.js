@@ -7,9 +7,12 @@ import { matchProductAlias, getProductById } from "./agent-config.js";
 import {
   detectTranscriptIntent,
   sanitizeResponseText,
-  isPostContactProductQuestion,
-  getWarmGoodbyeResponseText
+  isPostContactProductQuestion
 } from "./transcript-intent.js";
+import {
+  getClosingResponse,
+  getFallbackClarificationResponse
+} from "./behavior-policy.js";
 import {
   detectShortFollowUpCategory,
   buildPlaybookShortAnswer,
@@ -288,9 +291,11 @@ export function buildResponsePlan({
   ragResult = null,
   interruptionRecovery = null,
   closedDomain = null,
-  interruptFollowupTimeout = false
+  interruptFollowupTimeout = false,
+  behaviorPolicy = null
 } = {}) {
-  const resolvedIntent = intent ?? detectTranscriptIntent(transcript, memory, agentConfig);
+  const resolvedIntent =
+    intent ?? detectTranscriptIntent(transcript, memory, agentConfig, behaviorPolicy);
   const agent = agentConfig?.config ?? agentConfig ?? {};
   const state = stateMachine?.state ?? memory?.current_state ?? V4_STATES.LISTENING;
 
@@ -317,8 +322,10 @@ export function buildResponsePlan({
   // Phase 10AK: closing / stop intent is highest priority and must be planned
   // before scoped product QA, RAG, interrupt follow-up, and lead capture.
   if (resolvedIntent === "closing") {
+    // Phase 10AN: getClosingResponse(null) === getWarmGoodbyeResponseText(),
+    // so behavior is identical unless an opt-in playbook policy is provided.
     return planBase(RESPONSE_TYPES.CLOSING, {
-      text: sanitizeResponseText(getWarmGoodbyeResponseText()),
+      text: sanitizeResponseText(getClosingResponse(behaviorPolicy)),
       next_state: V4_STATES.COMPLETED,
       memory_patch: {
         current_state: V4_STATES.COMPLETED,
@@ -686,7 +693,7 @@ export function buildResponsePlan({
   }
 
   return planBase(RESPONSE_TYPES.FALLBACK_CLARIFICATION, {
-    text: sanitizeResponseText("Entschuldigung, das habe ich nicht ganz verstanden. Können Sie das bitte kurz wiederholen?"),
+    text: sanitizeResponseText(getFallbackClarificationResponse(behaviorPolicy)),
     next_state: V4_STATES.LISTENING,
     memory_patch: { current_state: V4_STATES.LISTENING },
     quality_event_type: "turn_started"

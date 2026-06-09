@@ -55,7 +55,7 @@ test("10AM: playbook is not runtime-active", () => {
     runtime_binding: { active: true },
   });
   assert.equal(invalid.ok, false);
-  assert.ok(invalid.errors.includes("runtime_binding_must_not_be_active_in_phase_10am"));
+  assert.ok(invalid.errors.includes("draft_playbook_must_not_be_runtime_active"));
 });
 
 test("10AM: all three required products exist with aliases", () => {

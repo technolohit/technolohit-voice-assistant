@@ -238,6 +238,14 @@ export function loadConfig() {
     false,
   );
   const v4CanaryEnabled = readBool("VOICE_V4_CANARY_ENABLED", false);
+  // Phase 10AN: playbook-driven behavior is opt-in and default-off. With the
+  // default env the playbook file is never loaded at runtime.
+  const v4PlaybookRuntimeEnabled = readBool(
+    "VOICE_V4_PLAYBOOK_RUNTIME_ENABLED",
+    false,
+  );
+  const v4PlaybookPath = String(process.env.VOICE_V4_PLAYBOOK_PATH ?? "").trim();
+  const v4PlaybookAllowDraft = readBool("VOICE_V4_PLAYBOOK_ALLOW_DRAFT", false);
   const v4VadRmsThreshold = Math.max(
     1,
     readInt("VOICE_V4_VAD_RMS_THRESHOLD", 450),
@@ -421,6 +429,9 @@ export function loadConfig() {
       tenantId,
       agentId,
       agentConfigPath,
+      playbookRuntimeEnabled: v4PlaybookRuntimeEnabled,
+      playbookPath: v4PlaybookPath,
+      playbookAllowDraft: v4PlaybookAllowDraft,
     },
     assistant: {
       enabled: assistantEnabled,
