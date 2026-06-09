@@ -76,6 +76,15 @@ export function shouldUseRagForTurn({ config = null, state, intent, memory = {},
     return { allowed: false, reason: "closing_intent", state: resolvedState };
   }
 
+  // Phase 10AP: role boundary and callback intents must not trigger RAG.
+  if (
+    resolvedIntent === "out_of_scope" ||
+    resolvedIntent === "technical_escalation" ||
+    resolvedIntent === "callback_request"
+  ) {
+    return { allowed: false, reason: `${resolvedIntent}_intent`, state: resolvedState };
+  }
+
   if (
     config &&
     (!config?.rag?.enabled || !config?.rag?.salesAnswererEnabled)

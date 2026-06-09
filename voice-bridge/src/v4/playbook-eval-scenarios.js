@@ -6,7 +6,7 @@
  * returns privacy-safe results keyed by playbook_version.
  *
  * Out-of-scope redirect, technical escalation, and callback lead-capture paths are
- * not runtime-consumed yet — those scenarios are marked pending, not faked as pass.
+ * runtime-consumed in Phase 10AP (planner/orchestrator harness, no live network).
  */
 
 import { loadConfig } from "../config.js";
@@ -44,14 +44,13 @@ export const RUNTIME_IMPLEMENTED_EVAL_CATEGORIES = new Set([
   "pricing",
   "product_question",
   "fallback",
-]);
-
-/** Categories documented in playbook but awaiting a runtime consumer path. */
-export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([
   "out_of_scope",
   "technical_escalation",
   "callback",
 ]);
+
+/** Reserved for future categories without a runtime consumer yet. */
+export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([]);
 
 export const REQUIRED_EVAL_SCENARIO_CATEGORIES = [
   "closing",
@@ -129,7 +128,12 @@ export function buildEvalScenarioStateMachine(scenario, memory = {}) {
 }
 
 function buildClosedDomainForScenario(scenario, agentConfig, memory) {
-  if (scenario.category === "fallback") {
+  if (
+    scenario.category === "fallback" ||
+    scenario.category === "out_of_scope" ||
+    scenario.category === "technical_escalation" ||
+    scenario.category === "callback"
+  ) {
     return { is_low_confidence: false, matched_product: null };
   }
   return resolveClosedDomainIntent({
@@ -174,6 +178,46 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
   }
   if (expected.behavior === "barge_in_interruption_wait" && meta.recoveryAction !== "interruption_followup") {
     failures.push(`recovery_action:${meta.recoveryAction ?? "null"}`);
+  }
+  if (expected.behavior === "role_boundary_redirect") {
+    if (plan.plan_reason !== "out_of_scope_redirect") {
+      failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
+    }
+    if (plan.response_type !== RESPONSE_TYPES.ROLE_BOUNDARY_REDIRECT) {
+      failures.push(`response_type:${plan.response_type}`);
+    }
+  }
+  if (expected.behavior === "escalate_to_team") {
+    if (plan.plan_reason !== "technical_escalation") {
+      failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
+    }
+    if (plan.response_type !== RESPONSE_TYPES.TECHNICAL_ESCALATION) {
+      failures.push(`response_type:${plan.response_type}`);
+    }
+  }
+  if (expected.behavior === "lead_capture_appropriate") {
+    const allowedTypes = new Set([
+      RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE,
+      RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION,
+    ]);
+    if (!allowedTypes.has(plan.response_type)) {
+      failures.push(`response_type:${plan.response_type}`);
+    }
+    if (plan.lead_transition_allowed) {
+      failures.push("premature_lead_transition");
+    }
+    if (/\b(sofort verbinden|jetzt weiterleiten|live transfer)\b/i.test(plan.text ?? "")) {
+      failures.push("live_transfer_claim");
+    }
+  }
+  if (expected.no_general_chatbot_answer && /\b(einstein|relativit[aä]t)\b/i.test(plan.text ?? "")) {
+    failures.push("general_knowledge_answer");
+  }
+  if (expected.no_overpromise && /\b(garantiert|auf jeden fall|problemlos|100\s*%)\b/i.test(plan.text ?? "")) {
+    failures.push("overpromise_detected");
+  }
+  if (expected.no_lead_capture && plan.response_type === RESPONSE_TYPES.COLLECT_SALES_CONTEXT) {
+    failures.push("unexpected_lead_capture");
   }
 
   return failures;
@@ -304,7 +348,7 @@ export async function runEvalScenario({
   }
 
   let plan;
-  if (useOrchestrator && scenario.category === "closing") {
+  if (useOrchestrator && (scenario.category === "closing" || scenario.category === "out_of_scope")) {
     const orchestrator = createDialogueOrchestrator({
       config: resolvedConfig,
       runtimeContext: createRuntimeContext(resolvedConfig, { bridgeCallId: memory.bridge_call_id }),
@@ -399,7 +443,9 @@ export async function runPlaybookEvalSuite({
       config: resolvedConfig,
       behaviorPolicy: resolvedPolicy,
       playbook,
-      useOrchestrator: useOrchestratorForClosing && scenario.category === "closing",
+      useOrchestrator:
+        useOrchestratorForClosing &&
+        (scenario.category === "closing" || scenario.category === "out_of_scope"),
     });
     results.push(result);
   }

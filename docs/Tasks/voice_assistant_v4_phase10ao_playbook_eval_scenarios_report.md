@@ -35,21 +35,12 @@ Module: `voice-bridge/src/v4/playbook-eval-scenarios.js`
 | `pricing` | `buildResponsePlan` | **pass** |
 | `product_question` | `buildResponsePlan` (combined inquiry) | **pass** |
 | `fallback` | `buildResponsePlan` (generic unclear → fallback clarification) | **pass** |
-| `out_of_scope` | documentation check vs `behavior-policy` + playbook | **pending** — runtime consumer not wired |
-| `technical_escalation` | documentation check vs policy + playbook | **pending** — runtime consumer not wired |
-| `callback` | documentation check vs `callback_policy` | **pending** — runtime consumer not wired |
+| `out_of_scope` | `decideNextAction` orchestrator or `buildResponsePlan` | **pass** (Phase 10AP) |
+| `technical_escalation` | `buildResponsePlan` | **pass** (Phase 10AP) |
+| `callback` | `buildResponsePlan` (safe contact preference) | **pass** (Phase 10AP) |
 
-Pending scenarios use status `pending` and reason
-`documented_playbook_ready_runtime_consumer_pending`. They are **not** faked as pass.
-
-Observed runtime gaps (why pending):
-
-- **Out-of-scope** ("Wer hat die Relativitätstheorie entwickelt?") → low-confidence product
-  clarification, not role-boundary redirect.
-- **Technical escalation** (LokalKI + SAP middleware) → product selection intro, not team
-  escalation wording.
-- **Callback** ("Können Sie mich zurückrufen lassen?") → low-confidence clarification, not
-  lead-capture flow.
+> **Update (Phase 10AP):** The three categories above were **pending** at 10AO commit
+> `4f358c1`. Runtime consumers are now wired; default suite is 9/9 pass with no pending.
 
 ### Default TechnoloHit playbook suite snapshot (hardcoded defaults)
 
@@ -58,12 +49,12 @@ With `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=false`:
 ```json
 {
   "playbook_version": "technolohit-playbook-v1-20260609",
-  "summary": { "total": 9, "pass": 6, "pending": 3, "fail": 0 }
+  "summary": { "total": 9, "pass": 9, "pending": 0, "fail": 0 }
 }
 ```
 
-Implemented passes: closing ×2, interruption, pricing, combined product inquiry, fallback.
-Pending: out_of_scope, technical_escalation, callback.
+All scenarios pass after Phase 10AP runtime consumers. At 10AO commit `4f358c1` the snapshot
+was `{ "pass": 6, "pending": 3 }`.
 
 ## Playbook change
 
@@ -117,28 +108,10 @@ Not changed: production env files, Dockerfiles, deploy workflows, `turn-assistan
 ## Production behavior changed?
 
 **No.** Default env is unchanged; eval runner is test/eval-only and does not alter live
-routing. Pending categories explicitly avoid faking runtime passes.
-
-## Verification results
-
-| Check | Result |
-|---|---|
-| `cd voice-bridge && npm test` | **PASS** — 524/524 (8 new 10AO tests) |
-| `python -m pytest rag-api/tests` | **PASS** — 7/7 |
-| `node --check` changed JS | **PASS** |
-| `git diff --check` | **PASS** |
-| `run-ci-dialogue-scenarios.ps1` | **PASS** — 26/26 |
-
-## Confirmations
-
-- Production v4 and RAG defaults remain **off**; playbook runtime flags default off.
-- `docs/Tasks/logs.txt` untouched.
-- Draft playbook not production-active.
-- No Docker tag created.
+routing. Runtime consumers (Phase 10AP) use hardcoded defaults unless playbook runtime is
+explicitly opted in.
 
 ## Recommendation for next phase
 
-**Phase 10AP — Questionnaire Generator** (later) or an incremental runtime consumer phase
-that wires out-of-scope redirect, technical escalation, and callback lead-capture paths so
-the three pending eval scenarios can move from `pending` to `pass` without changing the
-eval contract.
+See [Phase 10AP report](./voice_assistant_v4_phase10ap_runtime_consumers_for_role_boundary_report.md).
+**Questionnaire Generator** (later onboarding phase) or additional playbook runtime increments.

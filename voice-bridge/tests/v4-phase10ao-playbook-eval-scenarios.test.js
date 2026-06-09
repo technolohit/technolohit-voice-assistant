@@ -17,8 +17,6 @@ import {
   loadDefaultPlaybookEvalSuite,
   formatEvalSuiteSnapshot,
   REQUIRED_EVAL_SCENARIO_CATEGORIES,
-  PENDING_SCENARIO_REASON,
-  PENDING_SCENARIO_STATUS,
 } from "../src/v4/playbook-eval-scenarios.js";
 import { buildResponsePlan, RESPONSE_TYPES } from "../src/v4/response-planner.js";
 
@@ -68,7 +66,7 @@ test("10AO: implemented scenarios pass through planner/orchestrator harness", as
   assert.equal(suite.playbook_version, loaded.playbook.playbook_version);
   assert.equal(suite.ok, true);
   assert.equal(suite.summary.fail, 0);
-  assert.ok(suite.summary.pass >= 6, "expected implemented scenarios to pass");
+  assert.ok(suite.summary.pass >= 9, "expected all playbook eval scenarios to pass");
 
   const closing = suite.results.find((entry) => entry.id === "closing_after_product_answer");
   assert.equal(closing.status, "pass");
@@ -84,16 +82,22 @@ test("10AO: implemented scenarios pass through planner/orchestrator harness", as
   assert.equal(fallback.response_type, RESPONSE_TYPES.FALLBACK_CLARIFICATION);
 });
 
-test("10AO: pending scenarios are not faked as pass", async () => {
+test("10AO: role boundary scenarios pass through planner/orchestrator harness (Phase 10AP)", async () => {
   const loaded = loadDefaultPlaybookEvalSuite();
   const suite = await runPlaybookEvalSuite({ playbook: loaded.playbook });
+  assert.equal(suite.summary.pending, 0);
   for (const id of ["out_of_scope_general_question", "technical_escalation", "callback_request"]) {
     const entry = suite.results.find((result) => result.id === id);
     assert.ok(entry, id);
-    assert.equal(entry.status, PENDING_SCENARIO_STATUS, id);
-    assert.equal(entry.reason, PENDING_SCENARIO_REASON, id);
-    assert.equal(entry.runtime_mode, "documentation_only");
+    assert.equal(entry.status, "pass", id);
+    assert.notEqual(entry.runtime_mode, "documentation_only");
   }
+  const outOfScope = suite.results.find((entry) => entry.id === "out_of_scope_general_question");
+  assert.equal(outOfScope.response_type, RESPONSE_TYPES.ROLE_BOUNDARY_REDIRECT);
+  const technical = suite.results.find((entry) => entry.id === "technical_escalation");
+  assert.equal(technical.response_type, RESPONSE_TYPES.TECHNICAL_ESCALATION);
+  const callback = suite.results.find((entry) => entry.id === "callback_request");
+  assert.equal(callback.response_type, RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE);
 });
 
 test("10AO: eval snapshot is keyed by playbook_version and contains no raw caller text", async () => {

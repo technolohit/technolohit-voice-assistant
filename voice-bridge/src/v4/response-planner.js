@@ -11,7 +11,10 @@ import {
 } from "./transcript-intent.js";
 import {
   getClosingResponse,
-  getFallbackClarificationResponse
+  getFallbackClarificationResponse,
+  getOutOfScopeRedirect,
+  getTechnicalEscalationResponse,
+  getCallbackLeadCaptureResponse,
 } from "./behavior-policy.js";
 import {
   detectShortFollowUpCategory,
@@ -42,6 +45,8 @@ export const RESPONSE_TYPES = {
   LEAD_READY_ACK: "lead_ready_ack",
   INTERRUPTION_RECOVERY: "interruption_recovery",
   CLOSING: "closing",
+  ROLE_BOUNDARY_REDIRECT: "role_boundary_redirect",
+  TECHNICAL_ESCALATION: "technical_escalation",
   FALLBACK_CLARIFICATION: "fallback_clarification",
   GREETING: "greeting"
 };
@@ -336,6 +341,31 @@ export function buildResponsePlan({
       plan_reason: "closing_intent",
       rag_allowed: false,
       lead_transition_allowed: false
+    });
+  }
+
+  // Phase 10AP: role boundary (#2) — after closing, before product/RAG/lead paths.
+  if (resolvedIntent === "out_of_scope") {
+    return planBase(RESPONSE_TYPES.ROLE_BOUNDARY_REDIRECT, {
+      text: sanitizeResponseText(getOutOfScopeRedirect(behaviorPolicy)),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: { current_state: V4_STATES.LISTENING },
+      quality_event_type: "turn_started",
+      plan_reason: "out_of_scope_redirect",
+      rag_allowed: false,
+      lead_transition_allowed: false,
+    });
+  }
+
+  if (resolvedIntent === "technical_escalation") {
+    return planBase(RESPONSE_TYPES.TECHNICAL_ESCALATION, {
+      text: sanitizeResponseText(getTechnicalEscalationResponse(behaviorPolicy)),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: { current_state: V4_STATES.LISTENING },
+      quality_event_type: "turn_started",
+      plan_reason: "technical_escalation",
+      rag_allowed: false,
+      lead_transition_allowed: false,
     });
   }
 
@@ -657,6 +687,22 @@ export function buildResponsePlan({
         current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION
       },
       quality_event_type: "turn_started"
+    });
+  }
+
+  // Phase 10AP: explicit callback request (#4) — soft lead capture, validator unchanged.
+  if (resolvedIntent === "callback_request") {
+    return planBase(RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE, {
+      text: sanitizeResponseText(getCallbackLeadCaptureResponse(behaviorPolicy)),
+      next_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+      memory_patch: {
+        current_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+        lead_ready: false,
+      },
+      quality_event_type: "turn_started",
+      plan_reason: "callback_request_intent",
+      rag_allowed: false,
+      lead_transition_allowed: false,
     });
   }
 

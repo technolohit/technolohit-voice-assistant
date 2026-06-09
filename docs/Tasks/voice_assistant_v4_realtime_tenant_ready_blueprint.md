@@ -35,12 +35,12 @@ Last updated: 2026-06-09
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AO - Eval Scenarios From Playbook (non-live runner, draft playbook not production-active)** |
+| **Current completed phase** | **Phase 10AP - Runtime Consumers For Pending Playbook Eval Categories (v4 paths only; draft playbook not production-active)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
 | **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12: closing phrase produced goodbye only; no RAG/fallback/lead/product continuation after closing; post-call/privacy/rollback passed. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Phase 10AP — Questionnaire Generator (later phase) or wire pending eval categories (out-of-scope, technical escalation, callback) when runtime consumers exist. Production stays v3/RAG-off. |
+| **Next step** | Questionnaire Generator (later onboarding phase) or additional playbook runtime increments (pricing/product wording). Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -628,18 +628,32 @@ Do not move everything at once.
 
 Goal: create scenario tests from policy/playbook.
 
-Status: **implemented** — non-live eval runner `voice-bridge/src/v4/playbook-eval-scenarios.js` loads `eval_scenarios` from the draft playbook, runs implemented categories through the planner/orchestrator harness, marks out-of-scope/technical-escalation/callback as pending (not faked), and stores privacy-safe results keyed by `playbook_version` — [report](./voice_assistant_v4_phase10ao_playbook_eval_scenarios_report.md). **Does not make the draft playbook production-active.**
+Status: **implemented** — non-live eval runner `voice-bridge/src/v4/playbook-eval-scenarios.js` loads `eval_scenarios` from the draft playbook, runs all categories through the planner/orchestrator harness (Phase 10AP wired pending categories), and stores privacy-safe results keyed by `playbook_version` — [report](./voice_assistant_v4_phase10ao_playbook_eval_scenarios_report.md). **Does not make the draft playbook production-active.** See also [Phase 10AP report](./voice_assistant_v4_phase10ap_runtime_consumers_for_role_boundary_report.md) for runtime consumers.
 
 - [x] Successful: initial non-live scenario runner exists (`runPlaybookEvalSuite`, `formatEvalSuiteSnapshot`).
 - [x] Successful: closing scenarios added (orchestrator path, no RAG on closing).
-- [x] Successful: out-of-scope scenarios added (pending/documentation-only until runtime consumer exists).
-- [x] Successful: technical uncertain scenarios added (pending/documentation-only until runtime consumer exists).
+- [x] Successful: out-of-scope scenarios added (runtime pass via role-boundary redirect — Phase 10AP).
+- [x] Successful: technical uncertain scenarios added (runtime pass via technical escalation — Phase 10AP).
 - [x] Successful: product/pricing scenarios added (planner path).
-- [x] Successful: callback request scenarios added (pending/documentation-only until runtime consumer exists).
+- [x] Successful: callback request scenarios added (runtime pass via safe lead-capture path — Phase 10AP).
 - [x] Successful: fallback clarification scenario added (planner path).
 - [x] Successful: eval results are stored with playbook version (privacy-safe snapshot keyed by `playbook_version`).
 
-#### Phase 10AP - Questionnaire Generator
+#### Phase 10AP - Runtime Consumers For Pending Playbook Eval Categories
+
+Goal: wire minimal v4 runtime consumers for out-of-scope redirect, technical/uncertain escalation, and callback/lead-capture intent so playbook eval scenarios move from pending to pass.
+
+Status: **implemented** — `role-boundary-intent.js`, planner/orchestrator wiring, RAG gate, eval runner updates; all nine playbook eval scenarios pass with hardcoded defaults — [report](./voice_assistant_v4_phase10ap_runtime_consumers_for_role_boundary_report.md). **Does not enable production v4 or make the draft playbook production-active.**
+
+- [x] Successful: out-of-scope redirect (no RAG, no lead, no general-knowledge answer).
+- [x] Successful: technical/uncertain escalation (no overpromise; not callback-ready by itself).
+- [x] Successful: callback/lead-capture intent routes to safe contact-preference flow; validator unchanged.
+- [x] Successful: closing (#1) still overrides all three paths.
+- [x] Successful: playbook policy text only when opt-in policy injected; default hardcoded equivalence with flag off.
+- [x] Successful: eval runner moves out_of_scope, technical_escalation, callback from pending → pass (no fake passes).
+- [x] Successful: privacy-safe eval snapshot keyed by `playbook_version`; no PII/raw transcript in payloads.
+
+#### Phase 10AQ - Questionnaire Generator (later)
 
 Goal: later phase only.
 
@@ -1582,7 +1596,8 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AK closing / stop intent focused fix - closing phrases override RAG, fallback, product continuation, interrupt follow-up, and lead capture; supervised live closing canary passed on `voice-bridge-v1.34.12` (`call_session_id=b18cd9c4-c427-4ffa-92f4-967f9b9aa713`) — [report](./voice_assistant_v4_phase10ak_closing_stop_intent_fix_report.md).
 - [x] Successful: Phase 10AM first TechnoloHit structured playbook — draft artifact `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json`, non-runtime loader/validator, tests; **not runtime-active**; no runtime behavior change — [report](./voice_assistant_v4_phase10am_technolohit_structured_playbook_report.md).
 - [x] Successful: Phase 10AN playbook-driven runtime increment 1 — guarded `behavior-policy.js` resolver for closing phrases/response and fallback wording; opt-in `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` (default false), fail-closed, draft rejected without explicit override; default behavior equivalence-tested against 10AK — [report](./voice_assistant_v4_phase10an_playbook_runtime_increment1_report.md).
-- [x] Successful: Phase 10AO eval scenarios from playbook — non-live `playbook-eval-scenarios.js` runner; implemented categories pass; out-of-scope/technical-escalation/callback marked pending; results keyed by `playbook_version`; draft playbook not production-active — [report](./voice_assistant_v4_phase10ao_playbook_eval_scenarios_report.md).
+- [x] Successful: Phase 10AO eval scenarios from playbook — non-live `playbook-eval-scenarios.js` runner; all categories pass after Phase 10AP; results keyed by `playbook_version`; draft playbook not production-active — [report](./voice_assistant_v4_phase10ao_playbook_eval_scenarios_report.md).
+- [x] Successful: Phase 10AP runtime consumers for role boundary — out-of-scope redirect, technical escalation, callback lead-capture wired in v4 planner/orchestrator; eval pending categories now pass; production defaults unchanged — [report](./voice_assistant_v4_phase10ap_runtime_consumers_for_role_boundary_report.md).
 - [x] Successful: Phase 10AL Agent Behavior Architecture documented in this blueprint - role boundary, conversation priority contract, tenant playbook direction, eval scenarios, and questionnaire-to-playbook direction.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).

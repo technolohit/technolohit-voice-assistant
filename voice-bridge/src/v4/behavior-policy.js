@@ -30,7 +30,9 @@ export const HARDCODED_BEHAVIOR_DEFAULTS = Object.freeze({
   out_of_scope_redirect:
     "Dazu kann ich Ihnen als TechnoloHit Assistent keine verlässliche Beratung geben. Ich helfe Ihnen aber gerne bei Fragen zu unseren KI-Lösungen, Smart Website, AI Voice Agent oder LokalKI.",
   technical_escalation_response:
-    "Das möchte ich Ihnen nicht falsch beantworten. Ich kann Ihre Frage aber gerne aufnehmen, damit unser Team das prüft und sich gezielt bei Ihnen zurückmeldet."
+    "Das möchte ich Ihnen nicht falsch beantworten. Ich kann Ihre Frage aber gerne aufnehmen, damit unser Team das prüft und sich gezielt bei Ihnen zurückmeldet.",
+  callback_lead_capture_response:
+    "Ich kann die Anfrage gerne aufnehmen, damit sich unser Team das anschaut und sich bei Ihnen zurückmeldet. Möchten Sie telefonisch oder per E-Mail starten?"
 });
 
 function hardcodedPolicy(reason) {
@@ -113,7 +115,11 @@ export function resolveBehaviorPolicy({ config = null, playbook = null, allowDra
       HARDCODED_BEHAVIOR_DEFAULTS.out_of_scope_redirect,
     technical_escalation_response:
       candidate.escalation_policy?.uncertain_or_technical ||
-      HARDCODED_BEHAVIOR_DEFAULTS.technical_escalation_response
+      HARDCODED_BEHAVIOR_DEFAULTS.technical_escalation_response,
+    callback_lead_capture_response:
+      candidate.lead_capture_policy?.preferred_wording
+        ? `${candidate.lead_capture_policy.preferred_wording} Möchten Sie telefonisch oder per E-Mail starten?`
+        : HARDCODED_BEHAVIOR_DEFAULTS.callback_lead_capture_response,
   };
 }
 
@@ -140,6 +146,13 @@ export function getTechnicalEscalationResponse(policy = null) {
   return (
     policy?.technical_escalation_response ??
     HARDCODED_BEHAVIOR_DEFAULTS.technical_escalation_response
+  );
+}
+
+export function getCallbackLeadCaptureResponse(policy = null) {
+  return (
+    policy?.callback_lead_capture_response ??
+    HARDCODED_BEHAVIOR_DEFAULTS.callback_lead_capture_response
   );
 }
 

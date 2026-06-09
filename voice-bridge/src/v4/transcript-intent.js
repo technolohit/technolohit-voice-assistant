@@ -7,6 +7,11 @@ import { matchProductAlias } from "./agent-config.js";
 import { isGenericScopedProductQuestion } from "./product-context-persistence.js";
 import { CLOSING_RESPONSE_TEXT } from "./closing-intent.js";
 import { isClosingIntentForPolicy } from "./behavior-policy.js";
+import {
+  isOutOfScopeGeneralQuestion,
+  isTechnicalEscalationQuestion,
+  isCallbackLeadCaptureRequest,
+} from "./role-boundary-intent.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -86,6 +91,14 @@ export function detectTranscriptIntent(
     return "closing";
   }
 
+  // Phase 10AP: safety / role boundary (#2) before product Q&A and lead capture.
+  if (isOutOfScopeGeneralQuestion(transcript, agentConfig)) {
+    return "out_of_scope";
+  }
+  if (isTechnicalEscalationQuestion(transcript, agentConfig)) {
+    return "technical_escalation";
+  }
+
   const inInterruption = Boolean(memory?.interruption_context);
 
   if (agentConfig && isTopicRepairPhrase(transcript)) {
@@ -125,6 +138,8 @@ export function detectTranscriptIntent(
   }
   if (/\b(e-?mail|email|per mail)\b/i.test(lower)) return "contact_email";
   if (/\b(telefon|telefonisch|anruf|anrufen)\b/i.test(lower)) return "contact_phone";
+  // Phase 10AP: explicit callback/contact requests (#4) before unclear fallback.
+  if (isCallbackLeadCaptureRequest(transcript)) return "callback_request";
   if (/\b(ja|einverstanden|gerne|ok)\b/i.test(lower) && memory?.contact_preference) {
     return "callback_permission_granted";
   }
