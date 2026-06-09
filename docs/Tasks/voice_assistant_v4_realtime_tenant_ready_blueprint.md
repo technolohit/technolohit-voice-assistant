@@ -35,12 +35,12 @@ Last updated: 2026-06-09
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AQ - Playbook Questionnaire Generator / Lead Intake Design (non-live; draft playbook not production-active)** |
+| **Current completed phase** | **Phase 10AR - Opt-In v4 Questionnaire Runtime Wiring (default-off; production v3/RAG-off unchanged)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
 | **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12: closing phrase produced goodbye only; no RAG/fallback/lead/product continuation after closing; post-call/privacy/rollback passed. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Wire questionnaire generator into v4 planner when approved, or additional playbook runtime increments. Production stays v3/RAG-off. |
+| **Next step** | Supervised v4 canary with questionnaire flag on (allowlist only) after review, or further playbook runtime increments. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -668,7 +668,19 @@ Status: **implemented** — non-live `playbook-questionnaire-generator.js`, play
 - [x] Successful: privacy-safe eval snapshot keyed by `playbook_version`.
 - [x] Successful: seven questionnaire eval scenarios pass via generator harness.
 
-#### Phase 10AR - Questionnaire Runtime Wiring (later)
+#### Phase 10AR - Opt-In v4 Questionnaire Runtime Wiring After Product Answers
+
+Goal: wire Phase 10AQ generator into v4 planner/orchestrator behind explicit opt-in flag, only after safe product/pricing answers.
+
+Status: **implemented** — `questionnaire-runtime.js`, planner wrapper, orchestrator quality fields; `VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED=false` default — [report](./voice_assistant_v4_phase10ar_questionnaire_runtime_wiring_report.md). **Does not enable production v4 globally.**
+
+- [x] Successful: explicit flag `VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED` (default false).
+- [x] Successful: runtime eligibility gate (v4 path active, product/pricing answer, block conditions).
+- [x] Successful: at most one soft follow-up; append to spoken text only within TTS limit.
+- [x] Successful: `follow_up_question` + `questionnaire` plan evidence; safe quality payload fields.
+- [x] Successful: closing / role boundary / callback / RAG-unsafe / duplicate / length blocks.
+- [x] Successful: flag off leaves response plan unchanged (equivalence-tested).
+- [x] Successful: lead validator unchanged; playbook eval suite 16/16 pass.
 
 ## Recommended v4 Architecture
 
@@ -1604,6 +1616,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AO eval scenarios from playbook — non-live `playbook-eval-scenarios.js` runner; all categories pass after Phase 10AP; results keyed by `playbook_version`; draft playbook not production-active — [report](./voice_assistant_v4_phase10ao_playbook_eval_scenarios_report.md).
 - [x] Successful: Phase 10AP runtime consumers for role boundary — out-of-scope redirect, technical escalation, callback lead-capture wired in v4 planner/orchestrator; eval pending categories now pass; production defaults unchanged — [report](./voice_assistant_v4_phase10ap_runtime_consumers_for_role_boundary_report.md).
 - [x] Successful: Phase 10AQ playbook questionnaire generator — non-live lead-intake question generator, playbook `questionnaire_policy`, eval scenarios; production defaults unchanged — [report](./voice_assistant_v4_phase10aq_playbook_questionnaire_generator_report.md).
+- [x] Successful: Phase 10AR opt-in questionnaire runtime wiring — planner/orchestrator integration behind `VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED` (default false); safe quality evidence; production defaults unchanged — [report](./voice_assistant_v4_phase10ar_questionnaire_runtime_wiring_report.md).
 - [x] Successful: Phase 10AL Agent Behavior Architecture documented in this blueprint - role boundary, conversation priority contract, tenant playbook direction, eval scenarios, and questionnaire-to-playbook direction.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).

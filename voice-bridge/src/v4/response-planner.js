@@ -32,6 +32,7 @@ import {
   shouldEnterSalesQualification,
 } from "./product-context-persistence.js";
 import { shouldUseRagForTurn, fallbackToPlaybook } from "./rag-orchestrator.js";
+import { applyQuestionnaireRuntimeToPlan } from "./questionnaire-runtime.js";
 import { V4_STATES } from "./state-machine.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
@@ -285,7 +286,20 @@ function resolveRagAwareProductAnswer({
   };
 }
 
-export function buildResponsePlan({
+export function buildResponsePlan(options = {}) {
+  const plan = buildResponsePlanCore(options);
+  const resolvedIntent =
+    options.intent ??
+    detectTranscriptIntent(
+      options.transcript ?? "",
+      options.memory ?? {},
+      options.agentConfig,
+      options.behaviorPolicy
+    );
+  return applyQuestionnaireRuntimeToPlan(plan, { ...options, resolvedIntent });
+}
+
+function buildResponsePlanCore({
   agentConfig,
   memory = {},
   stateMachine = {},

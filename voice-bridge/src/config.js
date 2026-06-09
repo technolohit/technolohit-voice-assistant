@@ -246,6 +246,11 @@ export function loadConfig() {
   );
   const v4PlaybookPath = String(process.env.VOICE_V4_PLAYBOOK_PATH ?? "").trim();
   const v4PlaybookAllowDraft = readBool("VOICE_V4_PLAYBOOK_ALLOW_DRAFT", false);
+  // Phase 10AR: opt-in questionnaire follow-up after product/pricing answers (default-off).
+  const v4QuestionnaireRuntimeEnabled = readBool(
+    "VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED",
+    false,
+  );
   const v4VadRmsThreshold = Math.max(
     1,
     readInt("VOICE_V4_VAD_RMS_THRESHOLD", 450),
@@ -432,6 +437,7 @@ export function loadConfig() {
       playbookRuntimeEnabled: v4PlaybookRuntimeEnabled,
       playbookPath: v4PlaybookPath,
       playbookAllowDraft: v4PlaybookAllowDraft,
+      questionnaireRuntimeEnabled: v4QuestionnaireRuntimeEnabled,
     },
     assistant: {
       enabled: assistantEnabled,

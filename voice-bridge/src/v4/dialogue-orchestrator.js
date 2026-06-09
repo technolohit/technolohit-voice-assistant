@@ -32,6 +32,7 @@ import {
   retrieveV4RagAnswer
 } from "./rag-orchestrator.js";
 import { buildSafeRagEventDiagnostics, buildSafeTextPreview } from "./rag-quality-diagnostics.js";
+import { questionnaireQualityPayload } from "./questionnaire-runtime.js";
 import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
@@ -350,7 +351,10 @@ export async function decideNextAction(orchestrator, input = {}) {
     interruptionRecovery,
     closedDomain,
     interruptFollowupTimeout: Boolean(input.interruptFollowupTimeout),
-    behaviorPolicy: orchestrator.behaviorPolicy
+    behaviorPolicy: orchestrator.behaviorPolicy,
+    config: orchestrator.config,
+    v4PathActive: Boolean(orchestrator.v4PathActive),
+    lastAssistantText: orchestrator.lastAssistantText,
   });
 
   const ragGuard = ragAnswerMustNotCreateLead(Boolean(plan.rag_allowed));
@@ -515,6 +519,7 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
       resolvedPlan,
       { activeInterruptSequenceId: orchestrator.activeInterruptSequenceId },
     ),
+    ...questionnaireQualityPayload(resolvedPlan),
   });
 
   orchestrator.activeInterruptSequenceId = null;

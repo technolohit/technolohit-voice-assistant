@@ -123,6 +123,20 @@ VOICE_V4_PLAYBOOK_ALLOW_DRAFT=false
 
 Safety: missing/invalid/unapproved/inactive playbooks fail closed to hardcoded defaults. Draft playbooks are rejected unless `VOICE_V4_PLAYBOOK_ALLOW_DRAFT=true`.
 
+### Phase 10AR — questionnaire runtime (default off)
+
+Opt-in only. When disabled, v4 response plans are unchanged. When enabled on an active v4 path, at most one soft project-context question may attach after a product/pricing answer if TTS length allows.
+
+```env
+VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED=false
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED` | `false` | Master switch for post-answer questionnaire follow-up in v4 planner/orchestrator. Requires active v4 path; does not enable v4 globally. |
+
+Safety: closing, out-of-scope, technical escalation, callback contact flow, RAG-unsafe fallback, duplicate responses, and length limits block questionnaire attachment. Lead validator rules are unchanged.
+
 Production RAG URL from voice-bridge host network:
 
 ```env
