@@ -1,7 +1,7 @@
 # Phase 10AR — Opt-In v4 Questionnaire Runtime Wiring Report
 
 Date: 2026-06-10
-Commit: `TBD`
+Commit: `c54f0ca`
 Production status: **v3 / RAG-off unchanged**. Questionnaire runtime remains **opt-in/default-off**. Draft playbook **not production-active**.
 
 > Phase 10AR wires the Phase 10AQ questionnaire generator into the v4 planner/orchestrator
