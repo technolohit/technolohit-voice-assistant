@@ -26,6 +26,10 @@ import {
   resolveRagProductScope
 } from "./rag-product-scope.js";
 import {
+  runtimeRetrieveMaxAttempts,
+  runtimeRetrieveTimeoutMs
+} from "./rag-retrieve-config.js";
+import {
   buildPlaybookCombinedProductAnswer,
   buildPlaybookShortAnswer,
   COMBINED_LIVE_TTS_CHAR_LIMIT,
@@ -268,8 +272,6 @@ function buildAnswerFromChunks(productId, ragData, agentConfig) {
   };
 }
 
-const LIVE_RAG_MAX_ATTEMPTS = 2;
-
 function finiteLatencyMs(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : 0;
@@ -299,9 +301,9 @@ function summarizeLiveRagAttempts(attempts = []) {
   };
 }
 
-async function retrieveWithLiveTimeoutRetry({ config, payload, retrieveFn, timeoutMs }) {
+async function retrieveWithLiveTimeoutRetry({ config, payload, retrieveFn, timeoutMs, maxAttempts }) {
   const attempts = [];
-  for (let index = 0; index < LIVE_RAG_MAX_ATTEMPTS; index += 1) {
+  for (let index = 0; index < maxAttempts; index += 1) {
     let ragResult;
     try {
       ragResult = await retrieveFn(config, { ...payload, timeoutMs });
@@ -385,13 +387,15 @@ export async function retrieveV4RagAnswer({
   }
 
   const threshold = minScore ?? payload.min_score ?? thresholdDefault;
-  const timeoutMs = Math.max(100, Number(config?.rag?.timeoutMs ?? 700));
+  const timeoutMs = runtimeRetrieveTimeoutMs(config);
+  const maxAttempts = runtimeRetrieveMaxAttempts(config);
 
   const { ragResult, meta: attemptMeta, thrown } = await retrieveWithLiveTimeoutRetry({
     config,
     payload,
     retrieveFn,
-    timeoutMs
+    timeoutMs,
+    maxAttempts
   });
   const withAttemptMeta = (extra = {}) => ({
     ...extra,

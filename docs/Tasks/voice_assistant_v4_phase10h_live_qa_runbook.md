@@ -379,17 +379,27 @@ product_scope=smart_website
 hit=true
 result_count>0
 success_count>=required_success_count
+timeout_ms=1500
 ```
 
 If `rag:retrieve-preflight` reports `rag_retrieve_preflight=fail`, **do not place the Gate 3 call**.
 
-Phase 10AE / v1.34.6 makes `rag:retrieve-preflight` resilient to one-off jitter by running
-three retrieve attempts at the configured `VOICE_RAG_TIMEOUT_MS`. It still blocks Gate 3 unless
-the majority succeeds. Do not compensate for a failed preflight by placing a live call.
+Phase 10AG / v1.34.8 separates the general RAG timeout from the product retrieve timeout:
+
+```env
+VOICE_RAG_RETRIEVE_TIMEOUT_MS=1500
+VOICE_RAG_RETRIEVE_MAX_ATTEMPTS=3
+```
+
+Use `1500` ms for the next Gate 3 attempt. If preflight still times out, try `2000` ms only
+after recording diagnostics. `rag:retrieve-preflight` and the live v4 RAG path now use the
+same retrieve timeout and max-attempt settings. Both retry only timeout failures and stop
+immediately after the first successful hit. Do not compensate for a failed preflight by
+placing a live call.
 
 | `fallback_reason` | Action |
 |-------------------|--------|
-| `rag_retrieve_timeout` | Run `npm run rag:retrieve-diagnostics`. If `classification=latency_budget_issue` (passes at 1200 ms, fails at 700 ms), classify as **latency budget issue** — team decides canary `VOICE_RAG_TIMEOUT_MS`. Gate 3 only after preflight passes at chosen budget. |
+| `rag_retrieve_timeout` | Run `npm run rag:retrieve-diagnostics`. If `classification=latency_budget_issue`, classify as **latency budget issue** and decide canary `VOICE_RAG_RETRIEVE_TIMEOUT_MS` (`1500` first, `2000` if still unstable). Gate 3 only after preflight passes at chosen budget. |
 | `rag_miss` | Fix RAG knowledge ingestion (`result_count=0` at runtime timeout). |
 | `wrong_product_scope` | Fix agent/scope config. |
 | `rag_unavailable` | Fix RAG API connectivity. |
@@ -810,11 +820,12 @@ caller hears pricing language; no `collect_sales_context` on combined turn.
 
 **Pass on RAG hit:** `rag_used=true`, `rag_product_scope=smart_website`, scoped answer heard.
 
-**Phase 10AF / v1.34.7+ live timeout retry:** If the first live retrieve attempt hits the
-700 ms boundary, the v4 live path retries once on `timeout` only. A successful retry should
-produce `rag_retrieval_completed` with `rag_attempt_count=2`, `rag_timeout_count=1`,
-and `rag_attempt_fallback_reasons` containing `timeout`. Do not classify Gate 3 as full
-RAG pass unless the live call has `rag_retrieval_completed` / `rag_used=true`.
+**Phase 10AG / v1.34.8+ live timeout retry:** If a live retrieve attempt times out, the v4
+live path retries up to `VOICE_RAG_RETRIEVE_MAX_ATTEMPTS` on `timeout` only and stops after the
+first successful hit. A successful retry should produce `rag_retrieval_completed` with
+`rag_attempt_count > 1`, `rag_timeout_count >= 1`, and `rag_attempt_fallback_reasons`
+containing `timeout`. Do not classify Gate 3 as full RAG pass unless the live call has
+`rag_retrieval_completed` / `rag_used=true`.
 
 ### G.4 Session close + privacy-oriented payload scan
 

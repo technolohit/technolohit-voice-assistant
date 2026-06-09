@@ -10,6 +10,7 @@ import {
   PROBE_PRODUCT_SCOPE,
   buildSmartWebsiteRetrievePayload,
   classifyRetrieveOutcome,
+  runtimeRetrieveMaxAttempts,
   runtimeRetrieveTimeoutMs,
   validateRetrievePayload
 } from "./rag-retrieve-probe.js";
@@ -18,11 +19,9 @@ function safeBoolean(value) {
   return value ? "true" : "false";
 }
 
-const DEFAULT_PREFLIGHT_ATTEMPTS = 3;
-
-function resolvePreflightAttemptCount(options = {}) {
-  const raw = Number(options.attemptCount ?? process.env.VOICE_RAG_RETRIEVE_PREFLIGHT_ATTEMPTS ?? DEFAULT_PREFLIGHT_ATTEMPTS);
-  if (!Number.isFinite(raw)) return DEFAULT_PREFLIGHT_ATTEMPTS;
+function resolvePreflightAttemptCount(config, options = {}) {
+  const raw = Number(options.attemptCount ?? runtimeRetrieveMaxAttempts(config));
+  if (!Number.isFinite(raw)) return runtimeRetrieveMaxAttempts(config);
   return Math.max(1, Math.min(5, Math.trunc(raw)));
 }
 
@@ -32,7 +31,7 @@ function summarizeAttemptResults(attempts = [], payload = {}) {
     outcome: classifyRetrieveOutcome(entry.ragResult, payload)
   }));
   const hits = outcomes.filter((entry) => entry.outcome.hit);
-  const requiredSuccessCount = Math.max(1, Math.ceil(outcomes.length / 2));
+  const requiredSuccessCount = 1;
   const selected = hits[0] ?? outcomes[outcomes.length - 1] ?? {
     ragResult: null,
     outcome: classifyRetrieveOutcome(null, payload)
@@ -127,17 +126,23 @@ export async function runRagRetrievePreflight(config, options = {}) {
     };
   }
 
-  const attemptCount = resolvePreflightAttemptCount(options);
+  const attemptCount = resolvePreflightAttemptCount(config, options);
   const attempts = [];
   for (let index = 0; index < attemptCount; index += 1) {
+    let ragResult;
     try {
-      const ragResult = await retrieveFn(config, {
+      ragResult = await retrieveFn(config, {
         ...payload,
         timeoutMs: runtimeTimeout
       });
-      attempts.push({ ragResult });
     } catch {
-      attempts.push({ ragResult: { ok: false, reason: "request_failed", latencyMs: null } });
+      ragResult = { ok: false, reason: "request_failed", latencyMs: null };
+    }
+
+    attempts.push({ ragResult });
+    const outcome = classifyRetrieveOutcome(ragResult, payload);
+    if (outcome.hit || outcome.fallback_reason !== "rag_retrieve_timeout") {
+      break;
     }
   }
 

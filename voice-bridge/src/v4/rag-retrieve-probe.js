@@ -7,6 +7,9 @@ import { loadAgentConfig } from "./agent-config.js";
 import { buildV4RagQuery } from "./rag-orchestrator.js";
 import { createCallSessionMemory, setSelectedProduct } from "./call-session-memory.js";
 import { V4_STATES } from "./state-machine.js";
+import { runtimeRetrieveMaxAttempts, runtimeRetrieveTimeoutMs } from "./rag-retrieve-config.js";
+
+export { runtimeRetrieveMaxAttempts, runtimeRetrieveTimeoutMs } from "./rag-retrieve-config.js";
 
 export const PROBE_PRODUCT_SCOPE = "smart_website";
 const PROBE_QUERY = "Was ist Smart Website und was kostet sie?";
@@ -16,10 +19,6 @@ const PHONE_IN_TEXT = /\b(\+?\d[\d\s\-()/]{5,}\d)\b/;
 export function payloadContainsPrivateData(payload) {
   const serialized = JSON.stringify(payload ?? {});
   return EMAIL_IN_TEXT.test(serialized) || PHONE_IN_TEXT.test(serialized);
-}
-
-export function runtimeRetrieveTimeoutMs(config) {
-  return Math.max(100, Number(config?.rag?.timeoutMs ?? 700));
 }
 
 export function diagnosticTimeoutBudgets(config) {

@@ -149,16 +149,16 @@ test("10AD: retrieve preflight remains strict when runtime timeout repeats", asy
   });
 });
 
-test("10AE: retrieve preflight tolerates one-off jitter but requires majority success", async () => {
+test("10AG: retrieve preflight tolerates one-off jitter and stops after first hit", async () => {
   await withEnv(ragEnv({ VOICE_RAG_TIMEOUT_MS: "700" }), async () => {
     const result = await runRagRetrievePreflight(loadConfig(), {
       skipCanary: true,
       retrieveFn: flakyOnceThenHitRetrieveFn(),
     });
     assert.equal(result.ok, true);
-    assert.equal(result.attempt_count, 3);
-    assert.equal(result.success_count, 2);
-    assert.equal(result.required_success_count, 2);
+    assert.equal(result.attempt_count, 2);
+    assert.equal(result.success_count, 1);
+    assert.equal(result.required_success_count, 1);
     assert.equal(result.timeout_count, 1);
     assert.equal(result.fallback_reason, null);
     assert.equal(result.hit, true);

@@ -67,6 +67,14 @@ export function loadConfig() {
   const ragEnabled = readBool("VOICE_RAG_ENABLED", false);
   const ragApiUrl = String(process.env.VOICE_RAG_API_URL ?? "").trim();
   const ragTimeoutMs = Math.max(100, readInt("VOICE_RAG_TIMEOUT_MS", 700));
+  const ragRetrieveTimeoutMs = Math.max(
+    100,
+    readInt("VOICE_RAG_RETRIEVE_TIMEOUT_MS", ragTimeoutMs),
+  );
+  const ragRetrieveMaxAttempts = Math.max(
+    1,
+    Math.min(5, readInt("VOICE_RAG_RETRIEVE_MAX_ATTEMPTS", 3)),
+  );
   const ragRetrieveDiagnosticTimeoutMs = readInt(
     "VOICE_RAG_RETRIEVE_DIAGNOSTIC_TIMEOUT_MS",
     0,
@@ -340,6 +348,8 @@ export function loadConfig() {
       enabled: ragEnabled,
       apiUrl: ragApiUrl,
       timeoutMs: ragTimeoutMs,
+      retrieveTimeoutMs: ragRetrieveTimeoutMs,
+      retrieveMaxAttempts: ragRetrieveMaxAttempts,
       retrieveDiagnosticTimeoutMs:
         ragRetrieveDiagnosticTimeoutMs > 0 ? ragRetrieveDiagnosticTimeoutMs : null,
       minScore: ragMinScore,

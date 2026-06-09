@@ -3,6 +3,10 @@
 Date: 2026-06-09  
 Status: **Implemented — pending release and one-call Gate 3 retry**
 
+Superseded for release by [Phase 10AG](./voice_assistant_v4_phase10ag_rag_retrieve_timeout_config_report.md):
+v1.34.7 still used the 700 ms retrieve budget in preflight. v1.34.8 adds retrieve-specific
+timeout/max-attempt configuration and should be used for the next Gate 3 attempt.
+
 ## Context
 
 Phase 10AE / `voice-bridge-v1.34.6` produced a valid supervised Gate 3 v4/RAG-on live call, but the result was **PARTIAL**:
@@ -99,4 +103,5 @@ Pass criteria for the RAG portion:
 
 ## Recommendation
 
-Release as `voice-bridge-v1.34.7` after full verification. Do not run another Gate 3 live call on `v1.34.6`; it can still fall back on a one-off 700 ms live timeout.
+Do not run another Gate 3 live call on `v1.34.6` or `v1.34.7`; they can still fail around the
+700 ms retrieve budget. Use `voice-bridge-v1.34.8` or newer.
