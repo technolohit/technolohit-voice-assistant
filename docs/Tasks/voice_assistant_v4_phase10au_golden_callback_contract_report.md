@@ -133,7 +133,7 @@ Variants covered:
 
 ## 8. Release
 
-- Commit: `<set after commit>`
+- Commit: `8b9f0f4`
 - Tag: `v1.35.3`
 - Expected image: `thnhit/technhvoice:voice-bridge-v1.35.3`
 - Live QA: **not run** — Sysadmin runs one supervised canary only after Codex review.
