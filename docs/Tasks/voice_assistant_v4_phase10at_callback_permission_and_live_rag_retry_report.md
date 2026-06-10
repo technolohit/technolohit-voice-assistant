@@ -1,6 +1,7 @@
 # Phase 10AT — Callback Permission Continuation + Live RAG Transient Retry Report
 
 Date: 2026-06-10
+Commit: `89bd4fe`
 Release target: `v1.35.2` (`thnhit/technhvoice:voice-bridge-v1.35.2`)
 Production status: **v3 / RAG-off unchanged**. v4, RAG, and questionnaire runtime remain **opt-in/default-off**.
 
