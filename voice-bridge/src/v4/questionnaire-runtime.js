@@ -15,6 +15,7 @@ import {
 } from "./playbook-questionnaire-generator.js";
 import { loadTenantPlaybook, DEFAULT_PLAYBOOK_FILENAME } from "./playbook-loader.js";
 import { sanitizeResponseText } from "./transcript-intent.js";
+import { isCallbackFlowActive } from "./callback-flow-policy.js";
 
 const PRODUCT_QUESTION_ANSWER = "product_question_answer";
 
@@ -40,15 +41,16 @@ const ROLE_BOUNDARY_INTENTS = new Set([
   "closing",
 ]);
 
-// Phase 10AT: the whole callback/contact continuation (preference, permission
-// grant, permission refusal) uses the contact flow — never attach a
-// questionnaire question to those turns.
+// Phase 10AT/10AU: the whole callback/contact continuation (preference,
+// permission grant/refusal, manual review, attention recovery) uses the
+// contact flow — never attach a questionnaire question to those turns.
 const CALLBACK_INTENTS = new Set([
   "callback_request",
   "contact_phone",
   "contact_email",
   "callback_permission_granted",
   "callback_permission_denied",
+  "callback_flow_attention",
 ]);
 
 const ELIGIBLE_ANSWER_PLAN_REASONS = new Set([
@@ -141,7 +143,10 @@ export function evaluateQuestionnaireRuntimeEligibility({
       enabled: true,
     };
   }
-  if (CALLBACK_INTENTS.has(resolvedIntent)) {
+  // Phase 10AU Golden Conversation Contract: once the callback/contact flow
+  // has started, no questionnaire question may attach — including on later
+  // explicit product-question turns.
+  if (CALLBACK_INTENTS.has(resolvedIntent) || isCallbackFlowActive(memory)) {
     return {
       allowed: false,
       reason: QUESTIONNAIRE_RUNTIME_BLOCK_REASONS.CALLBACK_FLOW,

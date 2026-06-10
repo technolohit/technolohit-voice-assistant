@@ -12,6 +12,12 @@ import {
   isTechnicalEscalationQuestion,
   isCallbackLeadCaptureRequest,
 } from "./role-boundary-intent.js";
+import {
+  isCallbackFlowActive,
+  isCallbackFlowAttentionPhrase,
+  isCallbackPermissionPendingStage,
+  isPostDecisionCallbackStage,
+} from "./callback-flow-policy.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -55,9 +61,10 @@ const PRODUCT_QUESTION_HINT =
 
 /** True while a callback/contact permission answer is still expected. */
 export function isCallbackPermissionPending(memory = {}) {
-  if (memory?.current_state === "collecting_callback_permission") return true;
-  if (memory?.callback_permission) return false;
-  return memory?.contact_preference === "phone";
+  if (memory?.current_state === "collecting_callback_permission" && !memory?.callback_permission) {
+    return true;
+  }
+  return isCallbackPermissionPendingStage(memory);
 }
 
 export function isInterruptionFollowUpPhrase(transcript = "") {
@@ -116,10 +123,23 @@ export function detectTranscriptIntent(
     return "technical_escalation";
   }
 
+  // Phase 10AU: once the callback/contact decision is made (finalized, manual
+  // review, e-mail directed), attention/recovery phrases ("Hallo?", "Sind Sie
+  // noch da?", bare "Ja."/"Okay.") and repeated callback requests stay inside
+  // the flow as reassurance — never product continuation, never a flow restart.
+  if (
+    isPostDecisionCallbackStage(memory) &&
+    !PRODUCT_QUESTION_HINT.test(lower) &&
+    (isCallbackFlowAttentionPhrase(transcript) || isCallbackLeadCaptureRequest(transcript))
+  ) {
+    return "callback_flow_attention";
+  }
+
   const collectingContactPreference =
     memory?.current_state === "collecting_contact_preference" ||
     memory?.current_state === "collecting_callback_permission" ||
-    Boolean(memory?.contact_flow_pending);
+    Boolean(memory?.contact_flow_pending) ||
+    isCallbackFlowActive(memory);
   // Conversation Priority Contract #3: explicit callback/contact requests must
   // beat interruption recovery and product Q&A. Otherwise a known product
   // context can keep answering product questions and lose a qualified lead.

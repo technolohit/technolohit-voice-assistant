@@ -96,7 +96,11 @@ function smartWebsiteHit(latencyMs = 206) {
   };
 }
 
-function createCanaryOrchestrator({ ragRetriever = null, events = null } = {}) {
+function createCanaryOrchestrator({
+  ragRetriever = null,
+  events = null,
+  callerPhoneNormalized = null,
+} = {}) {
   const config = loadConfig();
   const orchestrator = createDialogueOrchestrator({
     config,
@@ -107,6 +111,7 @@ function createCanaryOrchestrator({ ragRetriever = null, events = null } = {}) {
     adapters: ragRetriever ? { ragRetriever } : {},
     qualitySink: createQualityEventSink({ v4PathActive: true }),
     v4PathActive: true,
+    callerPhoneNormalized,
   });
   if (events) {
     const originalBuffer = orchestrator.qualitySink.bufferQualityEvent.bind(orchestrator.qualitySink);
@@ -138,6 +143,7 @@ test("10AT: callback request -> telefonisch -> ja grants permission instead of s
   await withEnv(canaryEnv(), async () => {
     let ragCalls = 0;
     const orchestrator = createCanaryOrchestrator({
+      callerPhoneNormalized: "+4915112345678",
       ragRetriever: async () => {
         ragCalls += 1;
         return smartWebsiteHit();
@@ -159,11 +165,13 @@ test("10AT: callback request -> telefonisch -> ja grants permission instead of s
     assert.equal(permission.intent, "callback_permission_granted");
     assert.notEqual(permission.plan.response_type, RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER);
     assert.notEqual(permission.plan.plan_reason, "scoped_product_qa");
-    assert.equal(permission.plan.response_type, RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION);
+    // Phase 10AU: with a valid caller phone the grant finalizes the callback.
+    assert.equal(permission.plan.response_type, RESPONSE_TYPES.CALLBACK_FINALIZED);
     assert.equal(permission.plan.plan_reason, "callback_permission_granted");
     assert.equal(permission.plan.next_state, V4_STATES.VALIDATING_CONTACT);
     assert.equal(orchestrator.memory.callback_permission, "granted");
     assert.equal(orchestrator.memory.contact_preference, "phone");
+    assert.equal(orchestrator.memory.callback_flow_state, "callback_finalized");
 
     // No RAG and no questionnaire on any callback/contact turn.
     assert.equal(ragCalls, 0);
@@ -190,8 +198,9 @@ test("10AT: 'ja gerne' and 'okay' also grant callback permission", () => {
       memory: pendingMemory,
       stateMachine: { state: V4_STATES.THINKING },
       transcript,
+      callerPhoneNormalized: "+4915112345678",
     });
-    assert.equal(plan.response_type, RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION, transcript);
+    assert.equal(plan.response_type, RESPONSE_TYPES.CALLBACK_FINALIZED, transcript);
     assert.equal(plan.plan_reason, "callback_permission_granted", transcript);
     assert.notEqual(plan.response_type, RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, transcript);
   }

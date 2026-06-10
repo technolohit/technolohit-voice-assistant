@@ -33,6 +33,14 @@ import {
 } from "./product-context-persistence.js";
 import { shouldUseRagForTurn, fallbackToPlaybook } from "./rag-orchestrator.js";
 import { applyQuestionnaireRuntimeToPlan } from "./questionnaire-runtime.js";
+import {
+  CALLBACK_FLOW_STATES,
+  CALLBACK_FLOW_CONTINUATION_INTENTS,
+  CALLBACK_CONFIRMATION_TEXTS,
+  buildCallbackReassuranceText,
+  hasValidCallerPhone,
+  isCallbackFlowActive,
+} from "./callback-flow-policy.js";
 import { V4_STATES } from "./state-machine.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
@@ -46,6 +54,9 @@ export const RESPONSE_TYPES = {
   LEAD_READY_ACK: "lead_ready_ack",
   INTERRUPTION_RECOVERY: "interruption_recovery",
   CALLBACK_PERMISSION_DENIED: "callback_permission_denied",
+  CALLBACK_FINALIZED: "callback_finalized",
+  CALLBACK_MANUAL_REVIEW: "callback_manual_review",
+  CALLBACK_REASSURANCE: "callback_reassurance",
   CLOSING: "closing",
   ROLE_BOUNDARY_REDIRECT: "role_boundary_redirect",
   TECHNICAL_ESCALATION: "technical_escalation",
@@ -312,7 +323,9 @@ function buildResponsePlanCore({
   interruptionRecovery = null,
   closedDomain = null,
   interruptFollowupTimeout = false,
-  behaviorPolicy = null
+  behaviorPolicy = null,
+  callerPhoneNormalized = null,
+  callerPhoneRaw = null
 } = {}) {
   const resolvedIntent =
     intent ?? detectTranscriptIntent(transcript, memory, agentConfig, behaviorPolicy);
@@ -393,9 +406,10 @@ function buildResponsePlanCore({
       next_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
       memory_patch: {
         current_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
-        // Phase 10AT: mark the pending callback/contact flow so the next
+        // Phase 10AT/10AU: mark the pending callback/contact flow so the next
         // short answers stay in the contact flow across state churn.
         contact_flow_pending: true,
+        callback_flow_state: CALLBACK_FLOW_STATES.CONTACT_PREFERENCE_PENDING,
         lead_ready: false,
       },
       quality_event_type: "turn_started",
@@ -405,14 +419,34 @@ function buildResponsePlanCore({
     });
   }
 
-  // Phase 10AT: callback/contact continuation (#3) outranks scoped product QA,
-  // RAG, interruption recovery, and questionnaire. Without this guard a bare
-  // "Ja." after the permission question was hijacked by scoped_product_qa.
-  const contactFlowContinuation =
-    resolvedIntent === "contact_phone" ||
-    resolvedIntent === "contact_email" ||
-    resolvedIntent === "callback_permission_granted" ||
-    resolvedIntent === "callback_permission_denied";
+  // Phase 10AU Golden Conversation Contract: attention/recovery phrases after
+  // the callback decision ("Hallo?", "Sind Sie noch da?", bare "Ja.") repeat
+  // the callback/manual-review confirmation. Never product QA, never RAG,
+  // never questionnaire.
+  if (resolvedIntent === "callback_flow_attention") {
+    return planBase(RESPONSE_TYPES.CALLBACK_REASSURANCE, {
+      text: sanitizeResponseText(buildCallbackReassuranceText(memory)),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: { current_state: V4_STATES.LISTENING },
+      quality_event_type: "turn_started",
+      plan_reason: "callback_flow_reassurance",
+      rag_allowed: false,
+      lead_transition_allowed: false,
+    });
+  }
+
+  // Phase 10AT/10AU: callback/contact continuation (#3) outranks scoped
+  // product QA, RAG, interruption recovery, and questionnaire. Without this
+  // guard a bare "Ja." after the permission question was hijacked by
+  // scoped_product_qa.
+  const contactFlowContinuation = CALLBACK_FLOW_CONTINUATION_INTENTS.has(resolvedIntent);
+  // Once the callback flow is active, product QA may resume only when the
+  // caller clearly asks a new product question — never via the closed-domain
+  // default intent ("Hallo?" must not become scoped_product_qa).
+  const explicitProductReturn =
+    resolvedIntent === "product_question" || resolvedIntent === "product_selection";
+  const callbackFlowBlocksProductQa =
+    isCallbackFlowActive(memory) && !explicitProductReturn;
 
   const gate =
     ragGate ??
@@ -429,6 +463,7 @@ function buildResponsePlanCore({
 
   if (
     !contactFlowContinuation &&
+    !callbackFlowBlocksProductQa &&
     isScopedProductQaTurn(memory, transcript, closedDomainResolved) &&
     !interruptFollowupTimeout &&
     !shouldEnterSalesQualification(transcript, resolvedIntent)
@@ -718,6 +753,7 @@ function buildResponsePlanCore({
         email_present: true,
         lead_ready: false,
         contact_flow_pending: false,
+        callback_flow_state: CALLBACK_FLOW_STATES.EMAIL_DIRECTED,
         current_state: V4_STATES.VALIDATING_CONTACT
       },
       quality_event_type: "lead_skipped",
@@ -731,8 +767,9 @@ function buildResponsePlanCore({
       next_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
       memory_patch: {
         contact_preference: "phone",
-        // Phase 10AT: permission answer is still pending after this turn.
+        // Phase 10AT/10AU: permission answer is still pending after this turn.
         contact_flow_pending: true,
+        callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING,
         current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION
       },
       quality_event_type: "turn_started",
@@ -742,25 +779,53 @@ function buildResponsePlanCore({
     });
   }
 
+  // Phase 10AU: permission grant is a protected finalization step. With a
+  // valid caller phone the request is recorded as a callback (validator still
+  // gates callback-ready). Without one, the assistant confirms manual review
+  // instead of pretending callback-ready or drifting back to product QA.
   if (
     resolvedIntent === "callback_permission_granted" &&
     (memory?.contact_preference === "phone" ||
       memory?.current_state === V4_STATES.COLLECTING_CALLBACK_PERMISSION ||
       state === V4_STATES.COLLECTING_CALLBACK_PERMISSION)
   ) {
-    return planBase(RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION, {
-      text: sanitizeResponseText("Vielen Dank. Ich prüfe kurz Ihre Kontaktdaten."),
-      next_state: V4_STATES.VALIDATING_CONTACT,
+    const phoneAvailable = hasValidCallerPhone({
+      callerPhoneNormalized,
+      callerPhoneRaw,
+      memory,
+    });
+    if (phoneAvailable) {
+      return planBase(RESPONSE_TYPES.CALLBACK_FINALIZED, {
+        text: sanitizeResponseText(CALLBACK_CONFIRMATION_TEXTS.finalized),
+        next_state: V4_STATES.VALIDATING_CONTACT,
+        memory_patch: {
+          contact_preference: memory?.contact_preference ?? "phone",
+          callback_permission: "granted",
+          contact_flow_pending: false,
+          callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_FINALIZED,
+          current_state: V4_STATES.VALIDATING_CONTACT
+        },
+        quality_event_type: "turn_started",
+        plan_reason: "callback_permission_granted",
+        rag_allowed: false,
+        lead_transition_allowed: true
+      });
+    }
+    return planBase(RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW, {
+      text: sanitizeResponseText(CALLBACK_CONFIRMATION_TEXTS.manual_review),
+      next_state: V4_STATES.LISTENING,
       memory_patch: {
         contact_preference: memory?.contact_preference ?? "phone",
         callback_permission: "granted",
+        lead_ready: false,
         contact_flow_pending: false,
-        current_state: V4_STATES.VALIDATING_CONTACT
+        callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW,
+        current_state: V4_STATES.LISTENING
       },
-      quality_event_type: "turn_started",
-      plan_reason: "callback_permission_granted",
+      quality_event_type: "lead_skipped",
+      plan_reason: "callback_manual_review_no_phone",
       rag_allowed: false,
-      lead_transition_allowed: true
+      lead_transition_allowed: false
     });
   }
 
@@ -776,6 +841,7 @@ function buildResponsePlanCore({
         callback_permission: "denied",
         lead_ready: false,
         contact_flow_pending: false,
+        callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_DENIED,
         current_state: V4_STATES.LISTENING
       },
       quality_event_type: "lead_skipped",

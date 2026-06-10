@@ -220,7 +220,9 @@ test("10U: thrown RAG provider error returns safe product answer", async () => {
       throw new Error("provider unavailable");
     });
     assert.equal(action.ragResult.used_rag, false);
-    assert.equal(action.ragResult.fallback_reason, "rag_request_failed");
+    // Phase 10AU: thrown provider errors normalize to the documented
+    // transient reason "request_failed" (retried up to max attempts).
+    assert.equal(action.ragResult.fallback_reason, "request_failed");
     assert.equal(action.plan.rag_fallback_used, true);
     assert.equal(action.plan.rag_product_scope, "smart_website");
     assert.ok(action.plan.text.length > 0);

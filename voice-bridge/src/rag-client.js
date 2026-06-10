@@ -26,7 +26,7 @@ export async function retrieveRagContext(config, payload) {
 
     const latencyMs = Math.max(0, Date.now() - startedAt);
     if (!response.ok) {
-      return { ok: false, reason: `http_${response.status}`, latencyMs };
+      return { ok: false, reason: `http_${response.status}`, status: response.status, latencyMs };
     }
 
     const json = await response.json();

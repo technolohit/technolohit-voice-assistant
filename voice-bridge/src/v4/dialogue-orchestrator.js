@@ -355,6 +355,10 @@ export async function decideNextAction(orchestrator, input = {}) {
     config: orchestrator.config,
     v4PathActive: Boolean(orchestrator.v4PathActive),
     lastAssistantText: orchestrator.lastAssistantText,
+    // Phase 10AU: the planner needs the caller-ID phone source to decide
+    // between callback finalization and manual-review confirmation.
+    callerPhoneNormalized: orchestrator.callerPhoneNormalized,
+    callerPhoneRaw: orchestrator.callerPhoneRaw,
   });
 
   const ragGuard = ragAnswerMustNotCreateLead(Boolean(plan.rag_allowed));

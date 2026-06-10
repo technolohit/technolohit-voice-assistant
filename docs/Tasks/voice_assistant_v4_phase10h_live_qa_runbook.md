@@ -841,12 +841,35 @@ and `rag_attempt_fallback_reasons` listing the transient reason(s) (for example
 Gate 3 as full RAG pass unless the live call has `rag_retrieval_completed` /
 `rag_used=true`.
 
-**Phase 10AT / v1.35.2 callback permission validation:** After the assistant asks
-"Darf unser Team Sie unter Ihrer Nummer zurückmelden?", a caller "Ja." (also "ja gerne",
-"okay", "einverstanden") must produce `response_type=collect_callback_permission` with
-`plan_reason=callback_permission_granted` — never `product_question_answer` /
-`scoped_product_qa`. A refusal must produce `response_type=callback_permission_denied`
-with no callback-ready lead. The post-call summary must not contain "Ja." as caller need.
+**Phase 10AU / v1.35.3 RAG failure normalization:** Every failed attempt now carries a
+non-empty normalized reason — an empty/missing reason is classified as `request_failed`
+and retried. On a failed live call, `rag_attempt_fallback_reasons` must never be empty,
+`rag_error_reason` must always be set, and `rag_attempt_count=1` with a transient (or
+empty) reason while `max_attempts>1` is a regression — abort and report.
+
+**Phase 10AT / v1.35.2 callback permission validation, extended by Phase 10AU / v1.35.3:**
+After the assistant asks "Darf unser Team Sie unter Ihrer Nummer zurückmelden?", a caller
+"Ja." (also "ja gerne", "okay", "einverstanden") must finalize the callback flow:
+
+- With a valid caller ID: `response_type=callback_finalized`,
+  `plan_reason=callback_permission_granted`; the caller hears "Vielen Dank. Ich habe die
+  Anfrage aufgenommen. Unser Team meldet sich telefonisch bei Ihnen."
+- Without a valid caller ID: `response_type=callback_manual_review`,
+  `plan_reason=callback_manual_review_no_phone`; the caller hears the manual-review
+  confirmation and the lead stays `manual_review` (never callback-ready).
+- Never `product_question_answer` / `scoped_product_qa` on the grant turn.
+
+A refusal must produce `response_type=callback_permission_denied` with no callback-ready
+lead.
+
+**Phase 10AU / v1.35.3 attention recovery validation:** After the grant/finalization, a
+caller "Hallo?", "Sind Sie noch da?", "Ja?" or "Okay?" must produce
+`response_type=callback_reassurance` with `plan_reason=callback_flow_reassurance` (the
+assistant repeats the callback/manual-review confirmation). `product_question_answer` /
+`scoped_product_qa` on such a turn is the v1.35.2 regression — abort and report. Product
+Q&A may resume only when the caller asks an explicit new product question. The post-call
+summary must not contain "Ja.", "Hallo?", "Okay.", "Danke schön", or "telefonisch bitte"
+as caller need.
 
 ### G.3j Gate 3 RAG answer quality evidence (Phase 10AJ)
 

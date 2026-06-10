@@ -77,14 +77,15 @@ export function shouldUseRagForTurn({ config = null, state, intent, memory = {},
   }
 
   // Phase 10AP: role boundary and callback intents must not trigger RAG.
-  // Phase 10AT: callback permission continuation (grant/refusal) is part of
-  // the contact flow and must never run RAG either.
+  // Phase 10AT/10AU: the whole callback/contact continuation (permission
+  // grant/refusal, manual review, attention recovery) must never run RAG.
   if (
     resolvedIntent === "out_of_scope" ||
     resolvedIntent === "technical_escalation" ||
     resolvedIntent === "callback_request" ||
     resolvedIntent === "callback_permission_granted" ||
-    resolvedIntent === "callback_permission_denied"
+    resolvedIntent === "callback_permission_denied" ||
+    resolvedIntent === "callback_flow_attention"
   ) {
     return { allowed: false, reason: `${resolvedIntent}_intent`, state: resolvedState };
   }
@@ -358,8 +359,7 @@ function summarizeLiveRagAttempts(attempts = []) {
     ...new Set(
       safeAttempts
         .filter((entry) => !entry?.ok)
-        .map((entry) => String(entry?.reason ?? "rag_unavailable"))
-        .filter(Boolean)
+        .map((entry) => String(entry?.reason ?? "").trim() || "request_failed")
     )
   ];
   return {
@@ -388,24 +388,37 @@ export function isTransientRetrievalFailure(result) {
   return TRANSIENT_HTTP_STATUS.test(reason);
 }
 
+// Phase 10AU: every failed attempt must carry a non-empty normalized reason.
+// An empty/missing reason is a transport-level anomaly — classify it as
+// "request_failed" (transient, retryable) instead of letting an empty string
+// suppress retries and produce empty fallback-reason evidence.
+export function normalizeRetrievalFailure(result) {
+  if (!result) {
+    return { ok: false, reason: "request_failed", latencyMs: 0 };
+  }
+  if (result.ok) return result;
+  const reason = String(result.reason ?? "").trim();
+  if (reason) return result;
+  return { ...result, reason: "request_failed" };
+}
+
 async function retrieveWithLiveTransientRetry({ config, payload, retrieveFn, timeoutMs, maxAttempts }) {
   const attempts = [];
   for (let index = 0; index < maxAttempts; index += 1) {
     let ragResult;
-    let attemptThrew = false;
     try {
       ragResult = await retrieveFn(config, { ...payload, timeoutMs });
     } catch {
-      attemptThrew = true;
-      ragResult = { ok: false, reason: "rag_request_failed", latencyMs: 0 };
+      ragResult = { ok: false, reason: "request_failed", latencyMs: 0 };
     }
+    ragResult = normalizeRetrievalFailure(ragResult);
 
     attempts.push(ragResult);
     // Stop immediately on a transport-level success (usable hit or
     // deterministic miss). Retry only timeout / transient / unavailable
     // failures; deterministic failures (for example http_4xx) stop the loop.
     if (ragResult?.ok) break;
-    if (!attemptThrew && !isTransientRetrievalFailure(ragResult)) break;
+    if (!isTransientRetrievalFailure(ragResult)) break;
   }
 
   const selected = attempts.find((entry) => entry?.ok && entry?.hit) ?? attempts[attempts.length - 1] ?? null;
@@ -438,7 +451,9 @@ export async function retrieveV4RagAnswer({
     payload_tenant_id: payloadMeta?.tenant_id ?? null,
     payload_agent_id: payloadMeta?.agent_id ?? null,
     rag_http_status: extra?.rag_http_status ?? null,
-    rag_error_reason: extra?.rag_error_reason ?? null,
+    // Phase 10AU: failed final outcomes always carry a non-empty error
+    // reason; deterministic fallbacks reuse their fallback_reason.
+    rag_error_reason: extra?.rag_error_reason ?? extra?.fallback_reason ?? null,
     ...extra
   });
 
@@ -501,12 +516,15 @@ export async function retrieveV4RagAnswer({
 
   if (!ragResult?.ok) {
     const evidence = summarizeRagEvidence(ragResult);
+    // Phase 10AU: final failed outcome must always carry a non-empty
+    // normalized reason for fallback_reason and rag_error_reason.
+    const failureReason = String(ragResult?.reason ?? "").trim() || "rag_unavailable";
     return scopedFallback(
       withAttemptMeta({
-        fallback_reason: ragResult?.reason ?? "rag_unavailable",
+        fallback_reason: failureReason,
         latency_ms: attemptMeta.total_latency_ms || (ragResult?.latencyMs ?? null),
         rag_http_status: ragResult?.status ?? null,
-        rag_error_reason: ragResult?.reason ?? "rag_unavailable",
+        rag_error_reason: failureReason,
         evidence,
         top_score: evidence.top_score,
         result_count: evidence.hit_count

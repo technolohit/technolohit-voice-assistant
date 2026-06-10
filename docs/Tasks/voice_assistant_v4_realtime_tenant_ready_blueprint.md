@@ -35,12 +35,12 @@ Last updated: 2026-06-10
 
 | Item | Status |
 |------|--------|
-| **Current completed phase** | **Phase 10AT - Callback Permission Continuation + Live RAG Transient Retry (implementation ready; supervised v1.35.2 canary required)** |
+| **Current completed phase** | **Phase 10AU - Golden Conversation Contract for callback flow + RAG failure normalization (implementation ready; supervised v1.35.3 canary required)** |
 | **Current production runtime** | **v3** (`VOICE_RUNTIME_VERSION=v3`); RAG remains disabled by default |
-| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12. **v1.35.0 questionnaire canary PARTIAL/FAIL** (callback shadowed by product Q&A; fixed in 10AS). **v1.35.1 canary FAIL**: "Ja." after the callback permission question was hijacked into `scoped_product_qa`, and live RAG made only 1 attempt despite `VOICE_RAG_RETRIEVE_MAX_ATTEMPTS=3`; Phase 10AT fixes both and awaits v1.35.2 live validation. |
+| **v4 live canary** | **Gate 2 PASS** (v1.34.3+). **Gate 3 RAG/content PASS** on v1.34.11. **Phase 10AK closing canary PASS** on v1.34.12. **v1.35.0 questionnaire canary PARTIAL/FAIL** (callback shadowed by product Q&A; fixed in 10AS). **v1.35.1 canary FAIL** (permission "Ja." hijacked; fixed in 10AT). **v1.35.2 canary FAIL**: "Hallo?" after `callback_permission_granted` regressed to `scoped_product_qa` (no protected finalization state) and live RAG still recorded `rag_attempt_count=1` with an empty fallback reason; Phase 10AU adds the deterministic callback flow lifecycle + RAG failure normalization and awaits v1.35.3 live validation. |
 | **v4 production status** | **Not globally enabled** |
 | **Phase 9 dry run** | **Passed** (2026-06-01) |
-| **Next step** | Release `voice-bridge-v1.35.2`, run one supervised v4/RAG-on/questionnaire canary repeating the v1.35.1 script (callback → "telefonisch" → "Ja."), then roll back to v3/RAG-off. Production stays v3/RAG-off. |
+| **Next step** | Release `voice-bridge-v1.35.3`, run one supervised v4/RAG-on/questionnaire canary repeating the v1.35.2 script (combined product question → callback → "telefonisch bitte" → "Ja." → "Hallo?"), then roll back to v3/RAG-off. Production stays v3/RAG-off. |
 
 Completed foundation work (do not re-implement):
 
@@ -55,7 +55,7 @@ Completed foundation work (do not re-implement):
 - Phase 8 observability/quality analytics: persistence flush, per-call summary rollups, SQL runbook (canary/test-harness only)
 - Phase 9 rollout preparation: sysadmin runbook, v1.11.0 deploy procedure, acceptance checklist (**dry run passed**; production v4 still disabled)
 - Phase 9b supervised canary: blueprint + sysadmin canary runbook (validation plan only; **not executed**)
-- Phase 10 live AudioSocket wiring: **10A-10AK implemented and accepted**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; **closing/stop intent canary passed on v1.34.12**; **10AS callback priority fix implemented after v1.35.0 questionnaire canary partial/fail**; **10AT callback permission continuation + live RAG transient retry implemented after v1.35.1 canary fail**.
+- Phase 10 live AudioSocket wiring: **10A-10AK implemented and accepted**; **Gate 2 passed**; **Gate 3 RAG/content canary passed on v1.34.11**; **closing/stop intent canary passed on v1.34.12**; **10AS callback priority fix implemented after v1.35.0 questionnaire canary partial/fail**; **10AT callback permission continuation + live RAG transient retry implemented after v1.35.1 canary fail**; **10AU Golden Conversation Contract (callback flow lifecycle + RAG failure normalization) implemented after v1.35.2 canary fail**.
 
 Production rollout blockers (tracked; **do not block app implementation**):
 
@@ -79,7 +79,7 @@ Phase 7  — Lead Policy, Post-Call Reliability, And Privacy [completed]
 Phase 8  — Observability And Quality Analytics            [completed]
 Phase 9  — Production Rollout Preparation                 [completed — dry run passed]
 Phase 9b — Supervised Canary Validation                 [completed — docs/runbook; execution blocked]
-Phase 10 - Live AudioSocket -> v4 Canary Wiring          [completed through 10AT implementation - v1.35.2 callback-permission/RAG-retry canary pending]
+Phase 10 - Live AudioSocket -> v4 Canary Wiring          [completed through 10AU implementation - v1.35.3 golden-callback-contract canary pending]
 Phase 9c — Supervised production v4 enablement          [blocked — see blockers]
 ```
 
@@ -710,7 +710,24 @@ Status: **implemented, not live-accepted yet** — [report](./voice_assistant_v4
 - [x] Successful: live RAG retries transient failures (`timeout`, `request_failed`, `rag_unavailable`, `http_429`/`http_5xx`) up to `VOICE_RAG_RETRIEVE_MAX_ATTEMPTS`; deterministic failures (`http_4xx`, miss, scope/score/safety gates) are not retried; preflight and live path share the same retrieval function.
 - [x] Successful: quality evidence fields (`rag_attempt_count`, `rag_timeout_count`, `rag_success_count`, `rag_attempt_fallback_reasons`, `rag_http_status`, `rag_error_reason`, latency/result/scope/used/fallback) verified PII-free.
 - [x] Successful: local verification passed (`voice-bridge` 587/587, `rag-api` 7/7, dialogue QA 26/26).
-- [ ] Successful: supervised `voice-bridge-v1.35.2` v4/RAG-on/questionnaire canary proves callback permission continuation and RAG retry live.
+- [x] Failed: supervised `voice-bridge-v1.35.2` canary — grant turn planned correctly, but "Hallo?" after `callback_permission_granted` regressed to `scoped_product_qa` and live RAG still recorded `rag_attempt_count=1` with an empty fallback reason (handed to Phase 10AU).
+
+#### Phase 10AU - Golden Conversation Contract: Callback Flow Lifecycle + RAG Failure Normalization
+
+Goal: stop the patch-loop after the `v1.35.2` canary fail — make the callback/contact flow a deterministic lifecycle (`callback-flow-policy.js`) with a protected finalization/manual-review stage and attention-recovery handling, and normalize every failed live RAG attempt to a non-empty retryable reason.
+
+Status: **implemented, not live-accepted yet** — [report](./voice_assistant_v4_phase10au_golden_callback_contract_report.md).
+
+- [x] Successful: explicit lifecycle states in `memory.callback_flow_state` (`contact_preference_pending`, `callback_permission_pending`, `callback_finalized`, `callback_manual_review`, `callback_denied`, `email_directed`) with deterministic legacy fallback.
+- [x] Successful: grant with valid caller phone plans `callback_finalized` ("Vielen Dank. Ich habe die Anfrage aufgenommen. Unser Team meldet sich telefonisch bei Ihnen."); validator still gates callback-ready.
+- [x] Successful: grant without valid caller phone plans `callback_manual_review` ("…zur manuellen Prüfung…"); never pretends callback-ready; lead stays `manual_review`/guard-not-met; caller not left hanging.
+- [x] Successful: "Hallo?"/"Sind Sie noch da?"/"Ja?"/"Okay?" after the decision resolve to `callback_flow_attention` → `callback_reassurance` plan; never `product_question_answer`/`scoped_product_qa`.
+- [x] Successful: once the flow is active, scoped product QA is blocked unless the caller asks an explicit new product question; questionnaire never attaches (intent- and memory-based blocks); RAG gate blocks all callback/contact/permission/attention turns.
+- [x] Successful: post-call summary never stores "Hallo?", "Ja.", "Okay.", "Danke schön", "telefonisch bitte" (or sequences) as caller need.
+- [x] Successful: every failed live RAG attempt carries a non-empty normalized reason (`normalizeRetrievalFailure`; empty/missing → `request_failed`, retried); `rag_attempt_count` equals actual attempts; `rag_attempt_fallback_reasons` never empty on failure; `rag_error_reason` always set on failed final outcomes; `rag_http_status` populated on HTTP failures.
+- [x] Successful: golden contract test replays the exact v1.35.2 failure sequence turn-by-turn plus variants (valid/missing caller ID, closing after grant, explicit product return, refusal).
+- [x] Successful: local verification passed (`voice-bridge` 600/600, `rag-api` 7/7, dialogue QA 26/26).
+- [ ] Successful: supervised `voice-bridge-v1.35.3` v4/RAG-on/questionnaire canary proves callback finalization, attention recovery, and RAG retry evidence live.
 
 ## Recommended v4 Architecture
 
@@ -1648,6 +1665,7 @@ Stub modules remain for media/orchestration wiring in later phases (no productio
 - [x] Successful: Phase 10AQ playbook questionnaire generator — non-live lead-intake question generator, playbook `questionnaire_policy`, eval scenarios; production defaults unchanged — [report](./voice_assistant_v4_phase10aq_playbook_questionnaire_generator_report.md).
 - [x] Successful: Phase 10AR opt-in questionnaire runtime wiring — planner/orchestrator integration behind `VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED` (default false); safe quality evidence; production defaults unchanged — [report](./voice_assistant_v4_phase10ar_questionnaire_runtime_wiring_report.md).
 - [x] Successful: Phase 10AT callback permission continuation + live RAG transient retry — permission grant/refusal intents, scoped-QA guard, transient retry honoring `VOICE_RAG_RETRIEVE_MAX_ATTEMPTS`; production defaults unchanged — [report](./voice_assistant_v4_phase10at_callback_permission_and_live_rag_retry_report.md).
+- [x] Successful: Phase 10AU Golden Conversation Contract — deterministic callback flow lifecycle (`callback-flow-policy.js`), finalization/manual-review confirmations, attention recovery, summary cleanup, RAG failure normalization; production defaults unchanged — [report](./voice_assistant_v4_phase10au_golden_callback_contract_report.md).
 - [x] Successful: Phase 10AL Agent Behavior Architecture documented in this blueprint - role boundary, conversation priority contract, tenant playbook direction, eval scenarios, and questionnaire-to-playbook direction.
 - [ ] Successful: Phase 10O-A — 3/3 repeatability (RAG off) on v1.32.0+.
 - [ ] Successful: Phase 10O-B — 1 RAG-enabled product Q&A canary on v1.32.0+ — [plan](./voice_assistant_v4_phase10o_controlled_repeatability_and_rag_canary_plan.md).

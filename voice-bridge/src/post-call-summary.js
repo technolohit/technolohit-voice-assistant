@@ -15,16 +15,22 @@ function isClosingOnlyCallerText(text) {
   );
 }
 
-// Phase 10AT: a bare permission/acknowledgement answer ("Ja.", "okay",
-// "einverstanden", "nein") is not a caller need — the permission/contact state
-// fields already carry that information.
+// Phase 10AT/10AU: bare permission/acknowledgement/attention answers ("Ja.",
+// "okay", "Hallo?", "Dankeschön, telefonisch bitte.") are not a caller need —
+// the permission/contact state fields already carry that information.
+const ACK_ONLY_PHRASE =
+  "(ja|ja gerne|ja bitte|ja klar|gerne|okay|ok|einverstanden|in ordnung|alles klar|klar|genau|passt|super|gut|nein|nein danke|lieber nicht|hallo|huhu|sind sie noch da|noch da|h[oö]ren sie mich|danke|danke ?sch[oö]n|dankesch[oö]n|vielen dank|bitte|telefonisch|telefonisch bitte|bitte telefonisch|per telefon|per e-?mail)";
+const ACK_ONLY_SEQUENCE = new RegExp(`^${ACK_ONLY_PHRASE}( ${ACK_ONLY_PHRASE})*$`, "i");
+
 function isAcknowledgementOnlyCallerText(text) {
   const lower = normalizeText(text)
     .toLowerCase()
-    .replace(/[.!?,;]+$/g, "")
+    .replace(/[.!?,;:]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
   if (!lower) return false;
-  return /^(ja|ja gerne|ja bitte|ja klar|gerne|okay|ok|einverstanden|in ordnung|klar|genau|passt|nein|nein danke|lieber nicht)$/.test(lower);
+  if (lower.length > 80) return false;
+  return ACK_ONLY_SEQUENCE.test(lower);
 }
 
 function isUnusableCallerNeedText(text) {
