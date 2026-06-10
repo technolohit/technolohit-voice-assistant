@@ -15,6 +15,22 @@ function isClosingOnlyCallerText(text) {
   );
 }
 
+// Phase 10AT: a bare permission/acknowledgement answer ("Ja.", "okay",
+// "einverstanden", "nein") is not a caller need — the permission/contact state
+// fields already carry that information.
+function isAcknowledgementOnlyCallerText(text) {
+  const lower = normalizeText(text)
+    .toLowerCase()
+    .replace(/[.!?,;]+$/g, "")
+    .trim();
+  if (!lower) return false;
+  return /^(ja|ja gerne|ja bitte|ja klar|gerne|okay|ok|einverstanden|in ordnung|klar|genau|passt|nein|nein danke|lieber nicht)$/.test(lower);
+}
+
+function isUnusableCallerNeedText(text) {
+  return isClosingOnlyCallerText(text) || isAcknowledgementOnlyCallerText(text);
+}
+
 function metadataField(metadata, key) {
   if (!metadata || typeof metadata !== "object") return "";
   return normalizeText(metadata[key]);
@@ -46,7 +62,7 @@ function firstCallerNeed(turnRows) {
   if (!callerRows.length) return "";
   for (const row of callerRows) {
     const candidate = normalizeText(row.text);
-    if (!candidate || isClosingOnlyCallerText(candidate)) continue;
+    if (!candidate || isUnusableCallerNeedText(candidate)) continue;
     return candidate.slice(0, 220);
   }
   return "";
@@ -164,11 +180,11 @@ export function callerNeedFromV4Metadata(v4Metadata) {
       memory.last_user_utterance
     ]) {
       const fromMemory = normalizeText(value);
-      if (fromMemory && !isClosingOnlyCallerText(fromMemory)) return fromMemory.slice(0, 220);
+      if (fromMemory && !isUnusableCallerNeedText(fromMemory)) return fromMemory.slice(0, 220);
     }
   }
   const fromMetadata = normalizeText(v4Metadata?.caller_need);
-  return isClosingOnlyCallerText(fromMetadata) ? "" : fromMetadata.slice(0, 220);
+  return isUnusableCallerNeedText(fromMetadata) ? "" : fromMetadata.slice(0, 220);
 }
 
 function productInterestFromV4Metadata(v4Metadata) {

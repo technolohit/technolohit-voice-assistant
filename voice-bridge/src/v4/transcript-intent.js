@@ -43,6 +43,23 @@ const TOPIC_RESET_EXPLICIT =
 const DEFINITE_GOODBYE =
   /\b(auf wiederh[oö]ren|auf wiedersehen|wiederh[oö]ren|wiedersehen|bis dann|nein danke|danke[, ]+das war alles|das war alles|das war'?s|das wars|keine frage mehr|tsch[uü]ss|tschuess|sch[oö]nen tag)\b/i;
 
+// Phase 10AT: callback permission continuation. "Ja", "ja gerne", "okay",
+// "einverstanden" after the permission question must grant permission instead
+// of falling back to scoped product QA; a refusal must end the callback flow.
+const CALLBACK_PERMISSION_AFFIRMATIVE =
+  /\b(ja|okay|ok|einverstanden|gerne|in ordnung|klar)\b/i;
+const CALLBACK_PERMISSION_REFUSAL =
+  /\b(nein|lieber nicht|bitte nicht|kein anruf|keinen anruf|nicht anrufen|keinen r[üu]ckruf)\b/i;
+const PRODUCT_QUESTION_HINT =
+  /\b(was ist|was sind|was macht|was bedeutet|wie funktioniert|preis|kosten|was kostet|wie viel|tarif|geb[uü]hr)\b/i;
+
+/** True while a callback/contact permission answer is still expected. */
+export function isCallbackPermissionPending(memory = {}) {
+  if (memory?.current_state === "collecting_callback_permission") return true;
+  if (memory?.callback_permission) return false;
+  return memory?.contact_preference === "phone";
+}
+
 export function isInterruptionFollowUpPhrase(transcript = "") {
   const lower = normalizeText(transcript).toLowerCase();
   if (!lower) return false;
@@ -101,12 +118,33 @@ export function detectTranscriptIntent(
 
   const collectingContactPreference =
     memory?.current_state === "collecting_contact_preference" ||
-    memory?.current_state === "collecting_callback_permission";
+    memory?.current_state === "collecting_callback_permission" ||
+    Boolean(memory?.contact_flow_pending);
   // Conversation Priority Contract #3: explicit callback/contact requests must
   // beat interruption recovery and product Q&A. Otherwise a known product
   // context can keep answering product questions and lose a qualified lead.
   if (!collectingContactPreference && isCallbackLeadCaptureRequest(transcript)) {
     return "callback_request";
+  }
+
+  // Phase 10AT: while the callback permission question is open, a short
+  // affirmative/refusal answers the permission question — it must not fall
+  // through to scoped product QA. A new product question still wins so the
+  // caller can change topic explicitly.
+  if (
+    isCallbackPermissionPending(memory) &&
+    !PRODUCT_QUESTION_HINT.test(lower) &&
+    !isTopicRepairPhrase(transcript)
+  ) {
+    if (
+      CALLBACK_PERMISSION_REFUSAL.test(lower) &&
+      !CALLBACK_PERMISSION_AFFIRMATIVE.test(lower)
+    ) {
+      return "callback_permission_denied";
+    }
+    if (CALLBACK_PERMISSION_AFFIRMATIVE.test(lower)) {
+      return "callback_permission_granted";
+    }
   }
 
   const inInterruption = Boolean(memory?.interruption_context);
@@ -149,7 +187,7 @@ export function detectTranscriptIntent(
   if (/\b(e-?mail|email|per mail)\b/i.test(lower)) return "contact_email";
   if (/\b(telefon|telefonisch|anruf|anrufen)\b/i.test(lower)) return "contact_phone";
   if (isCallbackLeadCaptureRequest(transcript)) return "callback_request";
-  if (/\b(ja|einverstanden|gerne|ok)\b/i.test(lower) && memory?.contact_preference) {
+  if (CALLBACK_PERMISSION_AFFIRMATIVE.test(lower) && memory?.contact_preference) {
     return "callback_permission_granted";
   }
   if (memory?.selected_product_id && isGenericScopedProductQuestion(transcript)) {

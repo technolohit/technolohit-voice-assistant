@@ -40,7 +40,16 @@ const ROLE_BOUNDARY_INTENTS = new Set([
   "closing",
 ]);
 
-const CALLBACK_INTENTS = new Set(["callback_request"]);
+// Phase 10AT: the whole callback/contact continuation (preference, permission
+// grant, permission refusal) uses the contact flow — never attach a
+// questionnaire question to those turns.
+const CALLBACK_INTENTS = new Set([
+  "callback_request",
+  "contact_phone",
+  "contact_email",
+  "callback_permission_granted",
+  "callback_permission_denied",
+]);
 
 const ELIGIBLE_ANSWER_PLAN_REASONS = new Set([
   "combined_product_inquiry",

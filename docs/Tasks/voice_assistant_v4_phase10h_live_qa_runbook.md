@@ -829,12 +829,24 @@ caller hears pricing language; no `collect_sales_context` on combined turn.
 
 **Pass on RAG hit:** `rag_used=true`, `rag_product_scope=smart_website`, scoped answer heard.
 
-**Phase 10AG / v1.34.8+ live timeout retry:** If a live retrieve attempt times out, the v4
-live path retries up to `VOICE_RAG_RETRIEVE_MAX_ATTEMPTS` on `timeout` only and stops after the
-first successful hit. A successful retry should produce `rag_retrieval_completed` with
-`rag_attempt_count > 1`, `rag_timeout_count >= 1`, and `rag_attempt_fallback_reasons`
-containing `timeout`. Do not classify Gate 3 as full RAG pass unless the live call has
-`rag_retrieval_completed` / `rag_used=true`.
+**Phase 10AG / v1.34.8+ live timeout retry, extended by Phase 10AT / v1.35.2:** If a live
+retrieve attempt fails transiently (`timeout`, `request_failed`, `rag_unavailable`,
+`http_429`, `http_5xx`), the v4 live path retries up to `VOICE_RAG_RETRIEVE_MAX_ATTEMPTS`
+and stops after the first successful response. Deterministic failures (`http_4xx`, a
+successful miss, wrong product scope, low score, unsafe/empty answer) are not retried. A
+successful retry should produce `rag_retrieval_completed` with `rag_attempt_count > 1`
+and `rag_attempt_fallback_reasons` listing the transient reason(s) (for example
+`timeout` or `request_failed`). `rag_retrieval_failed` with `rag_attempt_count` <
+`max_attempts` and a transient `rag_error_reason` indicates a retry bug. Do not classify
+Gate 3 as full RAG pass unless the live call has `rag_retrieval_completed` /
+`rag_used=true`.
+
+**Phase 10AT / v1.35.2 callback permission validation:** After the assistant asks
+"Darf unser Team Sie unter Ihrer Nummer zurückmelden?", a caller "Ja." (also "ja gerne",
+"okay", "einverstanden") must produce `response_type=collect_callback_permission` with
+`plan_reason=callback_permission_granted` — never `product_question_answer` /
+`scoped_product_qa`. A refusal must produce `response_type=callback_permission_denied`
+with no callback-ready lead. The post-call summary must not contain "Ja." as caller need.
 
 ### G.3j Gate 3 RAG answer quality evidence (Phase 10AJ)
 

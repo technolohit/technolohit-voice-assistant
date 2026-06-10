@@ -77,10 +77,14 @@ export function shouldUseRagForTurn({ config = null, state, intent, memory = {},
   }
 
   // Phase 10AP: role boundary and callback intents must not trigger RAG.
+  // Phase 10AT: callback permission continuation (grant/refusal) is part of
+  // the contact flow and must never run RAG either.
   if (
     resolvedIntent === "out_of_scope" ||
     resolvedIntent === "technical_escalation" ||
-    resolvedIntent === "callback_request"
+    resolvedIntent === "callback_request" ||
+    resolvedIntent === "callback_permission_granted" ||
+    resolvedIntent === "callback_permission_denied"
   ) {
     return { allowed: false, reason: `${resolvedIntent}_intent`, state: resolvedState };
   }
@@ -370,31 +374,44 @@ function summarizeLiveRagAttempts(attempts = []) {
   };
 }
 
-async function retrieveWithLiveTimeoutRetry({ config, payload, retrieveFn, timeoutMs, maxAttempts }) {
+// Phase 10AT: transient transport failures must be retried up to
+// VOICE_RAG_RETRIEVE_MAX_ATTEMPTS (the previous loop only retried "timeout",
+// so a single transient network/5xx failure burned the whole live turn).
+const TRANSIENT_HTTP_STATUS = /^http_(429|5\d{2})$/;
+
+export function isTransientRetrievalFailure(result) {
+  if (!result || result.ok) return false;
+  const reason = String(result.reason ?? "");
+  if (reason === "timeout" || reason === "request_failed" || reason === "rag_unavailable") {
+    return true;
+  }
+  return TRANSIENT_HTTP_STATUS.test(reason);
+}
+
+async function retrieveWithLiveTransientRetry({ config, payload, retrieveFn, timeoutMs, maxAttempts }) {
   const attempts = [];
   for (let index = 0; index < maxAttempts; index += 1) {
     let ragResult;
+    let attemptThrew = false;
     try {
       ragResult = await retrieveFn(config, { ...payload, timeoutMs });
     } catch {
-      return {
-        ragResult: null,
-        meta: summarizeLiveRagAttempts(attempts),
-        thrown: true
-      };
+      attemptThrew = true;
+      ragResult = { ok: false, reason: "rag_request_failed", latencyMs: 0 };
     }
 
     attempts.push(ragResult);
-    if (ragResult?.ok || ragResult?.reason !== "timeout") {
-      break;
-    }
+    // Stop immediately on a transport-level success (usable hit or
+    // deterministic miss). Retry only timeout / transient / unavailable
+    // failures; deterministic failures (for example http_4xx) stop the loop.
+    if (ragResult?.ok) break;
+    if (!attemptThrew && !isTransientRetrievalFailure(ragResult)) break;
   }
 
   const selected = attempts.find((entry) => entry?.ok && entry?.hit) ?? attempts[attempts.length - 1] ?? null;
   return {
     ragResult: selected,
-    meta: summarizeLiveRagAttempts(attempts),
-    thrown: false
+    meta: summarizeLiveRagAttempts(attempts)
   };
 }
 
@@ -459,7 +476,7 @@ export async function retrieveV4RagAnswer({
   const timeoutMs = runtimeRetrieveTimeoutMs(config);
   const maxAttempts = runtimeRetrieveMaxAttempts(config);
 
-  const { ragResult, meta: attemptMeta, thrown } = await retrieveWithLiveTimeoutRetry({
+  const { ragResult, meta: attemptMeta } = await retrieveWithLiveTransientRetry({
     config,
     payload,
     retrieveFn,
@@ -481,13 +498,6 @@ export async function retrieveV4RagAnswer({
     top_score_before_filter: filterStages.top_score_before_filter ?? null,
     top_score_after_filter: filterStages.top_score_after_filter ?? null
   });
-
-  if (thrown) {
-    return {
-      ...scopedFallback(withAttemptMeta()),
-      fallback_reason: "rag_request_failed"
-    };
-  }
 
   if (!ragResult?.ok) {
     const evidence = summarizeRagEvidence(ragResult);

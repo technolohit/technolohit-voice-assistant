@@ -45,6 +45,7 @@ export const RESPONSE_TYPES = {
   EMAIL_GUIDANCE: "email_guidance",
   LEAD_READY_ACK: "lead_ready_ack",
   INTERRUPTION_RECOVERY: "interruption_recovery",
+  CALLBACK_PERMISSION_DENIED: "callback_permission_denied",
   CLOSING: "closing",
   ROLE_BOUNDARY_REDIRECT: "role_boundary_redirect",
   TECHNICAL_ESCALATION: "technical_escalation",
@@ -392,6 +393,9 @@ function buildResponsePlanCore({
       next_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
       memory_patch: {
         current_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+        // Phase 10AT: mark the pending callback/contact flow so the next
+        // short answers stay in the contact flow across state churn.
+        contact_flow_pending: true,
         lead_ready: false,
       },
       quality_event_type: "turn_started",
@@ -400,6 +404,15 @@ function buildResponsePlanCore({
       lead_transition_allowed: false,
     });
   }
+
+  // Phase 10AT: callback/contact continuation (#3) outranks scoped product QA,
+  // RAG, interruption recovery, and questionnaire. Without this guard a bare
+  // "Ja." after the permission question was hijacked by scoped_product_qa.
+  const contactFlowContinuation =
+    resolvedIntent === "contact_phone" ||
+    resolvedIntent === "contact_email" ||
+    resolvedIntent === "callback_permission_granted" ||
+    resolvedIntent === "callback_permission_denied";
 
   const gate =
     ragGate ??
@@ -415,6 +428,7 @@ function buildResponsePlanCore({
     resolveClosedDomainIntent({ agentConfig, transcript, memory });
 
   if (
+    !contactFlowContinuation &&
     isScopedProductQaTurn(memory, transcript, closedDomainResolved) &&
     !interruptFollowupTimeout &&
     !shouldEnterSalesQualification(transcript, resolvedIntent)
@@ -703,6 +717,7 @@ function buildResponsePlanCore({
         contact_preference: "email",
         email_present: true,
         lead_ready: false,
+        contact_flow_pending: false,
         current_state: V4_STATES.VALIDATING_CONTACT
       },
       quality_event_type: "lead_skipped",
@@ -716,22 +731,57 @@ function buildResponsePlanCore({
       next_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
       memory_patch: {
         contact_preference: "phone",
+        // Phase 10AT: permission answer is still pending after this turn.
+        contact_flow_pending: true,
         current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION
       },
-      quality_event_type: "turn_started"
+      quality_event_type: "turn_started",
+      plan_reason: "contact_phone_preference",
+      rag_allowed: false,
+      lead_transition_allowed: false
     });
   }
 
-  if (resolvedIntent === "callback_permission_granted" && memory?.contact_preference === "phone") {
+  if (
+    resolvedIntent === "callback_permission_granted" &&
+    (memory?.contact_preference === "phone" ||
+      memory?.current_state === V4_STATES.COLLECTING_CALLBACK_PERMISSION ||
+      state === V4_STATES.COLLECTING_CALLBACK_PERMISSION)
+  ) {
     return planBase(RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION, {
       text: sanitizeResponseText("Vielen Dank. Ich prüfe kurz Ihre Kontaktdaten."),
       next_state: V4_STATES.VALIDATING_CONTACT,
       memory_patch: {
+        contact_preference: memory?.contact_preference ?? "phone",
         callback_permission: "granted",
+        contact_flow_pending: false,
         current_state: V4_STATES.VALIDATING_CONTACT
       },
       quality_event_type: "turn_started",
+      plan_reason: "callback_permission_granted",
+      rag_allowed: false,
       lead_transition_allowed: true
+    });
+  }
+
+  // Phase 10AT: refusal after the permission question must not create a
+  // callback-ready lead and must not bounce back into product Q&A.
+  if (resolvedIntent === "callback_permission_denied") {
+    return planBase(RESPONSE_TYPES.CALLBACK_PERMISSION_DENIED, {
+      text: sanitizeResponseText(
+        "Alles klar, dann melden wir uns nicht telefonisch. Sie erreichen unser Team jederzeit per E-Mail über www.technolohit.com. Kann ich Ihnen sonst noch weiterhelfen?"
+      ),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: {
+        callback_permission: "denied",
+        lead_ready: false,
+        contact_flow_pending: false,
+        current_state: V4_STATES.LISTENING
+      },
+      quality_event_type: "lead_skipped",
+      plan_reason: "callback_permission_denied",
+      rag_allowed: false,
+      lead_transition_allowed: false
     });
   }
 
