@@ -483,6 +483,96 @@ docs/Tasks/
 - [x] Successful: File layout accepted.
 - [x] Successful: `turn-assistant.js` responsibility reduced.
 
+## 2026-06-11 Architecture Update: Agent Behavior Layer Track
+
+The supervised v4 canary sequence through `voice-bridge-v1.35.3` showed a useful but uncomfortable pattern: individual fixes can improve one live symptom, but the assistant will remain fragile if business behavior is spread across ad hoc planner branches.
+
+Recent canary evidence confirmed important progress:
+
+- live Smart Website RAG answer can work (`rag_retrieval_completed`, `rag_used=true`, scoped to `smart_website`)
+- callback/contact flow can reach manual review safely
+- RAG and questionnaire can be suppressed after callback flow starts
+- closing intent can override product continuation
+- post-call summary, notification, privacy scan, and rollback can work safely
+
+The remaining architecture decision is:
+
+```text
+Runtime engine changes rarely.
+Business behavior changes through versioned playbooks.
+Every playbook version has eval scenarios.
+No canary without passing eval.
+No production rollout without repeatability.
+```
+
+This is **not** a new framework from scratch. The repository already contains related pieces that should be consolidated:
+
+- `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json`
+- `voice-bridge/src/v4/playbook-loader.js`
+- `voice-bridge/src/v4/behavior-policy.js`
+- `voice-bridge/src/v4/playbook-eval-scenarios.js`
+- `voice-bridge/src/v4/playbook-questionnaire-generator.js`
+- `voice-bridge/src/v4/questionnaire-runtime.js`
+- `voice-bridge/src/v4/callback-flow-policy.js`
+- `voice-bridge/src/v4/response-planner.js`
+
+Source-of-truth rule:
+
+```text
+docs/TechnoloHit Product Playbook v1.md
+  = human/founder-approved source
+
+voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json
+  = schema-validated runtime source
+
+playbook eval scenarios
+  = quality gate before canary
+```
+
+Markdown must not be loaded directly at call time. Runtime must use a schema-validated JSON/YAML playbook with explicit `playbook_version`, status, approval, and runtime binding.
+
+The next work track keeps this existing v3 blueprint as the main source of truth. No separate blueprint is created unless a later implementation phase genuinely needs a long-form design addendum. If that happens, this file must link to it and remain the main entry point.
+
+### Agent Behavior Layer Decision Object
+
+The intended consolidation point is a small deterministic decision object shared by planner, RAG, questionnaire, callback/contact flow, and quality events.
+
+Example:
+
+```json
+{
+  "priority": "callback_flow",
+  "response_type": "callback_manual_review",
+  "product_id": "smart_website",
+  "playbook_version": "technolohit-playbook-v1",
+  "rag_allowed": false,
+  "questionnaire_allowed": false,
+  "lead_tier": "manual_review",
+  "next_action": "post_call_notification",
+  "reason": "callback_permission_granted_no_valid_phone",
+  "suppressed_intents": ["product_context_continuation", "questionnaire"]
+}
+```
+
+Required priority contract:
+
+1. Closing intent
+2. Active callback/contact flow continuation
+3. Safety / role boundary
+4. Explicit new product question
+5. Product context continuation
+6. Product-specific qualification question
+7. Questionnaire
+8. Generic fallback clarification
+
+Rules:
+
+- RAG provides product answer content only; it must not decide conversation priority.
+- Questionnaire runs only when the Agent Behavior Layer allows it.
+- Callback/contact flow remains higher priority than product continuation unless the caller asks a new explicit product question.
+- Lead readiness remains deterministic and cannot be granted by RAG or questionnaire.
+- Complex email addresses, website URLs, company names, keywords, and competitor lists should be routed to contact form instead of captured by voice.
+
 ## Implementation Phases
 
 ### Phase 0: Freeze And Baseline
@@ -633,6 +723,177 @@ GitHub Actions **Deploy Voice Stack** optional input `verify_v3_qa_env=true` che
 - [ ] Successful: QA mode works.
 - [ ] Successful: Production rollout approved.
 
+### Phase 9: Product Playbook Consolidation
+
+Goal: consolidate the founder-approved product playbook into a machine-readable, versioned runtime artifact without changing live behavior.
+
+No live behavior change in this phase.
+
+Inputs:
+
+- Human-approved playbook: [docs/TechnoloHit Product Playbook v1.md](../TechnoloHit%20Product%20Playbook%20v1.md)
+- Current runtime draft: `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json`
+- Current loader/validator: `voice-bridge/src/v4/playbook-loader.js`
+
+Required work:
+
+- Compare Markdown playbook against current JSON playbook.
+- Report gaps between Markdown and JSON before enabling any runtime use.
+- Add or strengthen schema validation for:
+  - `playbook_version`
+  - product IDs, priorities, aliases, explanations, follow-up questions
+  - pricing policies
+  - contact capture policy
+  - callback/contact flow policy
+  - contact form handoff policy
+  - lead tiers
+  - role boundaries
+  - eval scenarios
+  - approval/runtime binding metadata
+- Keep draft playbook inactive unless explicitly enabled for tests/canary.
+- Ensure `playbook_version` is available to quality events and eval snapshots.
+
+Do not:
+
+- Do not change live call behavior.
+- Do not enable `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` by default.
+- Do not remove current safe hardcoded fallbacks.
+- Do not modify `rag-api`.
+
+- [x] Successful: Markdown-to-JSON gap report produced ([docs/Tasks/phase9_product_playbook_consolidation_report.md](phase9_product_playbook_consolidation_report.md)).
+- [x] Successful: JSON playbook contains founder-approved product positioning and contact policy (`technolohit-playbook-v1-20260611`: company positioning, product priorities, 10s/25s/45s phone answers, follow-up questions, approved price phrases, contact capture / caller ID / contact form handoff policy, lead tiers, LokalKI low priority).
+- [x] Successful: Schema validation rejects incomplete or unsafe playbooks (required products, priorities, follow-up questions, pricing policies, contact capture/caller ID/contact form handoff, lead tiers, approval/runtime-binding metadata, LokalKI low-priority/direct-answer-only).
+- [x] Successful: `playbook_version` is explicit and test-visible (eval suite + snapshot keyed by `playbook_version`; `eval_coverage` traceability map added).
+- [x] Successful: Runtime binding remains inactive by default (`status=draft`, `runtime_binding.active=false`, `approved_for_runtime=false`; `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED`/`VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED` default off).
+- [x] Successful: Existing tests pass with no live behavior change (new `voice-bridge/tests/v4-phase9-product-playbook-consolidation.test.js`; full suite green).
+
+### Phase 10: Behavior Decision Layer
+
+Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.
+
+Recommended implementation shape:
+
+```text
+transcript + memory + playbook + agent_config
+  -> Agent Behavior Decision
+  -> response planner / RAG / questionnaire / callback flow
+```
+
+The decision object should include:
+
+- `priority`
+- `response_type`
+- `product_id`
+- `playbook_version`
+- `rag_allowed`
+- `questionnaire_allowed`
+- `lead_tier`
+- `next_action`
+- `reason`
+- `suppressed_intents`, if available
+
+Required behavior:
+
+- Closing always wins.
+- Active callback/contact flow wins over product continuation.
+- Safety and role-boundary intents run before product Q&A.
+- A clearly explicit new product question may resume product Q&A after callback flow.
+- Product context continuation can answer only when no higher-priority flow is active.
+- RAG can provide content only when `rag_allowed=true`.
+- Questionnaire can run only when `questionnaire_allowed=true`.
+- Lead tier is advisory metadata; deterministic lead validators still decide writes.
+
+Feature flag / rollout:
+
+- Keep default behavior unchanged.
+- Use an explicit opt-in flag or extend the existing playbook runtime flag only after review.
+- Fail closed to current behavior if playbook loading or decision resolution fails.
+
+- [ ] Successful: Behavior decision object is implemented behind a disabled flag.
+- [ ] Successful: Planner, RAG, questionnaire, and callback flow consume the same decision metadata.
+- [ ] Successful: Callback/contact flow cannot be overridden by scoped product Q&A.
+- [ ] Successful: RAG is content-only and cannot decide priority.
+- [ ] Successful: Questionnaire is decision-gated.
+- [ ] Successful: Quality events include safe decision metadata.
+- [ ] Successful: Default production behavior remains unchanged.
+
+### Phase 11: Playbook Eval / Review / Publish Version
+
+Goal: make playbook versions testable and reviewable before any canary.
+
+Required eval coverage:
+
+- company general question
+- Smart Website explanation
+- Smart Website price
+- Voice Agent explanation
+- Voice Agent price
+- AiseoQ explanation
+- AiseoQ price
+- callback request after product answer
+- phone preference
+- callback permission
+- no email capture by voice
+- no website URL capture by voice
+- contact form handoff
+- no RAG after callback starts
+- no questionnaire after callback starts
+- closing
+
+Review/publish flow:
+
+```text
+founder/questionnaire input
+  -> Markdown playbook update
+  -> validated JSON playbook version
+  -> eval scenarios
+  -> review
+  -> publish version
+  -> optional canary
+```
+
+Rules:
+
+- A new customer-specific behavior change creates a new playbook version, not a Docker-image behavior patch.
+- No live canary starts until eval passes.
+- No production rollout starts until canary repeatability passes.
+- Published playbooks must carry explicit approval metadata.
+
+- [ ] Successful: Eval scenarios are loaded from or traceable to playbook version.
+- [ ] Successful: Eval snapshot is privacy-safe and keyed by `playbook_version`.
+- [ ] Successful: All required eval categories pass before canary.
+- [ ] Successful: Review/publish metadata exists.
+- [ ] Successful: Canary remains blocked until eval pass is documented.
+
+## Next Implementation Task
+
+Do **not** start broad runtime rewrites next.
+
+The next implementation task should be Phase 9 only:
+
+```text
+Product Playbook Consolidation:
+compare docs/TechnoloHit Product Playbook v1.md with
+voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json,
+strengthen the schema/validator, add missing product/pricing/contact/lead/eval data,
+and report gaps. No live behavior change.
+```
+
+Required before code changes start:
+
+- Team accepts this Agent Behavior Layer roadmap.
+- Team accepts Markdown as founder-approved source and JSON/YAML as runtime source.
+- Team accepts that Phase 9 must not change live behavior.
+- Team accepts that no further canary is requested until playbook/eval gates are in place or explicitly waived.
+
+Do not touch yet:
+
+- production env files
+- `rag-api`
+- Docker/deploy workflows
+- live canary scripts except documentation updates
+- `turn-assistant.js`, unless a later approved phase explicitly requires it
+
 ## Sysadmin Preparation
 
 Before enabling RAG/semantic LLM in production-like QA, sysadmin should verify:
@@ -671,6 +932,11 @@ Local acceptance:
 - Phone capture still requires deterministic validation.
 - RAG timeout/unavailable remains safe.
 - No full phone number appears in logs, Telegram, or email.
+- Product/playbook behavior is traceable to a `playbook_version`.
+- Agent Behavior Decision metadata explains why RAG/questionnaire/callback/product paths were allowed or suppressed.
+- Callback/contact flow cannot be overridden by product continuation unless the caller asks a new explicit product question.
+- Contact form handoff exists for email, website URL, company name, keywords, competitors, or detailed project information.
+- Eval scenarios for the active playbook pass before any canary.
 
 Production acceptance:
 
@@ -681,6 +947,8 @@ Production acceptance:
 - Manual review is used when confidence/contact is insufficient.
 - Post-call summary reflects stable sales context.
 - n8n notification remains privacy-safe.
+- Live canary repeatability passes without code changes between calls.
+- Production rollout is approved only after product playbook/eval gates and operational blockers are reviewed.
 
 - [x] Successful: Local acceptance passed.
 - [ ] Successful: Production acceptance passed.
@@ -694,4 +962,3 @@ The v3 goal is:
 ```text
 Build a voice sales agent that understands messy human input, uses TechnoloHit knowledge, repairs misunderstandings gracefully, and only writes structured leads when the deterministic privacy and contact rules allow it.
 ```
-

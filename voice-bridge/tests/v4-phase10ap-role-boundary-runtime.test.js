@@ -22,6 +22,7 @@ import {
   loadDefaultPlaybookEvalSuite,
   formatEvalSuiteSnapshot,
   runEvalScenario,
+  RUNTIME_PENDING_EVAL_CATEGORIES,
 } from "../src/v4/playbook-eval-scenarios.js";
 import { loadTenantPlaybook } from "../src/v4/playbook-loader.js";
 
@@ -271,10 +272,16 @@ test("10AP: eval snapshot contains no raw caller text or PII", async () => {
 test("10AP: playbook eval suite passes all nine scenarios including role boundary categories", async () => {
   const loaded = loadDefaultPlaybookEvalSuite();
   const suite = await runPlaybookEvalSuite({ playbook: loaded.playbook });
-  assert.equal(suite.ok, true, JSON.stringify(suite.results.filter((r) => r.status !== "pass")));
+  assert.equal(suite.ok, true, JSON.stringify(suite.results.filter((r) => r.status === "fail")));
   assert.equal(suite.summary.fail, 0);
-  assert.equal(suite.summary.pending, 0);
-  assert.equal(suite.summary.pass, suite.summary.total);
+  // Phase 9: documentation-only categories may report pending; everything else passes.
+  for (const entry of suite.results.filter((result) => result.status === "pending")) {
+    assert.ok(
+      RUNTIME_PENDING_EVAL_CATEGORIES.has(entry.category),
+      `unexpected pending category: ${entry.category}`
+    );
+  }
+  assert.equal(suite.summary.pass + suite.summary.pending, suite.summary.total);
 
   for (const id of ["out_of_scope_general_question", "technical_escalation", "callback_request"]) {
     const entry = suite.results.find((result) => result.id === id);

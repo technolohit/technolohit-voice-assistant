@@ -17,6 +17,7 @@ import {
   loadDefaultPlaybookEvalSuite,
   formatEvalSuiteSnapshot,
   REQUIRED_EVAL_SCENARIO_CATEGORIES,
+  RUNTIME_PENDING_EVAL_CATEGORIES,
 } from "../src/v4/playbook-eval-scenarios.js";
 import { buildResponsePlan, RESPONSE_TYPES } from "../src/v4/response-planner.js";
 
@@ -85,7 +86,14 @@ test("10AO: implemented scenarios pass through planner/orchestrator harness", as
 test("10AO: role boundary scenarios pass through planner/orchestrator harness (Phase 10AP)", async () => {
   const loaded = loadDefaultPlaybookEvalSuite();
   const suite = await runPlaybookEvalSuite({ playbook: loaded.playbook });
-  assert.equal(suite.summary.pending, 0);
+  // Phase 9: documentation-only categories may report pending; runtime-implemented
+  // categories (incl. all role-boundary scenarios) must never be pending.
+  for (const entry of suite.results.filter((result) => result.status === "pending")) {
+    assert.ok(
+      RUNTIME_PENDING_EVAL_CATEGORIES.has(entry.category),
+      `unexpected pending category: ${entry.category}`
+    );
+  }
   for (const id of ["out_of_scope_general_question", "technical_escalation", "callback_request"]) {
     const entry = suite.results.find((result) => result.id === id);
     assert.ok(entry, id);

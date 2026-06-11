@@ -55,8 +55,19 @@ export const RUNTIME_IMPLEMENTED_EVAL_CATEGORIES = new Set([
   "questionnaire",
 ]);
 
-/** Reserved for future categories without a runtime consumer yet. */
-export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([]);
+/**
+ * Phase 9 (v3 blueprint): categories documented in the consolidated playbook
+ * but without a dedicated runtime consumer yet. They run documentation-only
+ * checks against the playbook and report "pending" until the Behavior
+ * Decision Layer (v3 blueprint Phase 10) wires runtime consumers.
+ */
+export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([
+  "company_general",
+  "product_explanation",
+  "product_pricing",
+  "contact_form_handoff",
+  "voice_capture_restriction",
+]);
 
 export const REQUIRED_EVAL_SCENARIO_CATEGORIES = [
   "closing",
@@ -269,6 +280,62 @@ function runPendingScenarioDocumentationCheck(scenario, playbook, policy) {
     }
     if (expected.no_live_transfer_claim && callbackPolicy.no_live_transfer_claims !== true) {
       failures.push("no_live_transfer_claim_not_documented");
+    }
+  }
+
+  // Phase 9 documentation-only categories: verify the consolidated playbook
+  // contains the data a future runtime consumer would need.
+  if (scenario.category === "company_general") {
+    const company = playbook.company ?? {};
+    if (!company.positioning_short || !String(company.positioning_short).trim()) {
+      failures.push("company_positioning_short_not_documented");
+    }
+    if (!company.diagnostic_follow_up || !String(company.diagnostic_follow_up).trim()) {
+      failures.push("company_diagnostic_follow_up_not_documented");
+    }
+  }
+
+  if (scenario.category === "product_explanation" || scenario.category === "product_pricing") {
+    const products = Array.isArray(playbook.products) ? playbook.products : [];
+    const product = products.find((entry) => entry?.id === scenario.product_id) ?? null;
+    if (!product) {
+      failures.push(`product_not_documented:${scenario.product_id ?? "unknown"}`);
+    } else if (scenario.category === "product_explanation") {
+      const hasExplanation =
+        Boolean(product.short_explanation) ||
+        Object.values(product.phone_answers ?? {}).some((answer) => String(answer ?? "").trim());
+      if (!hasExplanation) failures.push(`product_explanation_not_documented:${product.id}`);
+      if (!product.follow_up_question || !String(product.follow_up_question).trim()) {
+        failures.push(`product_follow_up_question_not_documented:${product.id}`);
+      }
+    } else {
+      const approvedPhrase = product.price_policy?.approved_phrase ?? product.pricing_answer ?? "";
+      if (!String(approvedPhrase).trim()) {
+        failures.push(`product_pricing_policy_not_documented:${product.id}`);
+      }
+      if (product.price_policy?.no_fixed_price !== true) {
+        failures.push(`product_no_fixed_price_rule_not_documented:${product.id}`);
+      }
+    }
+  }
+
+  if (scenario.category === "contact_form_handoff") {
+    const handoff = playbook.contact_capture_policy?.contact_form_handoff ?? {};
+    if (handoff.enabled !== true || !String(handoff.phrase ?? "").trim()) {
+      failures.push("contact_form_handoff_not_documented");
+    }
+  }
+
+  if (scenario.category === "voice_capture_restriction") {
+    const capture = playbook.contact_capture_policy ?? {};
+    if (expected.no_email_capture_by_voice && capture.no_email_capture_by_voice !== true) {
+      failures.push("no_email_capture_by_voice_not_documented");
+    }
+    if (
+      expected.no_website_url_capture_by_voice &&
+      capture.no_website_url_capture_by_voice !== true
+    ) {
+      failures.push("no_website_url_capture_by_voice_not_documented");
     }
   }
 

@@ -254,12 +254,14 @@ test("10AR: v3 defaults unchanged", () => {
   });
 });
 
-test("10AR: playbook eval suite still passes 16/16", async () => {
+test("10AR: playbook eval suite still passes with zero failures", async () => {
   const loaded = loadDefaultPlaybookEvalSuite();
   const suite = await runPlaybookEvalSuite({ playbook: loaded.playbook });
   assert.equal(suite.ok, true);
   assert.equal(suite.summary.fail, 0);
-  assert.equal(suite.summary.pass, suite.summary.total);
+  // Phase 9: documentation-only scenarios may report pending; nothing fails.
+  assert.equal(suite.summary.pass + suite.summary.pending, suite.summary.total);
+  assert.ok(suite.summary.pass >= 16);
   assert.ok(suite.summary.total >= 16);
   const snapshot = JSON.parse(formatEvalSuiteSnapshot(suite));
   const serialized = JSON.stringify(snapshot);
