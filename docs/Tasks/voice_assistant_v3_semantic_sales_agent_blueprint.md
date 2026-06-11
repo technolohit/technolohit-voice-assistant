@@ -807,6 +807,19 @@ Deliverable: `voice-bridge/src/v4/agent-behavior-decision-eval.js`, focused test
 - [x] Successful: Mismatches produce `status: "fail"` with useful `failures` (questionnaire same-turn attachment documented for Phase 10D).
 - [x] Successful: No live runtime behavior change; decision flag remains default off.
 
+#### Phase 10D: Questionnaire decision guard (opt-in, default off)
+
+Goal: fix the Phase 10C questionnaire mismatch only — block questionnaire attachment when Agent Behavior Decision says `questionnaire_allowed=false`, and only when the decision flag is explicitly enabled.
+
+Deliverable: `agent-behavior-decision-questionnaire-guard.js` wired into `questionnaire-runtime.js`.
+
+- [x] Successful: When `VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED=true`, questionnaire runtime does not attach when decision disallows.
+- [x] Successful: When decision flag is false (default), existing questionnaire behavior unchanged.
+- [x] Successful: Product answer `response_type`, base text, and `next_state` unchanged; only follow-up attachment skipped when guard blocks.
+- [x] Successful: Closing/callback/role-boundary paths still block questionnaire; invalid playbook fails closed for attachment when flag on.
+- [x] Successful: Phase 10C eval suite: 10 pass / 0 fail / 3 pending.
+- [x] Successful: No global planner/RAG/callback switching; decision flag remains default off.
+
 #### Phase 10 (remaining): Runtime behavior switching
 
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.

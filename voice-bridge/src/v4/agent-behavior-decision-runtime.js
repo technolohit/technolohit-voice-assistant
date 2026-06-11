@@ -2,8 +2,9 @@
  * Phase 10B — opt-in Agent Behavior Decision metadata plumbing (observability only).
  *
  * When enabled on an active v4 path, builds privacy-safe decision metadata for
- * quality events. Does NOT alter response plans, RAG, questionnaire, or callback
- * runtime behavior.
+ * quality events. Phase 10D adds an opt-in questionnaire attachment guard in
+ * questionnaire-runtime.js when this flag is on; planner/RAG/callback behavior
+ * is otherwise unchanged.
  */
 
 import { loadTenantPlaybook, DEFAULT_PLAYBOOK_FILENAME } from "./playbook-loader.js";

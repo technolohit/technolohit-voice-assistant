@@ -66,7 +66,7 @@ Only `caller_chars` is retained from caller input — no raw transcript, phone, 
 | `technical_escalation` | technical_escalation | pass |
 | `explicit_product_question` | product_question | pass |
 | `product_context_continuation` | product_continuation | pass |
-| `questionnaire_eligible_after_product_answer` | questionnaire | **fail** (documented mismatch) |
+| `questionnaire_eligible_after_product_answer` | questionnaire | pass (Phase 10D guard; requires both flags in harness) |
 | `fallback_unclear` | fallback | pass |
 | `contact_form_handoff` | contact_form_handoff | pending |
 | `no_email_capture_by_voice` | voice_capture_restriction | pending |
@@ -74,27 +74,24 @@ Only `caller_chars` is retained from caller input — no raw transcript, phone, 
 
 ---
 
-## Eval result summary (local run, 2026-06-11)
+## Eval result summary
 
-| Metric | Count |
-|---|---|
-| Total | 13 |
-| Pass | 9 |
-| Fail | 1 |
-| Pending | 3 |
+| Metric | Phase 10C (initial) | After Phase 10D |
+|---|---|---|
+| Pass | 9 | 10 |
+| Fail | 1 | 0 |
+| Pending | 3 | 3 |
 
-Suite `ok: false` because one documented mismatch is expected until Phase 10D runtime switching.
+Phase 10D fixed the questionnaire mismatch via `agent-behavior-decision-questionnaire-guard.js`. See `phase10d_questionnaire_decision_guard_report.md`.
 
 ---
 
-## Mismatches found (for Phase 10D)
+## Mismatches found (Phase 10C — resolved in 10D)
 
-### 1. `questionnaire_eligible_after_product_answer`
+### 1. `questionnaire_eligible_after_product_answer` (fixed)
 
-- **Decision:** `explicit_product_question`, `questionnaire_allowed=false`
-- **Actual:** `product_question_answer` with `questionnaire.used=true` (when `questionnaireRuntimeEnabled=true`)
-- **Failures:** `questionnaire_used_when_decision_disallows`, `questionnaire_attached_same_turn_while_decision_blocks`
-- **Phase 10D action:** Align decision layer questionnaire eligibility with questionnaire-runtime attachment rules, or gate questionnaire attachment on decision when runtime switching is enabled.
+- **Was:** Decision `questionnaire_allowed=false` but planner attached questionnaire on same product-answer turn.
+- **Fix (10D):** Questionnaire guard blocks attachment when decision flag is enabled.
 
 ### Informational (not failures by design)
 

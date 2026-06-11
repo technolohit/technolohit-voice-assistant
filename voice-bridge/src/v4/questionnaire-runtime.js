@@ -16,6 +16,7 @@ import {
 import { loadTenantPlaybook, DEFAULT_PLAYBOOK_FILENAME } from "./playbook-loader.js";
 import { sanitizeResponseText } from "./transcript-intent.js";
 import { isCallbackFlowActive } from "./callback-flow-policy.js";
+import { evaluateBehaviorDecisionQuestionnaireGuard } from "./agent-behavior-decision-questionnaire-guard.js";
 
 const PRODUCT_QUESTION_ANSWER = "product_question_answer";
 
@@ -33,6 +34,8 @@ export const QUESTIONNAIRE_RUNTIME_BLOCK_REASONS = Object.freeze({
   GENERATOR_BLOCKED: "generator_blocked",
   GENERATOR_INVALID: "generator_invalid",
   LENGTH_LIMIT: "response_length_limit",
+  BEHAVIOR_DECISION_DISALLOWED: "behavior_decision_questionnaire_disallowed",
+  BEHAVIOR_DECISION_GUARD_FAILED: "behavior_decision_guard_failed",
 });
 
 const ROLE_BOUNDARY_INTENTS = new Set([
@@ -128,6 +131,8 @@ export function evaluateQuestionnaireRuntimeEligibility({
   ragResult = null,
   ragGate = null,
   lastAssistantText = null,
+  state = null,
+  playbook = undefined,
 } = {}) {
   const enabled = isQuestionnaireRuntimeEnabled(config);
   if (!enabled) {
@@ -195,6 +200,29 @@ export function evaluateQuestionnaireRuntimeEligibility({
       enabled: true,
     };
   }
+
+  const decisionGuard = evaluateBehaviorDecisionQuestionnaireGuard({
+    config,
+    v4PathActive,
+    transcript,
+    memory,
+    state,
+    intent: resolvedIntent,
+    plan,
+    playbook,
+  });
+  if (decisionGuard.guardActive && !decisionGuard.allowed) {
+    return {
+      allowed: false,
+      reason: decisionGuard.decisionReason === "resolver_error"
+        ? QUESTIONNAIRE_RUNTIME_BLOCK_REASONS.BEHAVIOR_DECISION_GUARD_FAILED
+        : QUESTIONNAIRE_RUNTIME_BLOCK_REASONS.BEHAVIOR_DECISION_DISALLOWED,
+      enabled: true,
+      productId,
+      behavior_decision_priority: decisionGuard.decisionPriority ?? null,
+    };
+  }
+
   return { allowed: true, reason: null, enabled: true, productId };
 }
 
@@ -213,6 +241,7 @@ export function applyQuestionnaireRuntimeToPlan(plan, options = {}) {
     ragGate = null,
     lastAssistantText = null,
     playbook = null,
+    stateMachine = null,
   } = options;
 
   if (!isQuestionnaireRuntimeEnabled(config)) {
@@ -229,6 +258,8 @@ export function applyQuestionnaireRuntimeToPlan(plan, options = {}) {
     ragResult,
     ragGate,
     lastAssistantText,
+    state: stateMachine?.state ?? memory?.current_state ?? null,
+    playbook,
   });
 
   const productId =

@@ -129,8 +129,8 @@ export const DECISION_EVAL_SCENARIOS = [
     category: "questionnaire",
     caller: "Was ist Smart Website?",
     questionnaireRuntime: true,
+    behaviorDecisionEnabled: true,
     expected_decision_priority: BEHAVIOR_PRIORITIES.EXPLICIT_PRODUCT_QUESTION,
-    known_mismatch: "questionnaire_attached_same_turn_while_decision_blocks",
   },
   {
     id: "fallback_unclear",
@@ -172,11 +172,17 @@ function buildScenarioMemory(scenario, bridgeCallId) {
 
 function mergeConfig(scenario, config) {
   const base = config ?? loadConfig();
-  if (!scenario.questionnaireRuntime) return base;
-  return {
-    ...base,
-    v4: { ...base.v4, questionnaireRuntimeEnabled: true },
-  };
+  if (!scenario.questionnaireRuntime && !scenario.behaviorDecisionEnabled) {
+    return base;
+  }
+  const v4 = { ...base.v4 };
+  if (scenario.questionnaireRuntime) {
+    v4.questionnaireRuntimeEnabled = true;
+  }
+  if (scenario.behaviorDecisionEnabled) {
+    v4.agentBehaviorDecisionEnabled = true;
+  }
+  return { ...base, v4 };
 }
 
 export function responseTypesAligned(decisionType, actualType, decisionPriority) {
@@ -234,10 +240,6 @@ export function compareDecisionToActual(decision, actual = {}, scenario = {}) {
   }
   if (decision?.questionnaire_allowed === false && actualQuestionnaireUsed) {
     failures.push("questionnaire_used_when_decision_disallows");
-  }
-
-  if (scenario.known_mismatch && actualQuestionnaireUsed && decision?.questionnaire_allowed === false) {
-    failures.push(scenario.known_mismatch);
   }
 
   return failures;

@@ -154,6 +154,7 @@ test("implemented scenarios that align with planner pass", async () => {
     "explicit_product_question",
     "fallback_unclear",
     "callback_attention_reassurance",
+    "questionnaire_eligible_after_product_answer",
   ];
 
   for (const id of passCandidates) {
@@ -163,21 +164,23 @@ test("implemented scenarios that align with planner pass", async () => {
   }
 });
 
-test("known questionnaire mismatch is recorded as fail (documented for Phase 10D)", async () => {
+test("questionnaire scenario passes with decision guard enabled (Phase 10D)", async () => {
   const scenario = DECISION_EVAL_SCENARIOS.find(
     (s) => s.id === "questionnaire_eligible_after_product_answer"
   );
   const result = await runDecisionEvalScenario({ scenario });
-  assert.equal(result.status, "fail");
-  assert.ok(result.failures.length > 0);
-  assert.ok(
-    result.failures.some((f) => f.includes("questionnaire")),
-    result.failures.join(",")
-  );
+  assert.equal(result.status, "pass", result.failures.join(","));
+  assert.equal(result.decision_questionnaire_allowed, false);
+  assert.equal(result.actual_questionnaire_used, false);
+  assert.equal(summarizeDecisionEvalMismatches({ results: [result] }).length, 0);
+});
 
-  const mismatches = summarizeDecisionEvalMismatches({ results: [result] });
-  assert.equal(mismatches.length, 1);
-  assert.equal(mismatches[0].scenario_id, scenario.id);
+test("full eval suite is 10 pass / 0 fail / 3 pending with decision guard", async () => {
+  const suite = await runDecisionEvalSuite();
+  assert.equal(suite.summary.pass, 10);
+  assert.equal(suite.summary.fail, 0);
+  assert.equal(suite.summary.pending, 3);
+  assert.equal(suite.ok, true);
 });
 
 test("default production config unchanged (decision flag off)", () => {
