@@ -769,6 +769,20 @@ Do not:
 
 ### Phase 10: Behavior Decision Layer
 
+#### Phase 10A: Agent Behavior Decision skeleton (pure logic)
+
+Goal: implement the deterministic Agent Behavior Decision object as a pure module with tests only. No planner/RAG/questionnaire/callback runtime wiring in this increment.
+
+Deliverable: `voice-bridge/src/v4/agent-behavior-decision.js` exposing `resolveAgentBehaviorDecision()` and a privacy-safe snapshot helper.
+
+- [x] Successful: Pure decision module implements the 8-level priority contract.
+- [x] Successful: Decision object includes `priority`, `response_type`, `product_id`, `playbook_version`, `rag_allowed`, `questionnaire_allowed`, `lead_tier`, `next_action`, `reason`, `suppressed_intents`.
+- [x] Successful: Missing/invalid playbook fails closed to safe decision metadata.
+- [x] Successful: Focused tests cover closing, callback, role boundary, product paths, questionnaire eligibility, fallback, playbook traceability, and privacy.
+- [x] Successful: No live runtime behavior change (`isAgentBehaviorDecisionRuntimeEnabled()` remains false; no planner wiring).
+
+#### Phase 10 (remaining): Runtime wiring
+
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.
 
 Recommended implementation shape:
