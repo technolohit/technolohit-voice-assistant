@@ -794,6 +794,19 @@ Deliverable: `VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED=false`, `agent-behavior-d
 - [x] Successful: Invalid/missing playbook and resolver failures fail closed in metadata without throwing.
 - [x] Successful: Privacy-safe metadata (no transcript/phone/email/RAG query/lead details).
 
+#### Phase 10C: Agent Behavior Decision vs planner eval harness (non-live)
+
+Goal: compare Agent Behavior Decision metadata against actual v4 planner/orchestrator behavior in a non-live harness. Reveal mismatches for Phase 10D; do not switch runtime behavior.
+
+Deliverable: `voice-bridge/src/v4/agent-behavior-decision-eval.js`, focused tests, and privacy-safe eval snapshots.
+
+- [x] Successful: Eval harness runs synthetic scenarios through decision resolver and planner/orchestrator.
+- [x] Successful: Privacy-safe per-scenario results (`caller_chars` only; no raw transcript/phone/email).
+- [x] Successful: Required scenario categories covered (closing, callback, out-of-scope, technical escalation, product, questionnaire, fallback, pending voice-capture/handoff).
+- [x] Successful: Pending scenarios report `status: "pending"` (not fake pass).
+- [x] Successful: Mismatches produce `status: "fail"` with useful `failures` (questionnaire same-turn attachment documented for Phase 10D).
+- [x] Successful: No live runtime behavior change; decision flag remains default off.
+
 #### Phase 10 (remaining): Runtime behavior switching
 
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.
