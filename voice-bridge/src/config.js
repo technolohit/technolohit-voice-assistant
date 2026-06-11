@@ -251,6 +251,11 @@ export function loadConfig() {
     "VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED",
     false,
   );
+  // Phase 10B: opt-in Agent Behavior Decision metadata on v4 quality events (default-off).
+  const v4AgentBehaviorDecisionEnabled = readBool(
+    "VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED",
+    false,
+  );
   const v4VadRmsThreshold = Math.max(
     1,
     readInt("VOICE_V4_VAD_RMS_THRESHOLD", 450),
@@ -438,6 +443,7 @@ export function loadConfig() {
       playbookPath: v4PlaybookPath,
       playbookAllowDraft: v4PlaybookAllowDraft,
       questionnaireRuntimeEnabled: v4QuestionnaireRuntimeEnabled,
+      agentBehaviorDecisionEnabled: v4AgentBehaviorDecisionEnabled,
     },
     assistant: {
       enabled: assistantEnabled,

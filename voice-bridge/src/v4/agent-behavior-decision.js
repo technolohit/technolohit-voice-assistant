@@ -477,7 +477,7 @@ export function formatAgentBehaviorDecisionSnapshot(decision = {}) {
   return JSON.stringify(payload);
 }
 
-/** Phase 10A: decision layer is not runtime-active yet (always false). */
-export function isAgentBehaviorDecisionRuntimeEnabled() {
-  return false;
+/** Phase 10B: opt-in metadata plumbing only (default false). Does not control planner/RAG. */
+export function isAgentBehaviorDecisionRuntimeEnabled(config = null) {
+  return Boolean(config?.v4?.agentBehaviorDecisionEnabled);
 }

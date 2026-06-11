@@ -137,6 +137,20 @@ VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED=false
 
 Safety: closing, out-of-scope, technical escalation, callback contact flow, RAG-unsafe fallback, duplicate responses, and length limits block questionnaire attachment. Lead validator rules are unchanged.
 
+### Phase 10B — Agent Behavior Decision metadata (default off)
+
+Opt-in only. When disabled, v4 `response_plan_created` quality events are unchanged. When enabled on an active v4 path, privacy-safe decision metadata is attached for observability. The decision object does **not** control response text, RAG, questionnaire, or callback runtime in Phase 10B.
+
+```env
+VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED=false
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED` | `false` | Attach Agent Behavior Decision metadata to v4 `response_plan_created` events. Requires active v4 path; does not enable v4 globally or change planner behavior. |
+
+Safety: metadata never includes raw transcript, phone, email, RAG query, or lead details. Invalid/missing playbooks fail closed in metadata (`behavior_decision_rag_allowed=false`, `behavior_decision_questionnaire_allowed=false`). Resolver failures record safe failure metadata without throwing.
+
 Production RAG URL from voice-bridge host network:
 
 ```env

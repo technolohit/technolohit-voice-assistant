@@ -33,6 +33,7 @@ import {
 } from "./rag-orchestrator.js";
 import { buildSafeRagEventDiagnostics, buildSafeTextPreview } from "./rag-quality-diagnostics.js";
 import { questionnaireQualityPayload } from "./questionnaire-runtime.js";
+import { behaviorDecisionQualityPayload } from "./agent-behavior-decision-runtime.js";
 import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
@@ -373,6 +374,7 @@ export async function decideNextAction(orchestrator, input = {}) {
   plan.rag_fallback_used = Boolean(ragGate.allowed && !ragResult?.used_rag);
 
   orchestrator.lastPlan = plan;
+  orchestrator.lastResolvedIntent = intent;
   return { ok: true, plan, intent, ragResult, ragGate };
 }
 
@@ -524,6 +526,15 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
       { activeInterruptSequenceId: orchestrator.activeInterruptSequenceId },
     ),
     ...questionnaireQualityPayload(resolvedPlan),
+    ...behaviorDecisionQualityPayload({
+      config: orchestrator.config,
+      v4PathActive: Boolean(orchestrator.v4PathActive),
+      transcript: orchestrator.currentTurn?.transcript ?? "",
+      memory,
+      state: toState,
+      intent: orchestrator.lastResolvedIntent ?? resolvedPlan?.intent ?? null,
+      plan: resolvedPlan,
+    }),
   });
 
   orchestrator.activeInterruptSequenceId = null;

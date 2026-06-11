@@ -781,7 +781,20 @@ Deliverable: `voice-bridge/src/v4/agent-behavior-decision.js` exposing `resolveA
 - [x] Successful: Focused tests cover closing, callback, role boundary, product paths, questionnaire eligibility, fallback, playbook traceability, and privacy.
 - [x] Successful: No live runtime behavior change (`isAgentBehaviorDecisionRuntimeEnabled()` remains false; no planner wiring).
 
-#### Phase 10 (remaining): Runtime wiring
+#### Phase 10B: Agent Behavior Decision metadata plumbing (opt-in, default off)
+
+Goal: attach privacy-safe Agent Behavior Decision metadata to v4 quality events when explicitly enabled. Observability only — no planner/RAG/questionnaire/callback behavior switching.
+
+Deliverable: `VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED=false`, `agent-behavior-decision-runtime.js`, and `behavior_decision_*` fields on `response_plan_created`.
+
+- [x] Successful: Config flag added and defaults false.
+- [x] Successful: Metadata attached to v4 `response_plan_created` when flag on and v4 path active.
+- [x] Successful: Flag off leaves existing response plans and quality payloads unchanged.
+- [x] Successful: Decision metadata does not alter response text, type, or next action.
+- [x] Successful: Invalid/missing playbook and resolver failures fail closed in metadata without throwing.
+- [x] Successful: Privacy-safe metadata (no transcript/phone/email/RAG query/lead details).
+
+#### Phase 10 (remaining): Runtime behavior switching
 
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.
 
