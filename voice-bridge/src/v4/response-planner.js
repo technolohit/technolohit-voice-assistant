@@ -42,6 +42,11 @@ import {
   isCallbackFlowActive,
 } from "./callback-flow-policy.js";
 import { V4_STATES } from "./state-machine.js";
+import { isContactFormHandoffIntent } from "./contact-form-handoff-intent.js";
+import {
+  getContactFormHandoffResponse,
+  isContactFormHandoffRuntimeEnabled,
+} from "./contact-form-handoff-policy.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -61,7 +66,8 @@ export const RESPONSE_TYPES = {
   ROLE_BOUNDARY_REDIRECT: "role_boundary_redirect",
   TECHNICAL_ESCALATION: "technical_escalation",
   FALLBACK_CLARIFICATION: "fallback_clarification",
-  GREETING: "greeting"
+  GREETING: "greeting",
+  CONTACT_FORM_HANDOFF: "contact_form_handoff",
 };
 
 export {
@@ -299,15 +305,20 @@ function resolveRagAwareProductAnswer({
 }
 
 export function buildResponsePlan(options = {}) {
-  const plan = buildResponsePlanCore(options);
+  const contactFormHandoffEnabled = isContactFormHandoffRuntimeEnabled(
+    options.config,
+    options.v4PathActive
+  );
   const resolvedIntent =
     options.intent ??
     detectTranscriptIntent(
       options.transcript ?? "",
       options.memory ?? {},
       options.agentConfig,
-      options.behaviorPolicy
+      options.behaviorPolicy,
+      contactFormHandoffEnabled
     );
+  const plan = buildResponsePlanCore({ ...options, intent: resolvedIntent, contactFormHandoffEnabled });
   return applyQuestionnaireRuntimeToPlan(plan, { ...options, resolvedIntent });
 }
 
@@ -325,10 +336,12 @@ function buildResponsePlanCore({
   interruptFollowupTimeout = false,
   behaviorPolicy = null,
   callerPhoneNormalized = null,
-  callerPhoneRaw = null
+  callerPhoneRaw = null,
+  contactFormHandoffEnabled = false,
 } = {}) {
   const resolvedIntent =
-    intent ?? detectTranscriptIntent(transcript, memory, agentConfig, behaviorPolicy);
+    intent ??
+    detectTranscriptIntent(transcript, memory, agentConfig, behaviorPolicy, contactFormHandoffEnabled);
   const agent = agentConfig?.config ?? agentConfig ?? {};
   const state = stateMachine?.state ?? memory?.current_state ?? V4_STATES.LISTENING;
 
@@ -392,6 +405,18 @@ function buildResponsePlanCore({
       memory_patch: { current_state: V4_STATES.LISTENING },
       quality_event_type: "turn_started",
       plan_reason: "technical_escalation",
+      rag_allowed: false,
+      lead_transition_allowed: false,
+    });
+  }
+
+  if (contactFormHandoffEnabled && isContactFormHandoffIntent(resolvedIntent)) {
+    return planBase(RESPONSE_TYPES.CONTACT_FORM_HANDOFF, {
+      text: sanitizeResponseText(getContactFormHandoffResponse({ intent: resolvedIntent })),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: { current_state: V4_STATES.LISTENING, lead_ready: false },
+      quality_event_type: "turn_started",
+      plan_reason: `contact_form_handoff:${resolvedIntent}`,
       rag_allowed: false,
       lead_transition_allowed: false,
     });

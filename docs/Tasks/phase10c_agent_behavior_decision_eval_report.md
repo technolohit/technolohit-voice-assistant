@@ -68,21 +68,21 @@ Only `caller_chars` is retained from caller input — no raw transcript, phone, 
 | `product_context_continuation` | product_continuation | pass |
 | `questionnaire_eligible_after_product_answer` | questionnaire | pass (Phase 10D guard; requires both flags in harness) |
 | `fallback_unclear` | fallback | pass |
-| `contact_form_handoff` | contact_form_handoff | pending |
-| `no_email_capture_by_voice` | voice_capture_restriction | pending |
-| `no_website_url_capture_by_voice` | voice_capture_restriction | pending |
+| `contact_form_handoff` | contact_form_handoff | pass (Phase 10E) |
+| `no_email_capture_by_voice` | voice_capture_restriction | pass (Phase 10E) |
+| `no_website_url_capture_by_voice` | voice_capture_restriction | pass (Phase 10E) |
 
 ---
 
 ## Eval result summary
 
-| Metric | Phase 10C (initial) | After Phase 10D |
-|---|---|---|
-| Pass | 9 | 10 |
-| Fail | 1 | 0 |
-| Pending | 3 | 3 |
+| Metric | Phase 10C | After 10D | After 10E |
+|---|---|---|---|
+| Pass | 9 | 10 | 13 |
+| Fail | 1 | 0 | 0 |
+| Pending | 3 | 3 | 0 |
 
-Phase 10D fixed the questionnaire mismatch via `agent-behavior-decision-questionnaire-guard.js`. See `phase10d_questionnaire_decision_guard_report.md`.
+Phase 10D fixed questionnaire guard. Phase 10E implemented contact-form handoff runtime consumers. See `phase10e_contact_form_handoff_report.md`.
 
 ---
 

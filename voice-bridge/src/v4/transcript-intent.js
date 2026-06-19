@@ -18,6 +18,7 @@ import {
   isCallbackPermissionPendingStage,
   isPostDecisionCallbackStage,
 } from "./callback-flow-policy.js";
+import { detectContactFormHandoffIntent } from "./contact-form-handoff-intent.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -101,7 +102,8 @@ export function detectTranscriptIntent(
   transcript = "",
   memory = {},
   agentConfig = null,
-  behaviorPolicy = null
+  behaviorPolicy = null,
+  contactFormHandoffEnabled = false
 ) {
   const lower = normalizeText(transcript).toLowerCase();
   if (!lower) return "empty";
@@ -121,6 +123,11 @@ export function detectTranscriptIntent(
   }
   if (isTechnicalEscalationQuestion(transcript, agentConfig)) {
     return "technical_escalation";
+  }
+
+  if (contactFormHandoffEnabled) {
+    const handoffIntent = detectContactFormHandoffIntent(transcript);
+    if (handoffIntent) return handoffIntent;
   }
 
   // Phase 10AU: once the callback/contact decision is made (finalized, manual

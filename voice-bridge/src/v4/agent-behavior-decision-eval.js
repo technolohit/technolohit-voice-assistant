@@ -10,6 +10,7 @@ import { loadAgentConfig } from "./agent-config.js";
 import { loadTenantPlaybook, DEFAULT_PLAYBOOK_FILENAME } from "./playbook-loader.js";
 import { resolveAgentBehaviorDecision, BEHAVIOR_PRIORITIES } from "./agent-behavior-decision.js";
 import { resolveCallbackFlowState } from "./callback-flow-policy.js";
+import { isContactFormHandoffRuntimeEnabled } from "./contact-form-handoff-policy.js";
 import {
   applyMemoryPatch,
   RESPONSE_TYPES,
@@ -143,22 +144,22 @@ export const DECISION_EVAL_SCENARIOS = [
     id: "contact_form_handoff",
     category: "contact_form_handoff",
     caller: "Ich gebe Ihnen meine Website und E-Mail durch.",
-    pending: true,
-    pending_reason: DECISION_EVAL_PENDING_REASON,
+    contactFormHandoffEnabled: true,
+    expected_decision_priority: BEHAVIOR_PRIORITIES.CONTACT_FORM_HANDOFF,
   },
   {
     id: "no_email_capture_by_voice",
     category: "voice_capture_restriction",
     caller: "Soll ich Ihnen meine E-Mail-Adresse durchgeben?",
-    pending: true,
-    pending_reason: DECISION_EVAL_PENDING_REASON,
+    contactFormHandoffEnabled: true,
+    expected_decision_priority: BEHAVIOR_PRIORITIES.CONTACT_FORM_HANDOFF,
   },
   {
     id: "no_website_url_capture_by_voice",
     category: "voice_capture_restriction",
     caller: "Ich kann Ihnen die Website-Adresse am Telefon vorlesen.",
-    pending: true,
-    pending_reason: DECISION_EVAL_PENDING_REASON,
+    contactFormHandoffEnabled: true,
+    expected_decision_priority: BEHAVIOR_PRIORITIES.CONTACT_FORM_HANDOFF,
   },
 ];
 
@@ -172,7 +173,11 @@ function buildScenarioMemory(scenario, bridgeCallId) {
 
 function mergeConfig(scenario, config) {
   const base = config ?? loadConfig();
-  if (!scenario.questionnaireRuntime && !scenario.behaviorDecisionEnabled) {
+  if (
+    !scenario.questionnaireRuntime &&
+    !scenario.behaviorDecisionEnabled &&
+    !scenario.contactFormHandoffEnabled
+  ) {
     return base;
   }
   const v4 = { ...base.v4 };
@@ -181,6 +186,9 @@ function mergeConfig(scenario, config) {
   }
   if (scenario.behaviorDecisionEnabled) {
     v4.agentBehaviorDecisionEnabled = true;
+  }
+  if (scenario.contactFormHandoffEnabled) {
+    v4.contactFormHandoffEnabled = true;
   }
   return { ...base, v4 };
 }
@@ -204,6 +212,12 @@ export function responseTypesAligned(decisionType, actualType, decisionPriority)
       actualType === RESPONSE_TYPES.ROLE_BOUNDARY_REDIRECT ||
       actualType === RESPONSE_TYPES.TECHNICAL_ESCALATION
     );
+  }
+  if (
+    decisionPriority === BEHAVIOR_PRIORITIES.CONTACT_FORM_HANDOFF &&
+    actualType === RESPONSE_TYPES.CONTACT_FORM_HANDOFF
+  ) {
+    return true;
   }
   if (decisionPriority === BEHAVIOR_PRIORITIES.CLOSING && actualType === RESPONSE_TYPES.CLOSING) {
     return true;
@@ -324,11 +338,21 @@ export async function runDecisionEvalScenario({
   startTurn(orchestrator);
   acceptUserTranscript(orchestrator, scenario.caller);
   const action = await decideNextAction(orchestrator, { transcript: scenario.caller });
+  const contactFormHandoffEnabled = isContactFormHandoffRuntimeEnabled(
+    resolvedConfig,
+    true
+  );
   const intent =
     scenario.forcedIntent ??
     action.intent ??
     orchestrator.lastResolvedIntent ??
-    detectTranscriptIntent(scenario.caller, orchestrator.memory, resolvedAgent);
+    detectTranscriptIntent(
+      scenario.caller,
+      orchestrator.memory,
+      resolvedAgent,
+      null,
+      contactFormHandoffEnabled
+    );
 
   const decision = resolveAgentBehaviorDecision({
     transcript: scenario.caller,

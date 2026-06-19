@@ -820,6 +820,18 @@ Deliverable: `agent-behavior-decision-questionnaire-guard.js` wired into `questi
 - [x] Successful: Phase 10C eval suite: 10 pass / 0 fail / 3 pending.
 - [x] Successful: No global planner/RAG/callback switching; decision flag remains default off.
 
+#### Phase 10E: Contact form handoff and voice-capture restrictions (opt-in, default off)
+
+Goal: runtime consumers for contact-form handoff when callers offer email, website URL, company name, or complex project details by voice. Default v3 production behavior unchanged.
+
+Deliverable: `contact-form-handoff-intent.js`, `contact-form-handoff-policy.js`, planner `contact_form_handoff` response type, `VOICE_V4_CONTACT_FORM_HANDOFF_ENABLED=false`.
+
+- [x] Successful: Deterministic intents for email/website/company/complex-details voice offers.
+- [x] Successful: Planner returns `contact_form_handoff` with playbook phrase or safe fallback; no RAG/questionnaire/lead_ready/email-URL capture.
+- [x] Successful: Closing and explicit callback requests still outrank contact-form handoff.
+- [x] Successful: Agent Behavior Decision and eval harness aligned (13 pass / 0 fail / 0 pending).
+- [x] Successful: Flag off leaves existing v3/v4 default planner behavior unchanged.
+
 #### Phase 10 (remaining): Runtime behavior switching
 
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.

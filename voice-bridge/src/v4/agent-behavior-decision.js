@@ -24,6 +24,7 @@ export const BEHAVIOR_PRIORITIES = Object.freeze({
   PRODUCT_CONTEXT_CONTINUATION: "product_context_continuation",
   PRODUCT_QUALIFICATION: "product_qualification",
   QUESTIONNAIRE: "questionnaire",
+  CONTACT_FORM_HANDOFF: "contact_form_handoff",
   FALLBACK: "fallback",
 });
 
@@ -50,6 +51,7 @@ export const DECISION_RESPONSE_TYPES = Object.freeze({
   EMAIL_GUIDANCE: "email_guidance",
   PRODUCT_QUESTION_ANSWER: "product_question_answer",
   COLLECT_SALES_CONTEXT: "collect_sales_context",
+  CONTACT_FORM_HANDOFF: "contact_form_handoff",
   FALLBACK_CLARIFICATION: "fallback_clarification",
 });
 
@@ -64,6 +66,13 @@ const PRODUCT_CONTINUATION_INTENTS = new Set([
 const QUALIFICATION_INTENTS = new Set([
   "explicit_sales_qualification",
   "collect_sales_context",
+]);
+
+const CONTACT_FORM_HANDOFF_INTENTS = new Set([
+  "email_offer_by_voice",
+  "website_url_offer_by_voice",
+  "company_name_offer_by_voice",
+  "contact_form_handoff_needed",
 ]);
 
 const DENIED_CALLBACK_STATES = new Set([CALLBACK_FLOW_STATES.NONE, CALLBACK_FLOW_STATES.CALLBACK_DENIED]);
@@ -389,6 +398,20 @@ export function resolveAgentBehaviorDecision({
       next_action: "escalate_to_team",
       reason: appendPlaybookNote("technical_escalation", playbookMeta),
       suppressed_intents: ["rag", "questionnaire", "product_qa"],
+    });
+  }
+
+  // 3b. Voice-capture restrictions / contact-form handoff — before product Q&A.
+  if (CONTACT_FORM_HANDOFF_INTENTS.has(resolvedIntent)) {
+    return withPlaybook({
+      priority: BEHAVIOR_PRIORITIES.CONTACT_FORM_HANDOFF,
+      response_type: DECISION_RESPONSE_TYPES.CONTACT_FORM_HANDOFF,
+      rag_allowed: false,
+      questionnaire_allowed: false,
+      lead_tier: LEAD_TIERS.INFORMATION_REQUEST,
+      next_action: "redirect_to_contact_form",
+      reason: appendPlaybookNote("voice_capture_restriction", playbookMeta),
+      suppressed_intents: ["rag", "questionnaire", "callback_flow", "product_qa"],
     });
   }
 

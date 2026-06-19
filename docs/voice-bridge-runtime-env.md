@@ -151,6 +151,20 @@ VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED=false
 
 Safety: metadata never includes raw transcript, phone, email, RAG query, or lead details. Invalid/missing playbooks fail closed in metadata (`behavior_decision_rag_allowed=false`, `behavior_decision_questionnaire_allowed=false`). Resolver failures record safe failure metadata without throwing.
 
+### Phase 10E — contact form handoff / voice-capture restrictions (default off)
+
+Opt-in only. When disabled, v4 response plans are unchanged. When enabled on an active v4 path, callers who offer email addresses, website URLs, company names, or complex project details by voice receive a short `contact_form_handoff` redirect to the contact form instead of voice capture.
+
+```env
+VOICE_V4_CONTACT_FORM_HANDOFF_ENABLED=false
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VOICE_V4_CONTACT_FORM_HANDOFF_ENABLED` | `false` | Redirect email/URL/company/complex voice input to the contact form. Requires active v4 path; does not enable v4 globally. |
+
+Safety: does not trigger RAG, questionnaire attachment, callback flow, or `lead_ready`. Closing intent and explicit callback requests still outrank contact-form handoff. Invalid/missing playbooks use a safe hardcoded German fallback phrase.
+
 Production RAG URL from voice-bridge host network:
 
 ```env

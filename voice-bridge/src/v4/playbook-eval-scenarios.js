@@ -41,6 +41,12 @@ import {
   assertQuestionnaireExpectations,
 } from "./playbook-questionnaire-generator.js";
 import { V4_STATES } from "./state-machine.js";
+import { isContactFormHandoffRuntimeEnabled } from "./contact-form-handoff-policy.js";
+
+const CONTACT_FORM_EVAL_CATEGORIES = new Set([
+  "contact_form_handoff",
+  "voice_capture_restriction",
+]);
 
 /** Categories with a live v4 planner/orchestrator consumer today. */
 export const RUNTIME_IMPLEMENTED_EVAL_CATEGORIES = new Set([
@@ -53,6 +59,8 @@ export const RUNTIME_IMPLEMENTED_EVAL_CATEGORIES = new Set([
   "technical_escalation",
   "callback",
   "questionnaire",
+  "contact_form_handoff",
+  "voice_capture_restriction",
 ]);
 
 /**
@@ -65,8 +73,6 @@ export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([
   "company_general",
   "product_explanation",
   "product_pricing",
-  "contact_form_handoff",
-  "voice_capture_restriction",
 ]);
 
 export const REQUIRED_EVAL_SCENARIO_CATEGORIES = [
@@ -195,6 +201,24 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
   }
   if (expected.no_rag && meta.ragRetrieverCalls > 0) {
     failures.push("rag_retriever_called");
+  }
+  if (
+    (expected.behavior === "redirect_to_contact_form" ||
+      expected.behavior === "recommend_contact_form") &&
+    plan.response_type !== RESPONSE_TYPES.CONTACT_FORM_HANDOFF
+  ) {
+    failures.push(`expected_contact_form_handoff:${plan.response_type}`);
+  }
+  if (
+    (expected.no_email_capture_by_voice ||
+      expected.no_website_url_capture_by_voice ||
+      expected.no_voice_capture_of_complex_data) &&
+    !/kontaktformular/i.test(plan.text ?? "")
+  ) {
+    failures.push("contact_form_redirect_missing");
+  }
+  if (expected.no_lead_ready && plan.response_type === RESPONSE_TYPES.LEAD_READY_ACK) {
+    failures.push("unexpected_lead_ready");
   }
   if (expected.not_closing && plan.response_type === RESPONSE_TYPES.CLOSING) {
     failures.push("unexpected_closing");
@@ -474,10 +498,24 @@ export async function runEvalScenario({
     const action = await decideNextAction(orchestrator, { transcript: scenario.caller });
     plan = action.plan;
   } else {
+    const contactFormEval = CONTACT_FORM_EVAL_CATEGORIES.has(scenario.category);
+    const evalConfig = contactFormEval
+      ? {
+          ...resolvedConfig,
+          v4: { ...resolvedConfig.v4, contactFormHandoffEnabled: true },
+        }
+      : resolvedConfig;
+    const contactFormHandoffEnabled = isContactFormHandoffRuntimeEnabled(evalConfig, contactFormEval);
     const intent =
       scenario.category === "fallback"
         ? "unclear"
-        : detectTranscriptIntent(scenario.caller, memory, resolvedAgent, resolvedPolicy);
+        : detectTranscriptIntent(
+            scenario.caller,
+            memory,
+            resolvedAgent,
+            resolvedPolicy,
+            contactFormHandoffEnabled
+          );
     plan = buildResponsePlan({
       agentConfig: resolvedAgent,
       memory,
@@ -487,6 +525,8 @@ export async function runEvalScenario({
       closedDomain,
       ragGate: { allowed: false },
       behaviorPolicy: resolvedPolicy,
+      config: evalConfig,
+      v4PathActive: contactFormEval,
     });
 
     if (scenario.category === "fallback") {

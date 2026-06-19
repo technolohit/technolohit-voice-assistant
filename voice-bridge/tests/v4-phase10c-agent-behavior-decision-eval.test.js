@@ -71,16 +71,16 @@ test("formatDecisionEvalSnapshot is privacy-safe (no transcript/phone/email)", (
   assert.ok(!("caller" in parsed.results[0]));
 });
 
-test("pending scenarios are explicit pending, not pass", async () => {
-  const pendingIds = DECISION_EVAL_SCENARIOS.filter((s) => s.pending).map((s) => s.id);
-  assert.ok(pendingIds.length >= 3);
-
-  for (const id of pendingIds) {
+test("contact form handoff scenarios pass with runtime flag (Phase 10E)", async () => {
+  for (const id of [
+    "contact_form_handoff",
+    "no_email_capture_by_voice",
+    "no_website_url_capture_by_voice",
+  ]) {
     const scenario = DECISION_EVAL_SCENARIOS.find((s) => s.id === id);
     const result = await runDecisionEvalScenario({ scenario });
-    assert.equal(result.status, DECISION_EVAL_PENDING_STATUS, id);
-    assert.equal(result.failures.length, 0, id);
-    assert.ok(result.reason);
+    assert.equal(result.status, "pass", `${id}: ${result.failures.join(",")}`);
+    assert.equal(result.actual_response_type, RESPONSE_TYPES.CONTACT_FORM_HANDOFF, id);
   }
 });
 
@@ -122,7 +122,7 @@ test("runDecisionEvalSuite covers required categories", async () => {
   const suite = await runDecisionEvalSuite();
   assert.equal(suite.results.length, DECISION_EVAL_SCENARIOS.length);
   assert.ok(suite.summary.total >= 13);
-  assert.ok(suite.summary.pending >= 3);
+  assert.equal(suite.summary.pending, 0);
   assert.ok(suite.playbook_version);
 
   const byId = new Map(suite.results.map((r) => [r.scenario_id, r]));
@@ -175,11 +175,11 @@ test("questionnaire scenario passes with decision guard enabled (Phase 10D)", as
   assert.equal(summarizeDecisionEvalMismatches({ results: [result] }).length, 0);
 });
 
-test("full eval suite is 10 pass / 0 fail / 3 pending with decision guard", async () => {
+test("full eval suite is 13 pass / 0 fail / 0 pending (Phase 10E contact form)", async () => {
   const suite = await runDecisionEvalSuite();
-  assert.equal(suite.summary.pass, 10);
+  assert.equal(suite.summary.pass, 13);
   assert.equal(suite.summary.fail, 0);
-  assert.equal(suite.summary.pending, 3);
+  assert.equal(suite.summary.pending, 0);
   assert.equal(suite.ok, true);
 });
 

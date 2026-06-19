@@ -256,6 +256,11 @@ export function loadConfig() {
     "VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED",
     false,
   );
+  // Phase 10E: opt-in contact-form handoff / voice-capture restrictions (default-off).
+  const v4ContactFormHandoffEnabled = readBool(
+    "VOICE_V4_CONTACT_FORM_HANDOFF_ENABLED",
+    false,
+  );
   const v4VadRmsThreshold = Math.max(
     1,
     readInt("VOICE_V4_VAD_RMS_THRESHOLD", 450),
@@ -444,6 +449,7 @@ export function loadConfig() {
       playbookAllowDraft: v4PlaybookAllowDraft,
       questionnaireRuntimeEnabled: v4QuestionnaireRuntimeEnabled,
       agentBehaviorDecisionEnabled: v4AgentBehaviorDecisionEnabled,
+      contactFormHandoffEnabled: v4ContactFormHandoffEnabled,
     },
     assistant: {
       enabled: assistantEnabled,
