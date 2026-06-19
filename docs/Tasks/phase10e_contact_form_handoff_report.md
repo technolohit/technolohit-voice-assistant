@@ -71,7 +71,7 @@ New priority `contact_form_handoff` with `response_type: contact_form_handoff` f
 
 All Phase 10C decision-eval scenarios pass. Playbook eval scenarios for contact form / voice capture pass when flag is enabled in harness.
 
-**Remaining pending (playbook eval only):** `company_general`, `product_explanation`, `product_pricing` — documentation/runtime consumers not in Phase 10E scope.
+**Remaining pending (playbook eval):** none — `company_general`, `product_explanation`, and `product_pricing` moved to runtime pass in Phase 10F.
 
 ---
 

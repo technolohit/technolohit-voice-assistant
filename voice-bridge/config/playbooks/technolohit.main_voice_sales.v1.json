@@ -565,7 +565,7 @@
     "voice_agent_price": ["voice_agent_price"],
     "aiseoq_explanation": ["aiseoq_explanation"],
     "aiseoq_price": ["aiseoq_price"],
-    "callback_request_after_product_answer": ["callback_request"],
+    "callback_request_after_product_answer": ["callback_request", "company_general_with_callback_request"],
     "contact_form_handoff": ["contact_form_handoff_complex_details"],
     "no_email_capture_by_voice": ["no_email_capture_by_voice"],
     "no_website_url_capture_by_voice": ["no_website_url_capture_by_voice"],
@@ -667,6 +667,16 @@
       }
     },
     {
+      "id": "company_general_with_callback_request",
+      "category": "callback",
+      "caller": "Was macht TechnoloHit und können Sie mich bitte anrufen?",
+      "expected": {
+        "behavior": "lead_capture_appropriate",
+        "not_company_general": true,
+        "no_live_transfer_claim": true
+      }
+    },
+    {
       "id": "company_general_question",
       "category": "company_general",
       "caller": "Was macht TechnoloHit?",
@@ -704,7 +714,7 @@
       "caller": "Was ist AiseoQ?",
       "expected": {
         "behavior": "short_product_explanation",
-        "follow_up_about": "Ranking|Besucher|Anfragen"
+        "follow_up_about": "Google|Sichtbarkeit|Wettbewerb"
       }
     },
     {
@@ -714,7 +724,7 @@
       "caller": "Was kostet AiseoQ?",
       "expected": {
         "behavior": "approved_price_policy_answer",
-        "depends_on": "Seitenanzahl, Website",
+        "depends_on": "Anzahl der Seiten, Website",
         "no_fixed_price_promise": true
       }
     },

@@ -30,11 +30,23 @@ const TECHNOLOHIT_DOMAIN =
 const NORMAL_PRODUCT_OR_PRICING =
   /\b(was ist|was sind|was macht|was kostet|preis|kosten|wie funktioniert|was kann|wie viel)\b/i;
 
+/** Map common STT/ASCII spellings to canonical German before callback pattern matching. */
+function normalizeCallbackRequestText(transcript = "") {
+  return normalizeText(transcript)
+    .toLowerCase()
+    .replace(/\bkoennen\b/g, "können")
+    .replace(/\bkoennten\b/g, "könnten")
+    .replace(/\bkonnen\b/g, "können")
+    .replace(/\bkonnten\b/g, "könnten");
+}
+
 const CALLBACK_REQUEST_PATTERNS = [
   /\b(zurückrufen|zurueckrufen|zuruckrufen|rückruf|rueckruf|ruckruf)\b/i,
   /\b(rückruf erhalten|zurückgerufen|mich zurückrufen|zurück melden lassen)\b/i,
-  /\b(können sie mich|könnten sie mich|kann mich jemand)\b.*\b(zurück|rufen|melden)\b/i,
+  /\b(können sie mich|könnten sie mich)\b.*\b(zurück|rufen|melden|anrufen)\b/i,
+  /\bkann mich jemand\b.*\b(zurück|rufen|melden|anrufen)\b/i,
   /\b(bitte\s+)?rufen sie mich\b.*\b(zurück|zurueck|zuruck)\b/i,
+  /\b(bitte\s+)?(können|könnten)\s+sie\s+mich\s+anrufen\b/i,
   /\b(telefonisch|per telefon)\b.*\b(mit (dem )?team sprechen|kontakt aufnehmen|beratung)\b/i,
 ];
 
@@ -75,7 +87,7 @@ export function isTechnicalEscalationQuestion(transcript = "", agentConfig = nul
 }
 
 export function isCallbackLeadCaptureRequest(transcript = "") {
-  const lower = normalizeText(transcript).toLowerCase();
+  const lower = normalizeCallbackRequestText(transcript);
   if (!lower) return false;
   return CALLBACK_REQUEST_PATTERNS.some((pattern) => pattern.test(lower));
 }

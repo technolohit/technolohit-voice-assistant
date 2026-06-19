@@ -47,6 +47,15 @@ import {
   getContactFormHandoffResponse,
   isContactFormHandoffRuntimeEnabled,
 } from "./contact-form-handoff-policy.js";
+import {
+  filterPlaybookProductMatch,
+  isPlaybookProductContentRuntimeEnabled,
+  loadPlaybookForProductContent,
+  resolveCombinedProductInquiryAnswer,
+  resolveCompanyAnswer,
+  resolveProductExplanation,
+  resolveProductPricingAnswer,
+} from "./playbook-product-content.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -68,6 +77,7 @@ export const RESPONSE_TYPES = {
   FALLBACK_CLARIFICATION: "fallback_clarification",
   GREETING: "greeting",
   CONTACT_FORM_HANDOFF: "contact_form_handoff",
+  COMPANY_GENERAL: "company_general",
 };
 
 export {
@@ -116,6 +126,8 @@ function planScopedProductAnswer({
   ragGate = null,
   ragResult = null,
   planReason = "scoped_product_qa",
+  playbook = null,
+  playbookContentActive = false,
 }) {
   const productId = resolveCurrentProductContext(memory);
   const resolved = resolveRagAwareProductAnswer({
@@ -125,6 +137,8 @@ function planScopedProductAnswer({
     ragAnswer,
     ragResult,
     planReason,
+    playbook,
+    playbookContentActive,
   });
 
   return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
@@ -250,6 +264,13 @@ function gateUsesRag(ragGate) {
   return Boolean(ragGate?.allowed && ragGate?.used_rag);
 }
 
+function resolvePlaybookFilteredProductId(activePlaybook, productId, transcript, memory) {
+  if (!productId) return null;
+  if (!activePlaybook) return productId;
+  if (memory?.selected_product_id) return productId;
+  return filterPlaybookProductMatch(activePlaybook, productId, transcript);
+}
+
 /**
  * Prefer playbook answers over RAG fallback text when retrieval did not produce a hit.
  */
@@ -260,6 +281,8 @@ function resolveRagAwareProductAnswer({
   ragAnswer = null,
   ragResult = null,
   planReason = "scoped_product_qa",
+  playbook = null,
+  playbookContentActive = false,
 }) {
   const combined = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
   const category = detectShortFollowUpCategory(transcript);
@@ -270,6 +293,31 @@ function resolveRagAwareProductAnswer({
       planReason: combined ? "combined_product_inquiry" : planReason,
       maxSpokenChars: ragResult?.max_spoken_chars ?? null,
     };
+  }
+
+  if (playbookContentActive && playbook && productId) {
+    const combinedPlaybook = resolveCombinedProductInquiryAnswer(playbook, productId, transcript);
+    if (combinedPlaybook) {
+      return { text: sanitizeResponseText(combinedPlaybook), planReason: "combined_product_inquiry", maxSpokenChars: null };
+    }
+    if (category === "pricing") {
+      const pricing = resolveProductPricingAnswer(playbook, productId);
+      if (pricing) {
+        return {
+          text: sanitizeResponseText(pricing),
+          planReason: "product_pricing_fallback",
+          maxSpokenChars: null,
+        };
+      }
+    }
+    const explanation = resolveProductExplanation(playbook, productId);
+    if (explanation) {
+      return {
+        text: sanitizeResponseText(explanation),
+        planReason: "playbook_product_explanation",
+        maxSpokenChars: null,
+      };
+    }
   }
 
   if (combined) {
@@ -309,6 +357,11 @@ export function buildResponsePlan(options = {}) {
     options.config,
     options.v4PathActive
   );
+  const playbookProductContentEnabled = isPlaybookProductContentRuntimeEnabled(
+    options.config,
+    options.behaviorPolicy,
+    options.playbook
+  );
   const resolvedIntent =
     options.intent ??
     detectTranscriptIntent(
@@ -316,9 +369,15 @@ export function buildResponsePlan(options = {}) {
       options.memory ?? {},
       options.agentConfig,
       options.behaviorPolicy,
-      contactFormHandoffEnabled
+      contactFormHandoffEnabled,
+      playbookProductContentEnabled
     );
-  const plan = buildResponsePlanCore({ ...options, intent: resolvedIntent, contactFormHandoffEnabled });
+  const plan = buildResponsePlanCore({
+    ...options,
+    intent: resolvedIntent,
+    contactFormHandoffEnabled,
+    playbookProductContentEnabled,
+  });
   return applyQuestionnaireRuntimeToPlan(plan, { ...options, resolvedIntent });
 }
 
@@ -338,10 +397,23 @@ function buildResponsePlanCore({
   callerPhoneNormalized = null,
   callerPhoneRaw = null,
   contactFormHandoffEnabled = false,
+  playbookProductContentEnabled = false,
+  config = null,
+  playbook = null,
 } = {}) {
   const resolvedIntent =
     intent ??
-    detectTranscriptIntent(transcript, memory, agentConfig, behaviorPolicy, contactFormHandoffEnabled);
+    detectTranscriptIntent(
+      transcript,
+      memory,
+      agentConfig,
+      behaviorPolicy,
+      contactFormHandoffEnabled,
+      playbookProductContentEnabled
+    );
+  const activePlaybook = playbookProductContentEnabled
+    ? loadPlaybookForProductContent({ config, behaviorPolicy, playbook })
+    : null;
   const agent = agentConfig?.config ?? agentConfig ?? {};
   const state = stateMachine?.state ?? memory?.current_state ?? V4_STATES.LISTENING;
 
@@ -460,6 +532,26 @@ function buildResponsePlanCore({
     });
   }
 
+  // Phase 10F: company-general after callback flow; never during active callback.
+  if (
+    resolvedIntent === "company_general" &&
+    activePlaybook &&
+    !isCallbackFlowActive(memory)
+  ) {
+    const companyAnswer = resolveCompanyAnswer(activePlaybook);
+    if (companyAnswer) {
+      return planBase(RESPONSE_TYPES.COMPANY_GENERAL, {
+        text: sanitizeResponseText(companyAnswer),
+        next_state: V4_STATES.LISTENING,
+        memory_patch: { current_state: V4_STATES.LISTENING, lead_ready: false },
+        quality_event_type: "turn_started",
+        plan_reason: "company_ecosystem_answer",
+        rag_allowed: false,
+        lead_transition_allowed: false,
+      });
+    }
+  }
+
   // Phase 10AT/10AU: callback/contact continuation (#3) outranks scoped
   // product QA, RAG, interruption recovery, and questionnaire. Without this
   // guard a bare "Ja." after the permission question was hijacked by
@@ -501,6 +593,8 @@ function buildResponsePlanCore({
       ragGate: effectiveRagGate,
       ragResult,
       planReason: interruptionRecovery ? "interrupt_scoped_product_qa" : "scoped_product_qa",
+      playbook: activePlaybook,
+      playbookContentActive: Boolean(activePlaybook),
     });
   }
 
@@ -678,7 +772,11 @@ function buildResponsePlanCore({
   }
 
   if (resolvedIntent === "product_question") {
-    const productId = memory.selected_product_id ?? matchProductAlias(agentConfig, transcript)?.id;
+    const aliasMatch = matchProductAlias(agentConfig, transcript)?.id;
+    let productId = memory.selected_product_id ?? aliasMatch;
+    if (activePlaybook && productId && !memory.selected_product_id) {
+      productId = resolvePlaybookFilteredProductId(activePlaybook, productId, transcript, memory);
+    }
     const resolved = resolveRagAwareProductAnswer({
       agentConfig,
       productId,
@@ -686,6 +784,8 @@ function buildResponsePlanCore({
       ragAnswer,
       ragResult,
       planReason: "scoped_product_qa",
+      playbook: activePlaybook,
+      playbookContentActive: Boolean(activePlaybook),
     });
     return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
       text: resolved.text,
@@ -704,8 +804,14 @@ function buildResponsePlanCore({
 
   if (resolvedIntent === "product_selection") {
     const product = matchProductAlias(agentConfig, transcript);
-    const productId = product?.id ?? closedDomainResolved?.matched_product ?? memory.selected_product_id;
-    const combinedAnswer = buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
+    let productId = product?.id ?? closedDomainResolved?.matched_product ?? memory.selected_product_id;
+    if (activePlaybook && productId && !memory.selected_product_id) {
+      productId = resolvePlaybookFilteredProductId(activePlaybook, productId, transcript, memory);
+    }
+    const combinedAnswer =
+      (activePlaybook &&
+        resolveCombinedProductInquiryAnswer(activePlaybook, productId, transcript)) ||
+      buildPlaybookCombinedProductAnswer(agentConfig, productId, transcript);
     if (combinedAnswer) {
       return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
         text: combinedAnswer,
@@ -720,7 +826,9 @@ function buildResponsePlanCore({
       });
     }
     if (!shouldEnterSalesQualification(transcript, resolvedIntent)) {
-      const intro = buildPlaybookShortAnswer(agentConfig, productId, "how_it_works");
+      const intro =
+        (activePlaybook && resolveProductExplanation(activePlaybook, productId)) ||
+        buildPlaybookShortAnswer(agentConfig, productId, "how_it_works");
       return planBase(RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER, {
         text: sanitizeResponseText(
           intro || `Gerne zu ${product?.display_name ?? "diesem Produkt"}. Was möchten Sie dazu wissen?`

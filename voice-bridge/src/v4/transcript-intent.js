@@ -19,6 +19,7 @@ import {
   isPostDecisionCallbackStage,
 } from "./callback-flow-policy.js";
 import { detectContactFormHandoffIntent } from "./contact-form-handoff-intent.js";
+import { isCompanyGeneralQuestion } from "./company-general-intent.js";
 
 const NO_RUECKRUF = /\b(rückruf|rueckruf|ruckruf|zurückrufen|zurueckrufen|zuruckrufen)\b/i;
 
@@ -103,7 +104,8 @@ export function detectTranscriptIntent(
   memory = {},
   agentConfig = null,
   behaviorPolicy = null,
-  contactFormHandoffEnabled = false
+  contactFormHandoffEnabled = false,
+  playbookProductContentEnabled = false
 ) {
   const lower = normalizeText(transcript).toLowerCase();
   if (!lower) return "empty";
@@ -117,18 +119,11 @@ export function detectTranscriptIntent(
     return "closing";
   }
 
-  // Phase 10AP: safety / role boundary (#2) before product Q&A and lead capture.
-  if (isOutOfScopeGeneralQuestion(transcript, agentConfig)) {
-    return "out_of_scope";
-  }
-  if (isTechnicalEscalationQuestion(transcript, agentConfig)) {
-    return "technical_escalation";
-  }
-
-  if (contactFormHandoffEnabled) {
-    const handoffIntent = detectContactFormHandoffIntent(transcript);
-    if (handoffIntent) return handoffIntent;
-  }
+  const collectingContactPreference =
+    memory?.current_state === "collecting_contact_preference" ||
+    memory?.current_state === "collecting_callback_permission" ||
+    Boolean(memory?.contact_flow_pending) ||
+    isCallbackFlowActive(memory);
 
   // Phase 10AU: once the callback/contact decision is made (finalized, manual
   // review, e-mail directed), attention/recovery phrases ("Hallo?", "Sind Sie
@@ -142,16 +137,44 @@ export function detectTranscriptIntent(
     return "callback_flow_attention";
   }
 
-  const collectingContactPreference =
-    memory?.current_state === "collecting_contact_preference" ||
-    memory?.current_state === "collecting_callback_permission" ||
-    Boolean(memory?.contact_flow_pending) ||
-    isCallbackFlowActive(memory);
-  // Conversation Priority Contract #3: explicit callback/contact requests must
-  // beat interruption recovery and product Q&A. Otherwise a known product
-  // context can keep answering product questions and lose a qualified lead.
+  // Conversation Priority Contract #3 / Phase 10F: explicit callback/contact
+  // requests beat role boundary, contact-form handoff, and company-general.
   if (!collectingContactPreference && isCallbackLeadCaptureRequest(transcript)) {
     return "callback_request";
+  }
+
+  // Phase 10AP: safety / role boundary (#3) before product Q&A and lead capture.
+  if (isOutOfScopeGeneralQuestion(transcript, agentConfig)) {
+    return "out_of_scope";
+  }
+  if (isTechnicalEscalationQuestion(transcript, agentConfig)) {
+    return "technical_escalation";
+  }
+
+  if (contactFormHandoffEnabled) {
+    const handoffIntent = detectContactFormHandoffIntent(transcript);
+    if (handoffIntent) return handoffIntent;
+  }
+
+  // Phase 10F: during active callback/contact flow, company-general phrases
+  // must not escape the flow (no product-style override for company-general).
+  if (
+    collectingContactPreference &&
+    playbookProductContentEnabled &&
+    isCompanyGeneralQuestion(transcript) &&
+    !isCallbackLeadCaptureRequest(transcript)
+  ) {
+    return "callback_flow_attention";
+  }
+
+  // Phase 10F: company-general only on company-only turns (no callback request).
+  if (
+    playbookProductContentEnabled &&
+    !collectingContactPreference &&
+    !isCallbackLeadCaptureRequest(transcript) &&
+    isCompanyGeneralQuestion(transcript)
+  ) {
+    return "company_general";
   }
 
   // Phase 10AT: while the callback permission question is open, a short

@@ -117,7 +117,7 @@ VOICE_V4_PLAYBOOK_ALLOW_DRAFT=false
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` | `false` | Master switch for playbook-sourced closing/fallback wording (increment 1 scope only). |
+| `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` | `false` | Master switch for playbook-sourced behavior: closing/fallback wording (10AN), company-general answers, product explanations, and approved pricing phrases (10F). |
 | `VOICE_V4_PLAYBOOK_PATH` | empty (resolver falls back to repo default playbook path) | Absolute or package-relative path to a structured tenant playbook JSON file. |
 | `VOICE_V4_PLAYBOOK_ALLOW_DRAFT` | `false` | Explicit test/canary override to allow a `status=draft` playbook. Never enable in production. |
 

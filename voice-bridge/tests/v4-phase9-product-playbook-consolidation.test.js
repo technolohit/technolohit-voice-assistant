@@ -24,7 +24,6 @@ import {
 import {
   runPlaybookEvalSuite,
   formatEvalSuiteSnapshot,
-  RUNTIME_PENDING_EVAL_CATEGORIES,
 } from "../src/v4/playbook-eval-scenarios.js";
 
 const PHASE9_EVAL_COVERAGE_CATEGORIES = [
@@ -296,15 +295,7 @@ test("phase9: eval suite passes and is traceable to playbook_version", async () 
   assert.equal(suite.ok, true, JSON.stringify(suite.results.filter((r) => r.status === "fail")));
   assert.equal(suite.playbook_version, playbook.playbook_version);
   assert.equal(suite.summary.fail, 0);
-
-  // Phase 9 documentation-only scenarios report pending until the Behavior
-  // Decision Layer (Phase 10) provides runtime consumers.
-  for (const entry of suite.results.filter((result) => result.status === "pending")) {
-    assert.ok(
-      RUNTIME_PENDING_EVAL_CATEGORIES.has(entry.category),
-      `unexpected pending category: ${entry.category}`
-    );
-  }
+  assert.equal(suite.summary.pending, 0);
 
   const snapshot = JSON.parse(formatEvalSuiteSnapshot(suite));
   assert.equal(snapshot.playbook_version, playbook.playbook_version);

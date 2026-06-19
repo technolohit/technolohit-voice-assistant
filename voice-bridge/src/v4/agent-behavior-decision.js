@@ -25,6 +25,7 @@ export const BEHAVIOR_PRIORITIES = Object.freeze({
   PRODUCT_QUALIFICATION: "product_qualification",
   QUESTIONNAIRE: "questionnaire",
   CONTACT_FORM_HANDOFF: "contact_form_handoff",
+  COMPANY_GENERAL: "company_general",
   FALLBACK: "fallback",
 });
 
@@ -52,6 +53,7 @@ export const DECISION_RESPONSE_TYPES = Object.freeze({
   PRODUCT_QUESTION_ANSWER: "product_question_answer",
   COLLECT_SALES_CONTEXT: "collect_sales_context",
   CONTACT_FORM_HANDOFF: "contact_form_handoff",
+  COMPANY_GENERAL: "company_general",
   FALLBACK_CLARIFICATION: "fallback_clarification",
 });
 
@@ -411,6 +413,20 @@ export function resolveAgentBehaviorDecision({
       lead_tier: LEAD_TIERS.INFORMATION_REQUEST,
       next_action: "redirect_to_contact_form",
       reason: appendPlaybookNote("voice_capture_restriction", playbookMeta),
+      suppressed_intents: ["rag", "questionnaire", "callback_flow", "product_qa"],
+    });
+  }
+
+  // 3c. Company-general positioning — before product Q&A.
+  if (resolvedIntent === "company_general") {
+    return withPlaybook({
+      priority: BEHAVIOR_PRIORITIES.COMPANY_GENERAL,
+      response_type: DECISION_RESPONSE_TYPES.COMPANY_GENERAL,
+      rag_allowed: false,
+      questionnaire_allowed: false,
+      lead_tier: LEAD_TIERS.INFORMATION_REQUEST,
+      next_action: "answer_company",
+      reason: appendPlaybookNote("company_general", playbookMeta),
       suppressed_intents: ["rag", "questionnaire", "callback_flow", "product_qa"],
     });
   }

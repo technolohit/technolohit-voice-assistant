@@ -832,6 +832,20 @@ Deliverable: `contact-form-handoff-intent.js`, `contact-form-handoff-policy.js`,
 - [x] Successful: Agent Behavior Decision and eval harness aligned (13 pass / 0 fail / 0 pending).
 - [x] Successful: Flag off leaves existing v3/v4 default planner behavior unchanged.
 
+#### Phase 10F: Playbook-driven company and product content (opt-in, default off)
+
+Goal: runtime consumers for `company_general`, `product_explanation`, and `product_pricing` eval categories using the validated Product Playbook. Reuses `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=false` — no separate content flag.
+
+Deliverable: `playbook-product-content.js`, `company-general-intent.js`, planner/orchestrator wiring, eval harness pass for pending content categories.
+
+- [x] Successful: Pure resolvers for company positioning, phone-safe explanations, approved pricing phrases, and LokalKI `answer_only_when_asked` filter.
+- [x] Successful: Company-general intent is narrow (TechnoloHit ecosystem questions only); arbitrary general knowledge stays `out_of_scope`.
+- [x] Successful: RAG success preserved; playbook is deterministic fallback only.
+- [x] Successful: Closing, callback, contact-form handoff, and role boundary still outrank product content.
+- [x] Successful: Pricing uses approved phrases only (scope-dependent Smart Website; orientation prices for Voice Agent / AiseoQ).
+- [x] Successful: Playbook eval: 0 fail / 0 pending for `company_general`, `product_explanation`, `product_pricing`.
+- [x] Successful: Flag off leaves planner output unchanged; production defaults unchanged.
+
 #### Phase 10 (remaining): Runtime behavior switching
 
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.

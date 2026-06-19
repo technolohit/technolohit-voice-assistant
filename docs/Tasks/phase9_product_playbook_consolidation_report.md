@@ -136,20 +136,20 @@ New `eval_coverage` map in the playbook keys all 12 required Phase 9 categories 
 
 | Required category | Scenario id(s) | Mode |
 |---|---|---|
-| company general question | `company_general_question` | pending (documentation check) |
+| company general question | `company_general_question` | pass (Phase 10F planner harness) |
 | Smart Website explanation | `combined_product_inquiry_smart_website` | pass (live planner harness) |
 | Smart Website price | `pricing_question_smart_website` | pass (live planner harness) |
-| Voice Agent explanation | `voice_agent_explanation` | pending (documentation check) |
-| Voice Agent price | `voice_agent_price` | pending (documentation check) |
-| AiseoQ explanation | `aiseoq_explanation` | pending (documentation check) |
-| AiseoQ price | `aiseoq_price` | pending (documentation check) |
+| Voice Agent explanation | `voice_agent_explanation` | pass (Phase 10F planner harness) |
+| Voice Agent price | `voice_agent_price` | pass (Phase 10F planner harness) |
+| AiseoQ explanation | `aiseoq_explanation` | pass (Phase 10F planner harness) |
+| AiseoQ price | `aiseoq_price` | pass (Phase 10F planner harness) |
 | callback request after product answer | `callback_request` | pass (live planner harness) |
-| contact form handoff | `contact_form_handoff_complex_details` | pending (documentation check) |
-| no email capture by voice | `no_email_capture_by_voice` | pending (documentation check) |
-| no website URL capture by voice | `no_website_url_capture_by_voice` | pending (documentation check) |
+| contact form handoff | `contact_form_handoff_complex_details` | pass (Phase 10E planner harness) |
+| no email capture by voice | `no_email_capture_by_voice` | pass (Phase 10E planner harness) |
+| no website URL capture by voice | `no_website_url_capture_by_voice` | pass (Phase 10E planner harness) |
 | closing | `closing_after_product_answer`, `closing_stop_with_thanks` | pass (orchestrator harness) |
 
-`RUNTIME_PENDING_EVAL_CATEGORIES` now contains `company_general`, `product_explanation`, `product_pricing`, `contact_form_handoff`, `voice_capture_restriction`. Pending scenarios run documentation checks against the consolidated playbook (content exists, restrictions are `true`, approved phrases non-empty) and report `pending` — they move to `pass` only when Phase 10/11 wires real runtime consumers. No fake passes. Snapshot remains privacy-safe and keyed by `playbook_version`.
+`RUNTIME_PENDING_EVAL_CATEGORIES` is empty as of Phase 10F. All eval categories now run through the live planner/orchestrator harness (with per-category opt-in flags in the harness where required). Snapshot remains privacy-safe and keyed by `playbook_version`.
 
 ## 9. Files changed in Phase 9
 
@@ -167,11 +167,11 @@ Not changed: production env files, Dockerfiles, deploy workflows, `rag-api/`, li
 
 1. Implement the Agent Behavior Decision object (`priority`, `response_type`, `product_id`, `playbook_version`, `rag_allowed`, `questionnaire_allowed`, `lead_tier`, `next_action`, `reason`, `suppressed_intents`) behind a disabled flag, fail-closed to current behavior.
 2. Bind planner/RAG/questionnaire/callback flow to the same decision metadata; enforce the priority contract centrally instead of ad hoc planner branches.
-3. Wire playbook product data (priorities, phone answers, follow-up questions, approved price phrases) into the planner path behind the flag; reconcile generic `pricing_answer` wording vs. founder-approved `price_policy.approved_phrase` (incl. 65 €/Monat and 40 €/Seite/Monat orientation prices) with founder review.
-4. Add runtime consumers for the pending eval categories: company general answer, per-product explanation/pricing from playbook, contact form handoff response, no-email/no-URL voice-capture redirects, caller-ID ask-once phone question (`request_phone_once`).
+3. Wire playbook product data (priorities, phone answers, follow-up questions, approved price phrases) into the planner path behind the flag — **done in Phase 10F** for company general, product explanation, and pricing when `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=true`.
+4. Add runtime consumers for remaining eval gaps: caller-ID ask-once phone question (`request_phone_once`) if not yet bound; contact form handoff — **done in Phase 10E**.
 5. Reconcile callback finalization wording between Markdown and `callback-flow-policy.js`; bind via playbook after review.
 6. Decide botinteg's founder-approved status (add to Markdown or remove from JSON).
-7. Move the Phase 9 pending eval scenarios from `pending` to `pass` only when actual runtime behavior matches; surface `playbook_version` in decision quality events.
+7. ~~Move the Phase 9 pending eval scenarios from `pending` to `pass`~~ — **done in Phase 10E (contact form) and Phase 10F (company/product content)**; surface `playbook_version` in decision quality events (remaining).
 8. Keep defaults off: `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=false`, `VOICE_V4_QUESTIONNAIRE_RUNTIME_ENABLED=false`, production v3/RAG-off.
 
 ## 11. Verification

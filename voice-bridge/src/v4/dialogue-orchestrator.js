@@ -35,6 +35,7 @@ import { buildSafeRagEventDiagnostics, buildSafeTextPreview } from "./rag-qualit
 import { questionnaireQualityPayload } from "./questionnaire-runtime.js";
 import { behaviorDecisionQualityPayload } from "./agent-behavior-decision-runtime.js";
 import { isContactFormHandoffRuntimeEnabled } from "./contact-form-handoff-policy.js";
+import { isPlaybookProductContentRuntimeEnabled } from "./playbook-product-content.js";
 import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
@@ -243,6 +244,10 @@ export async function decideNextAction(orchestrator, input = {}) {
     orchestrator.config,
     orchestrator.v4PathActive
   );
+  const playbookProductContentEnabled = isPlaybookProductContentRuntimeEnabled(
+    orchestrator.config,
+    orchestrator.behaviorPolicy
+  );
   const intent =
     input.intent ??
     detectTranscriptIntent(
@@ -250,7 +255,8 @@ export async function decideNextAction(orchestrator, input = {}) {
       orchestrator.memory,
       orchestrator.agentConfig,
       orchestrator.behaviorPolicy,
-      contactFormHandoffEnabled
+      contactFormHandoffEnabled,
+      playbookProductContentEnabled
     );
   const interruptionRecovery = input.interruptionRecovery ?? null;
 

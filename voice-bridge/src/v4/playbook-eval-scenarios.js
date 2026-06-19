@@ -42,10 +42,17 @@ import {
 } from "./playbook-questionnaire-generator.js";
 import { V4_STATES } from "./state-machine.js";
 import { isContactFormHandoffRuntimeEnabled } from "./contact-form-handoff-policy.js";
+import { isPlaybookProductContentRuntimeEnabled } from "./playbook-product-content.js";
 
 const CONTACT_FORM_EVAL_CATEGORIES = new Set([
   "contact_form_handoff",
   "voice_capture_restriction",
+]);
+
+const PLAYBOOK_CONTENT_EVAL_CATEGORIES = new Set([
+  "company_general",
+  "product_explanation",
+  "product_pricing",
 ]);
 
 /** Categories with a live v4 planner/orchestrator consumer today. */
@@ -61,19 +68,16 @@ export const RUNTIME_IMPLEMENTED_EVAL_CATEGORIES = new Set([
   "questionnaire",
   "contact_form_handoff",
   "voice_capture_restriction",
-]);
-
-/**
- * Phase 9 (v3 blueprint): categories documented in the consolidated playbook
- * but without a dedicated runtime consumer yet. They run documentation-only
- * checks against the playbook and report "pending" until the Behavior
- * Decision Layer (v3 blueprint Phase 10) wires runtime consumers.
- */
-export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([
   "company_general",
   "product_explanation",
   "product_pricing",
 ]);
+
+/**
+ * Phase 9 (v3 blueprint): categories documented in the consolidated playbook
+ * but without a dedicated runtime consumer yet.
+ */
+export const RUNTIME_PENDING_EVAL_CATEGORIES = new Set([]);
 
 export const REQUIRED_EVAL_SCENARIO_CATEGORIES = [
   "closing",
@@ -141,6 +145,13 @@ export function buildEvalScenarioMemory(scenario) {
   if (scenario.category === "pricing" || scenario.category === "product_question") {
     return {
       ...setSelectedProduct(base, "smart_website"),
+      current_state: V4_STATES.LISTENING,
+    };
+  }
+
+  if (scenario.category === "product_explanation" || scenario.category === "product_pricing") {
+    return {
+      ...setSelectedProduct(base, scenario.product_id ?? "smart_website"),
       current_state: V4_STATES.LISTENING,
     };
   }
@@ -257,6 +268,9 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
       failures.push("live_transfer_claim");
     }
   }
+  if (expected.not_company_general && plan.response_type === RESPONSE_TYPES.COMPANY_GENERAL) {
+    failures.push("unexpected_company_general");
+  }
   if (expected.no_general_chatbot_answer && /\b(einstein|relativit[aä]t)\b/i.test(plan.text ?? "")) {
     failures.push("general_knowledge_answer");
   }
@@ -265,6 +279,52 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
   }
   if (expected.no_lead_capture && plan.response_type === RESPONSE_TYPES.COLLECT_SALES_CONTEXT) {
     failures.push("unexpected_lead_capture");
+  }
+  if (expected.behavior === "company_ecosystem_answer") {
+    if (plan.plan_reason !== "company_ecosystem_answer") {
+      failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
+    }
+    if (expected.diagnostic_follow_up && !/\?/.test(plan.text ?? "")) {
+      failures.push("missing_diagnostic_follow_up");
+    }
+    if (expected.no_immediate_product_dump && /\bsmart website\b/i.test(plan.text ?? "")) {
+      failures.push("immediate_product_dump");
+    }
+  }
+  if (expected.behavior === "short_product_explanation") {
+    if (plan.response_type !== RESPONSE_TYPES.PRODUCT_QUESTION_ANSWER) {
+      failures.push(`response_type:${plan.response_type}`);
+    }
+    if (expected.follow_up_about) {
+      if (!new RegExp(expected.follow_up_about, "i").test(plan.text ?? "")) {
+        failures.push(`follow_up_missing:${expected.follow_up_about}`);
+      }
+    }
+    if (expected.within_live_tts_limit && (plan.text?.length ?? 0) > COMBINED_LIVE_TTS_CHAR_LIMIT) {
+      failures.push("exceeds_live_tts_limit");
+    }
+  }
+  if (expected.behavior === "approved_price_policy_answer") {
+    if (plan.plan_reason !== "product_pricing_fallback") {
+      failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
+    }
+    if (expected.depends_on) {
+      const parts = String(expected.depends_on)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      for (const part of parts) {
+        if (!new RegExp(part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(plan.text ?? "")) {
+          failures.push(`pricing_missing:${part}`);
+        }
+      }
+    }
+  }
+  if (expected.answer_before_qualification && plan.response_type === RESPONSE_TYPES.COLLECT_SALES_CONTEXT) {
+    failures.push("qualification_before_answer");
+  }
+  if (expected.behavior === "scope_dependent_pricing_answer" && plan.plan_reason !== "product_pricing_fallback") {
+    failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
   }
 
   return failures;
@@ -442,7 +502,30 @@ export async function runEvalScenario({
 
   const resolvedConfig = config ?? loadConfig();
   const resolvedAgent = agentConfig ?? loadAgentConfig(resolvedConfig);
-  const resolvedPolicy = behaviorPolicy ?? resolveBehaviorPolicy({ config: resolvedConfig });
+  const contactFormEval = CONTACT_FORM_EVAL_CATEGORIES.has(scenario.category);
+  const playbookContentEval = PLAYBOOK_CONTENT_EVAL_CATEGORIES.has(scenario.category);
+  const evalConfig =
+    contactFormEval || playbookContentEval
+      ? {
+          ...resolvedConfig,
+          v4: {
+            ...resolvedConfig.v4,
+            ...(contactFormEval ? { contactFormHandoffEnabled: true } : {}),
+            ...(playbookContentEval
+              ? { playbookRuntimeEnabled: true, playbookAllowDraft: true }
+              : {}),
+          },
+        }
+      : resolvedConfig;
+  const harnessV4Active = contactFormEval || playbookContentEval;
+  const resolvedPolicy =
+    playbookContentEval || contactFormEval
+      ? resolveBehaviorPolicy({
+          config: evalConfig,
+          playbook: playbookContentEval ? playbook : undefined,
+          allowDraft: playbookContentEval ? true : undefined,
+        })
+      : behaviorPolicy ?? resolveBehaviorPolicy({ config: evalConfig });
   const memory = buildEvalScenarioMemory(scenario);
   const stateMachine = buildEvalScenarioStateMachine(scenario, memory);
   const closedDomain = buildClosedDomainForScenario(scenario, resolvedAgent, memory);
@@ -498,14 +581,12 @@ export async function runEvalScenario({
     const action = await decideNextAction(orchestrator, { transcript: scenario.caller });
     plan = action.plan;
   } else {
-    const contactFormEval = CONTACT_FORM_EVAL_CATEGORIES.has(scenario.category);
-    const evalConfig = contactFormEval
-      ? {
-          ...resolvedConfig,
-          v4: { ...resolvedConfig.v4, contactFormHandoffEnabled: true },
-        }
-      : resolvedConfig;
-    const contactFormHandoffEnabled = isContactFormHandoffRuntimeEnabled(evalConfig, contactFormEval);
+    const contactFormHandoffEnabled = isContactFormHandoffRuntimeEnabled(evalConfig, harnessV4Active);
+    const playbookProductContentEnabled = isPlaybookProductContentRuntimeEnabled(
+      evalConfig,
+      resolvedPolicy,
+      playbook
+    );
     const intent =
       scenario.category === "fallback"
         ? "unclear"
@@ -514,7 +595,8 @@ export async function runEvalScenario({
             memory,
             resolvedAgent,
             resolvedPolicy,
-            contactFormHandoffEnabled
+            contactFormHandoffEnabled,
+            playbookProductContentEnabled
           );
     plan = buildResponsePlan({
       agentConfig: resolvedAgent,
@@ -526,7 +608,8 @@ export async function runEvalScenario({
       ragGate: { allowed: false },
       behaviorPolicy: resolvedPolicy,
       config: evalConfig,
-      v4PathActive: contactFormEval,
+      playbook: playbookContentEval ? playbook : undefined,
+      v4PathActive: harnessV4Active,
     });
 
     if (scenario.category === "fallback") {
