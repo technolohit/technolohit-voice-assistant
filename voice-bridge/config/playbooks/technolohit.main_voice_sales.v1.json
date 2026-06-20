@@ -481,6 +481,7 @@
     ],
     "allowed_callback_response_types": [
       "collect_contact_preference",
+      "request_phone_once",
       "collect_callback_permission",
       "callback_finalized",
       "callback_manual_review",
@@ -674,6 +675,121 @@
         "behavior": "lead_capture_appropriate",
         "not_company_general": true,
         "no_live_transfer_claim": true
+      }
+    },
+    {
+      "id": "caller_id_available_permission",
+      "category": "callback",
+      "caller": "Dankeschön, telefonisch bitte.",
+      "caller_phone": "+4915112345678",
+      "expected": {
+        "response_type": "collect_callback_permission",
+        "plan_reason": "contact_phone_preference"
+      }
+    },
+    {
+      "id": "caller_id_missing_request_phone_once",
+      "category": "callback",
+      "caller": "Dankeschön, telefonisch bitte.",
+      "expected": {
+        "response_type": "request_phone_once",
+        "plan_reason": "caller_id_missing_request_phone_once"
+      }
+    },
+    {
+      "id": "valid_spoken_phone_then_permission",
+      "category": "callback",
+      "caller": "null eins sieben eins fuenf eins zwei drei vier fuenf sechs sieben acht",
+      "memory_patch": {
+        "contact_preference": "phone",
+        "phone_capture_attempted": true,
+        "callback_flow_state": "phone_number_pending",
+        "current_state": "collecting_phone_number"
+      },
+      "state": "collecting_phone_number",
+      "expected": {
+        "response_type": "collect_callback_permission",
+        "plan_reason": "phone_number_captured"
+      }
+    },
+    {
+      "id": "valid_digit_phone_then_permission",
+      "category": "callback",
+      "caller": "0171 512345678",
+      "memory_patch": {
+        "contact_preference": "phone",
+        "phone_capture_attempted": true,
+        "callback_flow_state": "phone_number_pending",
+        "current_state": "collecting_phone_number"
+      },
+      "state": "collecting_phone_number",
+      "expected": {
+        "response_type": "collect_callback_permission",
+        "plan_reason": "phone_number_captured"
+      }
+    },
+    {
+      "id": "invalid_spoken_phone_manual_review",
+      "category": "callback",
+      "caller": "null eins zwei",
+      "memory_patch": {
+        "contact_preference": "phone",
+        "phone_capture_attempted": true,
+        "callback_flow_state": "phone_number_pending",
+        "current_state": "collecting_phone_number"
+      },
+      "state": "collecting_phone_number",
+      "expected": {
+        "response_type": "callback_manual_review",
+        "plan_reason": "phone_capture_failed",
+        "no_lead_ready": true
+      }
+    },
+    {
+      "id": "no_repeat_phone_request",
+      "category": "callback",
+      "caller": "0171 512345678",
+      "memory_patch": {
+        "contact_preference": "phone",
+        "phone_capture_attempted": true,
+        "phone_present": false,
+        "callback_flow_state": "callback_manual_review",
+        "current_state": "listening"
+      },
+      "state": "listening",
+      "expected": {
+        "no_request_phone_repeat": true
+      }
+    },
+    {
+      "id": "no_rag_after_phone_capture_started",
+      "category": "callback",
+      "caller": "Was kostet Smart Website?",
+      "memory_patch": {
+        "contact_preference": "phone",
+        "phone_capture_attempted": true,
+        "callback_flow_state": "phone_number_pending",
+        "current_state": "collecting_phone_number"
+      },
+      "state": "collecting_phone_number",
+      "expected": {
+        "no_rag": true
+      }
+    },
+    {
+      "id": "no_questionnaire_after_phone_capture_started",
+      "category": "callback",
+      "caller": "null eins zwei",
+      "memory_patch": {
+        "contact_preference": "phone",
+        "phone_capture_attempted": true,
+        "callback_flow_state": "phone_number_pending",
+        "current_state": "collecting_phone_number"
+      },
+      "state": "collecting_phone_number",
+      "expected": {
+        "no_questionnaire": true,
+        "response_type": "callback_manual_review"
       }
     },
     {

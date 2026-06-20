@@ -77,6 +77,31 @@ export function assertNoRawPhoneInPayload(payload = {}) {
   return !containsRawPhone(payload);
 }
 
+function containsKnownSpokenPhoneSequence(value, sequences = [], key = "") {
+  if (SKIP_PHONE_SCAN_KEYS.has(key)) return false;
+  const normalizedSequences = sequences
+    .map((sequence) => normalizeText(sequence).toLowerCase())
+    .filter(Boolean);
+  if (normalizedSequences.length === 0) return false;
+  if (typeof value === "string") {
+    const text = normalizeText(value).toLowerCase();
+    return normalizedSequences.some((sequence) => text.includes(sequence));
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsKnownSpokenPhoneSequence(item, normalizedSequences, key));
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).some(([childKey, childValue]) =>
+      containsKnownSpokenPhoneSequence(childValue, normalizedSequences, childKey)
+    );
+  }
+  return false;
+}
+
+export function assertNoKnownSpokenPhoneInPayload(payload = {}, sequences = []) {
+  return !containsKnownSpokenPhoneSequence(payload, sequences);
+}
+
 export function buildPostCallIdempotencyKey(ctx, summary, leadResult) {
   const callSessionId = normalizeText(ctx?.callSessionId);
   const summaryId = normalizeText(summary?.summaryId);

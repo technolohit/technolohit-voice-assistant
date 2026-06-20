@@ -16,8 +16,13 @@ import {
   isCallbackFlowActive,
   isCallbackFlowAttentionPhrase,
   isCallbackPermissionPendingStage,
+  isPhoneNumberPendingStage,
   isPostDecisionCallbackStage,
 } from "./callback-flow-policy.js";
+import {
+  evaluateSpokenPhoneCapture,
+  isPhoneCaptureRefusal,
+} from "./spoken-phone-capture.js";
 import { detectContactFormHandoffIntent } from "./contact-form-handoff-intent.js";
 import { isCompanyGeneralQuestion } from "./company-general-intent.js";
 
@@ -121,6 +126,7 @@ export function detectTranscriptIntent(
 
   const collectingContactPreference =
     memory?.current_state === "collecting_contact_preference" ||
+    memory?.current_state === "collecting_phone_number" ||
     memory?.current_state === "collecting_callback_permission" ||
     Boolean(memory?.contact_flow_pending) ||
     isCallbackFlowActive(memory);
@@ -175,6 +181,20 @@ export function detectTranscriptIntent(
     isCompanyGeneralQuestion(transcript)
   ) {
     return "company_general";
+  }
+
+  // Phase 10G: while the one-time phone capture question is open, parse the
+  // next spoken phone candidate deterministically. Explicit product questions
+  // still win (same contract as permission pending).
+  if (
+    isPhoneNumberPendingStage(memory) &&
+    !PRODUCT_QUESTION_HINT.test(lower) &&
+    !isTopicRepairPhrase(transcript)
+  ) {
+    if (isPhoneCaptureRefusal(transcript)) return "phone_capture_refused";
+    const capture = evaluateSpokenPhoneCapture(transcript);
+    if (capture.ok) return "phone_number_candidate";
+    return "phone_capture_failed";
   }
 
   // Phase 10AT: while the callback permission question is open, a short

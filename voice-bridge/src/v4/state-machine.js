@@ -13,6 +13,7 @@ export const V4_STATES = {
   ANSWERING_PRODUCT_QUESTION: "answering_product_question",
   COLLECTING_SALES_CONTEXT: "collecting_sales_context",
   COLLECTING_CONTACT_PREFERENCE: "collecting_contact_preference",
+  COLLECTING_PHONE_NUMBER: "collecting_phone_number",
   COLLECTING_CALLBACK_PERMISSION: "collecting_callback_permission",
   VALIDATING_CONTACT: "validating_contact",
   LEAD_READY: "lead_ready",
@@ -38,6 +39,7 @@ const ALLOWED = {
     V4_STATES.ANSWERING_PRODUCT_QUESTION,
     V4_STATES.COLLECTING_SALES_CONTEXT,
     V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+    V4_STATES.COLLECTING_PHONE_NUMBER,
     V4_STATES.COLLECTING_CALLBACK_PERMISSION,
     V4_STATES.VALIDATING_CONTACT,
     V4_STATES.SPEAKING,
@@ -62,8 +64,15 @@ const ALLOWED = {
   ],
   [V4_STATES.COLLECTING_CONTACT_PREFERENCE]: [
     V4_STATES.LISTENING,
+    V4_STATES.COLLECTING_PHONE_NUMBER,
     V4_STATES.COLLECTING_CALLBACK_PERMISSION,
     V4_STATES.VALIDATING_CONTACT,
+    V4_STATES.SPEAKING,
+    V4_STATES.ERROR
+  ],
+  [V4_STATES.COLLECTING_PHONE_NUMBER]: [
+    V4_STATES.LISTENING,
+    V4_STATES.COLLECTING_CALLBACK_PERMISSION,
     V4_STATES.SPEAKING,
     V4_STATES.ERROR
   ],
@@ -182,7 +191,13 @@ export function nextStateForIntent(currentState, intentName = "") {
 export function nextStateForMemory(memory = {}) {
   if (memory?.interruption_context) return V4_STATES.INTERRUPTED;
   if (memory?.lead_ready) return V4_STATES.LEAD_READY;
-  if (memory?.contact_preference && !memory?.callback_permission) {
+  if (memory?.contact_preference === "phone" && !memory?.callback_permission) {
+    if (
+      memory?.callback_flow_state === "phone_number_pending" ||
+      memory?.current_state === V4_STATES.COLLECTING_PHONE_NUMBER
+    ) {
+      return V4_STATES.COLLECTING_PHONE_NUMBER;
+    }
     return V4_STATES.COLLECTING_CALLBACK_PERMISSION;
   }
   if (memory?.selected_product_id && !memory?.customer_type) {

@@ -846,7 +846,25 @@ Deliverable: `playbook-product-content.js`, `company-general-intent.js`, planner
 - [x] Successful: Playbook eval: 0 fail / 0 pending for `company_general`, `product_explanation`, `product_pricing`.
 - [x] Successful: Flag off leaves planner output unchanged; production defaults unchanged.
 
-#### Phase 10 (remaining): Runtime behavior switching
+#### Phase 10G: Caller-ID missing `ask_phone_once` (v4)
+
+Goal: when caller ID is missing/invalid, ask for phone exactly once before callback permission; never loop; route failures to contact-form / manual review.
+
+Deliverable: `spoken-phone-capture.js`, `phone-capture-privacy.js`, `caller-id-callback-policy.js`, `phone_number_pending` state, `request_phone_once` response type, orchestrator-protected phone, playbook eval scenarios.
+
+- [x] Successful: Valid CLI → permission phrase only (playbook or hardcoded).
+- [x] Successful: Missing CLI → `request_phone_once` once (`max_phone_asks=1`).
+- [x] Successful: Valid spoken/digit phone → permission; invalid/refusal → manual review / contact form, no second ask.
+- [x] Successful: Closing wins; RAG and questionnaire blocked during phone capture.
+- [x] Successful: Numeric and spoken digit phone turns persist `[phone_redacted]` in `last_user_utterance`; raw current-turn transcript is replaced after planning.
+- [x] Successful: No full numeric phone or known spoken digit sequence in serialized memory, post-call summary metadata, notification payload, quality events, decision payloads, or eval snapshots.
+- [x] Successful: Playbook eval 33/0/0; decision eval 13/0/0; `npm test` 712/0.
+
+**Phase 10 completion (2026-06-20):** Increments **10A–10G complete**. Umbrella Phase 10 **closed after Codex privacy blocker tests passed**. See [phase10_completion_audit_report.md](phase10_completion_audit_report.md) and [phase10g_caller_id_missing_phone_capture_report.md](phase10g_caller_id_missing_phone_capture_report.md).
+
+**Audit conclusion (superseded 2026-06-11):** Central runtime behavior switching **not required**; priority contract enforced by bounded planner/RAG/callback guards plus decision metadata (default off).
+
+#### Phase 10 (remaining): Runtime behavior switching — audit status (superseded)
 
 Goal: centralize conversation priority decisions behind a feature flag, using existing v4 modules rather than adding another planner framework.
 
@@ -888,13 +906,16 @@ Feature flag / rollout:
 - Use an explicit opt-in flag or extend the existing playbook runtime flag only after review.
 - Fail closed to current behavior if playbook loading or decision resolution fails.
 
-- [ ] Successful: Behavior decision object is implemented behind a disabled flag.
-- [ ] Successful: Planner, RAG, questionnaire, and callback flow consume the same decision metadata.
-- [ ] Successful: Callback/contact flow cannot be overridden by scoped product Q&A.
-- [ ] Successful: RAG is content-only and cannot decide priority.
-- [ ] Successful: Questionnaire is decision-gated.
-- [ ] Successful: Quality events include safe decision metadata.
-- [ ] Successful: Default production behavior remains unchanged.
+**Audit (2026-06-11):** Distributed enforcement via planner/intent/RAG/callback modules satisfies the priority contract in eval; a single decision-driven controller is **not recommended**. Checklist below reflects **original wording** — treat items as **met in spirit** except where audit notes partial status.
+
+- [x] Successful: Behavior decision object is implemented behind a disabled flag (10A/10B).
+- Partial (accepted): Planner, RAG, questionnaire, and callback flow use distributed imperative guards; decision metadata is observability + opt-in questionnaire guard (10D). Eval alignment is sufficient; no second global controller is required.
+- [x] Successful: Callback/contact flow cannot be overridden by scoped product Q&A (10AP–10AU, 10F).
+- [x] Successful: RAG is content-only and cannot decide priority.
+- Partial (accepted): Questionnaire is decision-gated only when `VOICE_V4_AGENT_BEHAVIOR_DECISION_ENABLED=true` (10D guard; default off).
+- [x] Successful: Quality events include safe decision metadata when flag on (10B).
+- [x] Successful: Default production behavior remains unchanged.
+- [x] **Closed (10G):** Caller-ID missing `request_phone_once` — implemented.
 
 ### Phase 11: Playbook Eval / Review / Publish Version
 

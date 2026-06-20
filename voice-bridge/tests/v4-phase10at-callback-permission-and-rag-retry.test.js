@@ -208,7 +208,7 @@ test("10AT: 'ja gerne' and 'okay' also grant callback permission", () => {
 
 test("10AT: refusal after the permission question does not create a callback-ready lead", async () => {
   await withEnv(canaryEnv(), async () => {
-    const orchestrator = createCanaryOrchestrator();
+    const orchestrator = createCanaryOrchestrator({ callerPhoneNormalized: "+4915112345678" });
     await runTurn(orchestrator, "Bitte rufen Sie mich telefonisch zurück.");
     await runTurn(orchestrator, "Telefonisch bitte.");
 

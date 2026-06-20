@@ -54,6 +54,7 @@ export const V4_RAG_ALLOWED_STATES = new Set([
 
 export const V4_RAG_FORBIDDEN_STATES = new Set([
   V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+  V4_STATES.COLLECTING_PHONE_NUMBER,
   V4_STATES.COLLECTING_CALLBACK_PERMISSION,
   V4_STATES.CLOSING,
   V4_STATES.COMPLETED,
@@ -85,7 +86,10 @@ export function shouldUseRagForTurn({ config = null, state, intent, memory = {},
     resolvedIntent === "callback_request" ||
     resolvedIntent === "callback_permission_granted" ||
     resolvedIntent === "callback_permission_denied" ||
-    resolvedIntent === "callback_flow_attention"
+    resolvedIntent === "callback_flow_attention" ||
+    resolvedIntent === "phone_number_candidate" ||
+    resolvedIntent === "phone_capture_refused" ||
+    resolvedIntent === "phone_capture_failed"
   ) {
     return { allowed: false, reason: `${resolvedIntent}_intent`, state: resolvedState };
   }

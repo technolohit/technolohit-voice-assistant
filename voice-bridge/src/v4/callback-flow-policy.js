@@ -13,6 +13,7 @@ import { validatePhoneForCallback } from "./lead-validator.js";
 export const CALLBACK_FLOW_STATES = Object.freeze({
   NONE: "none",
   CONTACT_PREFERENCE_PENDING: "contact_preference_pending",
+  PHONE_NUMBER_PENDING: "phone_number_pending",
   CALLBACK_PERMISSION_PENDING: "callback_permission_pending",
   CALLBACK_PERMISSION_GRANTED: "callback_permission_granted",
   CALLBACK_MANUAL_REVIEW: "callback_manual_review",
@@ -26,6 +27,7 @@ const KNOWN_STATES = new Set(Object.values(CALLBACK_FLOW_STATES));
 /** Flow has started and not been denied — outranks product QA/RAG/questionnaire. */
 const ACTIVE_STATES = new Set([
   CALLBACK_FLOW_STATES.CONTACT_PREFERENCE_PENDING,
+  CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING,
   CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING,
   CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_GRANTED,
   CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW,
@@ -45,6 +47,9 @@ const POST_DECISION_STATES = new Set([
 export const CALLBACK_FLOW_CONTINUATION_INTENTS = new Set([
   "contact_phone",
   "contact_email",
+  "phone_number_candidate",
+  "phone_capture_refused",
+  "phone_capture_failed",
   "callback_permission_granted",
   "callback_permission_denied",
   "callback_flow_attention",
@@ -68,8 +73,19 @@ export function resolveCallbackFlowState(memory = {}) {
   }
   if (permission === "denied") return CALLBACK_FLOW_STATES.CALLBACK_DENIED;
   if (preference === "email") return CALLBACK_FLOW_STATES.EMAIL_DIRECTED;
+  if (preference === "phone" && memory?.phone_present !== true && !hasValidCallerPhone({ memory })) {
+    if (
+      memory?.callback_flow_state === CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING ||
+      memory?.current_state === "collecting_phone_number"
+    ) {
+      return CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING;
+    }
+  }
   if (preference === "phone") return CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING;
   if (memory?.contact_flow_pending) return CALLBACK_FLOW_STATES.CONTACT_PREFERENCE_PENDING;
+  if (memory?.current_state === "collecting_phone_number") {
+    return CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING;
+  }
   if (memory?.current_state === "collecting_callback_permission") {
     return CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING;
   }
@@ -91,6 +107,10 @@ export function isCallbackPermissionPendingStage(memory = {}) {
   return (
     resolveCallbackFlowState(memory) === CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING
   );
+}
+
+export function isPhoneNumberPendingStage(memory = {}) {
+  return resolveCallbackFlowState(memory) === CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING;
 }
 
 // Attention/recovery phrases inside the callback flow ("Hallo?", "Sind Sie
@@ -129,6 +149,9 @@ export const CALLBACK_CONFIRMATION_TEXTS = Object.freeze({
 
 export function buildCallbackReassuranceText(memory = {}) {
   const stage = resolveCallbackFlowState(memory);
+  if (stage === CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING) {
+    return "Ja, ich bin noch da. Unter welcher Telefonnummer kann unser Team Sie am besten erreichen?";
+  }
   if (stage === CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW) {
     return "Ja, ich bin noch da. Ihre Anfrage ist zur manuellen Prüfung aufgenommen, unser Team kümmert sich darum.";
   }

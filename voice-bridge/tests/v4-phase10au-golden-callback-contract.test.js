@@ -245,7 +245,7 @@ test("10AU golden contract: live failure sequence with valid caller ID finalizes
   });
 });
 
-test("10AU golden contract: same sequence without caller ID confirms manual review and never pretends callback-ready", async () => {
+test("10AU golden contract: same sequence without caller ID asks phone once then permission then finalizes", async () => {
   await withEnv(canaryEnv(), async () => {
     const ragState = { calls: 0 };
     const orchestrator = createGoldenOrchestrator({ callerPhoneNormalized: null, ragState });
@@ -255,37 +255,85 @@ test("10AU golden contract: same sequence without caller ID confirms manual revi
     await runTurn(orchestrator, GOLDEN_TURNS[1]);
     await runTurn(orchestrator, GOLDEN_TURNS[2]);
 
-    // Turn 4: no valid phone source — manual-review confirmation, the caller
-    // is not left hanging and the assistant does not pretend callback-ready.
-    const turn4 = await runTurn(orchestrator, GOLDEN_TURNS[3]);
-    assert.equal(turn4.intent, "callback_permission_granted");
-    assert.equal(turn4.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
-    assert.equal(turn4.plan.plan_reason, "callback_manual_review_no_phone");
-    assert.match(turn4.plan.text, /manuellen Pr[üu]fung/);
-    assert.equal(turn4.plan.lead_transition_allowed, false);
-    assert.equal(orchestrator.memory.lead_ready, false);
+    const turn4 = await runTurn(orchestrator, "0171 512345678");
+    assert.equal(turn4.intent, "phone_number_candidate");
+    assert.equal(turn4.plan.response_type, RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION);
+    assert.equal(turn4.plan.plan_reason, "phone_number_captured");
+    assert.equal(orchestrator.memory.phone_present, true);
     assert.equal(
       resolveCallbackFlowState(orchestrator.memory),
-      CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW
+      CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING
     );
     assertNoProductQaLeak(turn4, "turn 4");
 
-    // Turn 5: "Hallo?" repeats the manual-review reassurance.
-    const turn5 = await runTurn(orchestrator, GOLDEN_TURNS[4]);
-    assert.equal(turn5.intent, "callback_flow_attention");
-    assert.equal(turn5.plan.response_type, RESPONSE_TYPES.CALLBACK_REASSURANCE);
-    assert.match(turn5.plan.text, /manuellen Pr[üu]fung/);
+    const turn5 = await runTurn(orchestrator, GOLDEN_TURNS[3]);
+    assert.equal(turn5.intent, "callback_permission_granted");
+    assert.equal(turn5.plan.response_type, RESPONSE_TYPES.CALLBACK_FINALIZED);
+    assert.equal(turn5.plan.lead_transition_allowed, true);
     assertNoProductQaLeak(turn5, "turn 5");
+
+    const turn6 = await runTurn(orchestrator, GOLDEN_TURNS[4]);
+    assert.equal(turn6.intent, "callback_flow_attention");
+    assert.equal(turn6.plan.response_type, RESPONSE_TYPES.CALLBACK_REASSURANCE);
+    assertNoProductQaLeak(turn6, "turn 6");
 
     assert.equal(ragState.calls, ragCallsAfterProductTurn);
 
-    // Validator keeps the lead guard_not_met / manual review.
     const candidate = buildLeadCandidateFromMemory(orchestrator.memory, {
-      callerPhoneNormalized: "",
+      callerPhoneNormalized: orchestrator.callerPhoneNormalized,
     });
-    assert.equal(candidate.callback_ready, false);
-    assert.equal(candidate.next_action, "manual_review");
-    assert.equal(candidate.validation.allowed, false);
+    assert.equal(candidate.callback_ready, true);
+    assert.equal(candidate.next_action, "team_callback");
+  });
+});
+
+test("10AU golden contract: missing caller ID requests phone once on contact preference", async () => {
+  await withEnv(canaryEnv(), async () => {
+    const orchestrator = createGoldenOrchestrator({ callerPhoneNormalized: null });
+    await runTurn(orchestrator, GOLDEN_TURNS[0]);
+    await runTurn(orchestrator, GOLDEN_TURNS[1]);
+
+    const turn3 = await runTurn(orchestrator, GOLDEN_TURNS[2]);
+    assert.equal(turn3.intent, "contact_phone");
+    assert.equal(turn3.plan.response_type, RESPONSE_TYPES.REQUEST_PHONE_ONCE);
+    assert.equal(turn3.plan.plan_reason, "caller_id_missing_request_phone_once");
+    assert.equal(
+      resolveCallbackFlowState(orchestrator.memory),
+      CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING
+    );
+  });
+});
+
+test("10AU variant: no caller ID refusal after phone ask routes to manual review without repeat", async () => {
+  await withEnv(canaryEnv(), async () => {
+    const orchestrator = createGoldenOrchestrator({ callerPhoneNormalized: null });
+    await runTurn(orchestrator, GOLDEN_TURNS[0]);
+    await runTurn(orchestrator, GOLDEN_TURNS[1]);
+    await runTurn(orchestrator, GOLDEN_TURNS[2]);
+
+    const refusal = await runTurn(orchestrator, "Nein, lieber nicht.");
+    assert.equal(refusal.intent, "phone_capture_refused");
+    assert.equal(refusal.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
+    assert.equal(refusal.plan.plan_reason, "phone_capture_refused");
+    assert.equal(orchestrator.memory.lead_ready, false);
+
+    const retry = await runTurn(orchestrator, "0171 512345678");
+    assert.notEqual(retry.plan.response_type, RESPONSE_TYPES.REQUEST_PHONE_ONCE);
+  });
+});
+
+test("10AU golden contract: same sequence without caller ID — legacy block replaced by 10G flow", async () => {
+  await withEnv(canaryEnv(), async () => {
+    const orchestrator = createGoldenOrchestrator({ callerPhoneNormalized: null });
+    await runTurn(orchestrator, GOLDEN_TURNS[0]);
+    await runTurn(orchestrator, GOLDEN_TURNS[1]);
+    await runTurn(orchestrator, GOLDEN_TURNS[2]);
+
+    const turn4 = await runTurn(orchestrator, GOLDEN_TURNS[3]);
+    assert.equal(turn4.intent, "phone_capture_failed");
+    assert.equal(turn4.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
+    assert.equal(turn4.plan.plan_reason, "phone_capture_failed");
+    assert.equal(orchestrator.memory.lead_ready, false);
   });
 });
 

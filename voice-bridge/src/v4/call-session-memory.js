@@ -3,6 +3,7 @@
  */
 
 import { normalizeText, redactPhoneLikeText, sanitizeCustomFields } from "./redaction.js";
+import { sanitizePhoneCaptureTranscriptForPersistence } from "./phone-capture-privacy.js";
 
 function cloneMemory(memory) {
   return {
@@ -85,7 +86,8 @@ export function updateMemoryFromIntent(memory, intent = {}) {
 export function updateMemoryFromUserTurn(memory, callerText = "") {
   const next = touch(cloneMemory(memory));
   const text = normalizeText(callerText);
-  next.last_user_utterance = text ? redactPhoneLikeText(text) : null;
+  const phoneCaptureText = sanitizePhoneCaptureTranscriptForPersistence(memory, text);
+  next.last_user_utterance = phoneCaptureText ?? (text ? redactPhoneLikeText(text) : null);
   next.turn_count = Number(next.turn_count ?? 0) + 1;
   return next;
 }

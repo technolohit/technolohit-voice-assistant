@@ -41,6 +41,8 @@ import {
   hasValidCallerPhone,
   isCallbackFlowActive,
 } from "./callback-flow-policy.js";
+import { resolveCallerIdCallbackPhrases } from "./caller-id-callback-policy.js";
+import { evaluateSpokenPhoneCapture } from "./spoken-phone-capture.js";
 import { V4_STATES } from "./state-machine.js";
 import { isContactFormHandoffIntent } from "./contact-form-handoff-intent.js";
 import {
@@ -64,6 +66,7 @@ export const RESPONSE_TYPES = {
   COLLECT_SALES_CONTEXT: "collect_sales_context",
   COLLECT_CONTACT_PREFERENCE: "collect_contact_preference",
   COLLECT_CALLBACK_PERMISSION: "collect_callback_permission",
+  REQUEST_PHONE_ONCE: "request_phone_once",
   EMAIL_GUIDANCE: "email_guidance",
   LEAD_READY_ACK: "lead_ready_ack",
   INTERRUPTION_RECOVERY: "interruption_recovery",
@@ -895,20 +898,120 @@ function buildResponsePlanCore({
   }
 
   if (resolvedIntent === "contact_phone") {
-    return planBase(RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION, {
-      text: sanitizeResponseText("Darf unser Team Sie unter Ihrer Nummer zurückmelden?"),
-      next_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
+    const callerIdPhrases = resolveCallerIdCallbackPhrases({
+      config,
+      behaviorPolicy,
+      playbook: activePlaybook,
+    });
+    const phoneAvailable = hasValidCallerPhone({
+      callerPhoneNormalized,
+      callerPhoneRaw,
+      memory,
+    });
+    if (phoneAvailable) {
+      return planBase(RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION, {
+        text: sanitizeResponseText(callerIdPhrases.availablePhrase),
+        next_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
+        memory_patch: {
+          contact_preference: "phone",
+          contact_flow_pending: true,
+          callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING,
+          current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
+        },
+        quality_event_type: "turn_started",
+        plan_reason: "contact_phone_preference",
+        rag_allowed: false,
+        lead_transition_allowed: false,
+      });
+    }
+    return planBase(RESPONSE_TYPES.REQUEST_PHONE_ONCE, {
+      text: sanitizeResponseText(callerIdPhrases.missingPhrase),
+      next_state: V4_STATES.COLLECTING_PHONE_NUMBER,
       memory_patch: {
         contact_preference: "phone",
-        // Phase 10AT/10AU: permission answer is still pending after this turn.
         contact_flow_pending: true,
-        callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING,
-        current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION
+        phone_capture_attempted: true,
+        phone_present: false,
+        callback_flow_state: CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING,
+        current_state: V4_STATES.COLLECTING_PHONE_NUMBER,
       },
       quality_event_type: "turn_started",
-      plan_reason: "contact_phone_preference",
+      plan_reason: "caller_id_missing_request_phone_once",
       rag_allowed: false,
-      lead_transition_allowed: false
+      lead_transition_allowed: false,
+    });
+  }
+
+  if (resolvedIntent === "phone_number_candidate") {
+    const callerIdPhrases = resolveCallerIdCallbackPhrases({
+      config,
+      behaviorPolicy,
+      playbook: activePlaybook,
+    });
+    const capture = evaluateSpokenPhoneCapture(transcript);
+    if (capture.ok) {
+      return planBase(RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION, {
+        text: sanitizeResponseText(callerIdPhrases.availablePhrase),
+        next_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
+        captured_phone_normalized: capture.normalized_phone,
+        memory_patch: {
+          contact_preference: "phone",
+          contact_flow_pending: true,
+          phone_capture_attempted: true,
+          phone_present: true,
+          callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING,
+          current_state: V4_STATES.COLLECTING_CALLBACK_PERMISSION,
+        },
+        quality_event_type: "turn_started",
+        plan_reason: "phone_number_captured",
+        rag_allowed: false,
+        lead_transition_allowed: false,
+      });
+    }
+    return planBase(RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW, {
+      text: sanitizeResponseText(callerIdPhrases.failurePhrase),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: {
+        contact_preference: memory?.contact_preference ?? "phone",
+        lead_ready: false,
+        phone_present: false,
+        contact_flow_pending: false,
+        phone_capture_attempted: true,
+        callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW,
+        current_state: V4_STATES.LISTENING,
+      },
+      quality_event_type: "lead_skipped",
+      plan_reason: "phone_capture_failed",
+      rag_allowed: false,
+      lead_transition_allowed: false,
+    });
+  }
+
+  if (resolvedIntent === "phone_capture_refused" || resolvedIntent === "phone_capture_failed") {
+    const callerIdPhrases = resolveCallerIdCallbackPhrases({
+      config,
+      behaviorPolicy,
+      playbook: activePlaybook,
+    });
+    return planBase(RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW, {
+      text: sanitizeResponseText(callerIdPhrases.failurePhrase),
+      next_state: V4_STATES.LISTENING,
+      memory_patch: {
+        contact_preference: memory?.contact_preference ?? "phone",
+        lead_ready: false,
+        phone_present: false,
+        contact_flow_pending: false,
+        phone_capture_attempted: true,
+        callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW,
+        current_state: V4_STATES.LISTENING,
+      },
+      quality_event_type: "lead_skipped",
+      plan_reason:
+        resolvedIntent === "phone_capture_refused"
+          ? "phone_capture_refused"
+          : "phone_capture_failed",
+      rag_allowed: false,
+      lead_transition_allowed: false,
     });
   }
 

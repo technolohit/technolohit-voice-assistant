@@ -60,6 +60,10 @@ import {
   requestPlaybackCancel,
   finalizePlayback
 } from "./playback-controller.js";
+import {
+  sanitizePhoneCaptureTranscriptForPersistence,
+  shouldRedactPhoneCaptureTranscript
+} from "./phone-capture-privacy.js";
 
 function bufferEvent(orchestrator, eventType, payload = {}, metricValue = null) {
   const event = buildQualityEventInput({
@@ -385,6 +389,14 @@ export async function decideNextAction(orchestrator, input = {}) {
   plan.rag_used = Boolean(ragResult?.used_rag);
   plan.rag_fallback_used = Boolean(ragGate.allowed && !ragResult?.used_rag);
 
+  if (orchestrator.currentTurn && shouldRedactPhoneCaptureTranscript(orchestrator.memory, transcript)) {
+    orchestrator.currentTurn.transcript = sanitizePhoneCaptureTranscriptForPersistence(
+      orchestrator.memory,
+      transcript
+    );
+  }
+
+  consumeCapturedPhoneFromPlan(orchestrator, plan);
   orchestrator.lastPlan = plan;
   orchestrator.lastResolvedIntent = intent;
   return { ok: true, plan, intent, ragResult, ragGate };
@@ -414,9 +426,30 @@ export function prepareAssistantResponse(orchestrator, plan = null) {
   };
 }
 
+/**
+ * Transfer planner-only phone capture to orchestrator runtime storage and strip
+ * it from the public plan before lastPlan/quality/event persistence.
+ */
+function consumeCapturedPhoneFromPlan(orchestrator, plan = {}) {
+  if (!plan || typeof plan !== "object") return plan;
+  const normalized = plan.captured_phone_normalized;
+  if (typeof normalized === "string" && normalized.trim()) {
+    orchestrator.callerPhoneNormalized = normalized.trim();
+    orchestrator.callerPhoneRaw = null;
+  }
+  delete plan.captured_phone_normalized;
+  return plan;
+}
+
+function applyCapturedPhoneFromPlan(orchestrator, plan = {}) {
+  return consumeCapturedPhoneFromPlan(orchestrator, plan);
+}
+
 export function recordAssistantResponse(orchestrator, text = null, plan = null) {
   const resolvedPlan = plan ?? orchestrator.lastPlan;
   const responseText = sanitizeResponseText(text ?? resolvedPlan?.text ?? orchestrator.lastAssistantText ?? "");
+
+  applyCapturedPhoneFromPlan(orchestrator, resolvedPlan);
 
   let memory = applyMemoryPatch(orchestrator.memory, resolvedPlan?.memory_patch ?? {});
   memory = updateMemoryFromAssistantTurn(memory, responseText);
@@ -484,6 +517,8 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
   const resolvedPlan = plan ?? orchestrator.lastPlan;
   const responseText = sanitizeResponseText(text ?? resolvedPlan?.text ?? orchestrator.lastAssistantText ?? "");
   const fromState = orchestrator.stateMachine?.state ?? orchestrator.memory?.current_state ?? null;
+
+  applyCapturedPhoneFromPlan(orchestrator, resolvedPlan);
 
   let memory = applyMemoryPatch(orchestrator.memory, resolvedPlan?.memory_patch ?? {});
   memory = updateMemoryFromAssistantTurn(memory, responseText);

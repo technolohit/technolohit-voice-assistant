@@ -24,6 +24,7 @@ import {
   buildResponsePlan,
   RESPONSE_TYPES,
   detectTranscriptIntent,
+  applyMemoryPatch,
 } from "./response-planner.js";
 import {
   createDialogueOrchestrator,
@@ -257,6 +258,7 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
     const allowedTypes = new Set([
       RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE,
       RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION,
+      RESPONSE_TYPES.REQUEST_PHONE_ONCE,
     ]);
     if (!allowedTypes.has(plan.response_type)) {
       failures.push(`response_type:${plan.response_type}`);
@@ -326,8 +328,122 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
   if (expected.behavior === "scope_dependent_pricing_answer" && plan.plan_reason !== "product_pricing_fallback") {
     failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
   }
+  if (expected.no_questionnaire && meta.questionnaireUsed) {
+    failures.push("questionnaire_used");
+  }
+  if (expected.no_request_phone_repeat && plan.response_type === RESPONSE_TYPES.REQUEST_PHONE_ONCE) {
+    failures.push("unexpected_repeat_phone_request");
+  }
 
   return failures;
+}
+
+function buildCallbackFlowMemory(base, overrides = {}) {
+  return {
+    ...setSelectedProduct(base, "smart_website"),
+    current_product_context: "smart_website",
+    contact_flow_pending: true,
+    callback_flow_state: "contact_preference_pending",
+    current_state: V4_STATES.COLLECTING_CONTACT_PREFERENCE,
+    ...overrides,
+  };
+}
+
+const CALLER_ID_EVAL_SCENARIO_IDS = new Set([
+  "caller_id_available_permission",
+  "caller_id_missing_request_phone_once",
+  "valid_spoken_phone_then_permission",
+  "valid_digit_phone_then_permission",
+  "invalid_spoken_phone_manual_review",
+  "no_repeat_phone_request",
+  "no_rag_after_phone_capture_started",
+  "no_questionnaire_after_phone_capture_started",
+]);
+
+async function runCallerIdEvalScenario({
+  scenario,
+  agentConfig,
+  config,
+  behaviorPolicy,
+  playbook,
+  baseResult,
+}) {
+  const resolvedConfig = config ?? loadConfig();
+  const resolvedAgent = agentConfig ?? loadAgentConfig(resolvedConfig);
+  const resolvedPolicy =
+    behaviorPolicy ??
+    resolveBehaviorPolicy({
+      config: {
+        ...resolvedConfig,
+        v4: { ...resolvedConfig.v4, playbookRuntimeEnabled: true, playbookAllowDraft: true },
+      },
+      playbook,
+      allowDraft: true,
+    });
+  const evalConfig = {
+    ...resolvedConfig,
+    v4: {
+      ...resolvedConfig.v4,
+      playbookRuntimeEnabled: true,
+      playbookAllowDraft: true,
+      questionnaireRuntimeEnabled: true,
+    },
+  };
+  let ragRetrieverCalls = 0;
+  const base = createCallSessionMemory({ bridgeCallId: `eval-${scenario.id}` });
+
+  const orchestrator = createDialogueOrchestrator({
+    config: evalConfig,
+    runtimeContext: createRuntimeContext(evalConfig, { bridgeCallId: base.bridge_call_id }),
+    memory: buildCallbackFlowMemory(base, scenario.memory_patch ?? {}),
+    stateMachine: { state: scenario.state ?? V4_STATES.COLLECTING_CONTACT_PREFERENCE },
+    agentConfig: resolvedAgent,
+    adapters: {
+      ragRetriever: async () => {
+        ragRetrieverCalls += 1;
+        return { ok: true, hit: false, hitCount: 0 };
+      },
+    },
+    qualitySink: createQualityEventSink({ v4PathActive: true }),
+    v4PathActive: true,
+    behaviorPolicy: resolvedPolicy,
+    callerPhoneNormalized: scenario.caller_phone ?? null,
+    callerPhoneRaw: scenario.caller_phone_raw ?? null,
+  });
+
+  if (Array.isArray(scenario.setup_turns)) {
+    for (const transcript of scenario.setup_turns) {
+      startTurn(orchestrator);
+      acceptUserTranscript(orchestrator, transcript);
+      const action = await decideNextAction(orchestrator, { transcript });
+      orchestrator.memory = applyMemoryPatch(orchestrator.memory, action.plan?.memory_patch ?? {});
+      orchestrator.stateMachine = {
+        state: action.plan?.next_state ?? V4_STATES.LISTENING,
+      };
+      orchestrator.memory = {
+        ...orchestrator.memory,
+        current_state: orchestrator.stateMachine.state,
+      };
+    }
+  }
+
+  startTurn(orchestrator);
+  acceptUserTranscript(orchestrator, scenario.caller);
+  const action = await decideNextAction(orchestrator, { transcript: scenario.caller });
+  const failures = assertPlanExpectations(action.plan, scenario.expected ?? {}, {
+    ragRetrieverCalls,
+    questionnaireUsed: Boolean(action.plan?.questionnaire?.used),
+  });
+
+  return {
+    ...baseResult,
+    status: failures.length ? "fail" : "pass",
+    reason: failures.length ? failures.join(";") : "runtime_pass",
+    runtime_mode: "caller_id_orchestrator",
+    response_type: action.plan?.response_type ?? null,
+    plan_reason: action.plan?.plan_reason ?? null,
+    response_chars: action.plan?.text?.length ?? 0,
+  };
 }
 
 function runPendingScenarioDocumentationCheck(scenario, playbook, policy) {
@@ -451,6 +567,17 @@ export async function runEvalScenario({
     caller_chars: callerChars,
     runtime_mode: null,
   };
+
+  if (CALLER_ID_EVAL_SCENARIO_IDS.has(scenario.id)) {
+    return runCallerIdEvalScenario({
+      scenario,
+      agentConfig,
+      config,
+      behaviorPolicy,
+      playbook,
+      baseResult,
+    });
+  }
 
   if (RUNTIME_PENDING_EVAL_CATEGORIES.has(scenario.category)) {
     const docFailures = runPendingScenarioDocumentationCheck(

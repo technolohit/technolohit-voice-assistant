@@ -12,6 +12,7 @@ import {
   CALLBACK_FLOW_CONTINUATION_INTENTS,
   resolveCallbackFlowState,
   isCallbackFlowActive,
+  hasValidCallerPhone,
 } from "./callback-flow-policy.js";
 import { validatePlaybook } from "./playbook-loader.js";
 
@@ -45,6 +46,7 @@ export const DECISION_RESPONSE_TYPES = Object.freeze({
   TECHNICAL_ESCALATION: "technical_escalation",
   COLLECT_CONTACT_PREFERENCE: "collect_contact_preference",
   COLLECT_CALLBACK_PERMISSION: "collect_callback_permission",
+  REQUEST_PHONE_ONCE: "request_phone_once",
   CALLBACK_FINALIZED: "callback_finalized",
   CALLBACK_MANUAL_REVIEW: "callback_manual_review",
   CALLBACK_REASSURANCE: "callback_reassurance",
@@ -145,7 +147,7 @@ function isCallbackFlowBlocking(callbackState, memory, intent) {
   return isCallbackFlowActive(memory ?? {});
 }
 
-function mapCallbackResponseType(callbackState, intent) {
+function mapCallbackResponseType(callbackState, intent, phoneContext = {}) {
   if (intent === "callback_flow_attention") return DECISION_RESPONSE_TYPES.CALLBACK_REASSURANCE;
   if (intent === "callback_permission_denied") {
     return DECISION_RESPONSE_TYPES.CALLBACK_PERMISSION_DENIED;
@@ -162,7 +164,16 @@ function mapCallbackResponseType(callbackState, intent) {
     }
     return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
   }
-  if (intent === "contact_phone") return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
+  if (intent === "contact_phone") {
+    if (!hasValidCallerPhone(phoneContext)) {
+      return DECISION_RESPONSE_TYPES.REQUEST_PHONE_ONCE;
+    }
+    return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
+  }
+  if (intent === "phone_number_candidate") return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
+  if (intent === "phone_capture_refused" || intent === "phone_capture_failed") {
+    return DECISION_RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW;
+  }
   if (intent === "contact_email") return DECISION_RESPONSE_TYPES.EMAIL_GUIDANCE;
   if (intent === "callback_request") return DECISION_RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE;
 
@@ -177,6 +188,9 @@ function mapCallbackResponseType(callbackState, intent) {
   }
   if (callbackState === CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING) {
     return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
+  }
+  if (callbackState === CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING) {
+    return DECISION_RESPONSE_TYPES.REQUEST_PHONE_ONCE;
   }
   return DECISION_RESPONSE_TYPES.COLLECT_CONTACT_PREFERENCE;
 }
@@ -215,6 +229,9 @@ function mapCallbackReason(callbackState, intent) {
   }
   if (intent === "callback_request") return "callback_request_intent";
   if (intent === "contact_phone") return "contact_phone_preference";
+  if (intent === "phone_number_candidate") return "phone_number_captured";
+  if (intent === "phone_capture_refused") return "phone_capture_refused";
+  if (intent === "phone_capture_failed") return "phone_capture_failed";
   if (intent === "contact_email") return "contact_email_preference";
   return `active_callback_flow:${callbackState}`;
 }
@@ -303,6 +320,8 @@ export function resolveAgentBehaviorDecision({
   productAnswered = false,
   pricingAnswered = false,
   questionnaireEligible = false,
+  callerPhoneNormalized = null,
+  callerPhoneRaw = null,
 } = {}) {
   void state;
   void config;
@@ -312,6 +331,7 @@ export function resolveAgentBehaviorDecision({
   const productId = resolveProductId(productContext, memory);
   const resolvedIntent = hasNonEmptyString(intent) ? intent : "unclear";
   const callbackState = resolveCallbackState(callbackFlowState, memory);
+  const phoneContext = { callerPhoneNormalized, callerPhoneRaw, memory };
   const closing = resolveClosing(closingIntent, transcript, memory, resolvedIntent);
   const boundary = isRoleBoundaryIntent(roleBoundaryIntent, resolvedIntent);
 
@@ -367,7 +387,7 @@ export function resolveAgentBehaviorDecision({
   if (callbackBlocking) {
     return withPlaybook({
       priority: BEHAVIOR_PRIORITIES.CALLBACK_FLOW,
-      response_type: mapCallbackResponseType(callbackState, resolvedIntent),
+      response_type: mapCallbackResponseType(callbackState, resolvedIntent, phoneContext),
       rag_allowed: false,
       questionnaire_allowed: false,
       lead_tier: mapCallbackLeadTier(callbackState, memory),
