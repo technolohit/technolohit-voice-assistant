@@ -1,0 +1,25 @@
+{
+  "schema_version": "playbook-runtime-binding-1",
+  "binding_version": "technolohit-main-voice-sales-canary-binding-v1-approved-20260622",
+  "tenant_id": "technolohit",
+  "agent_id": "main_voice_sales",
+  "playbook_version": "technolohit-playbook-v1-20260622-published",
+  "playbook_artifact": "config/playbooks/technolohit.main_voice_sales.v1.published.json",
+  "sha256": "f8bb259a09d409242b876939ebefb63bf7031bb6bccbaa70e8e1b56cb786a21c",
+  "scope": "canary",
+  "status": "approved",
+  "approval": {
+    "state": "approved",
+    "approved_by": "Mojtaba / Codex supervised canary approval",
+    "approved_at": "2026-06-22T00:00:00Z",
+    "canary_only": true,
+    "production_approved": false,
+    "global_approval": false
+  },
+  "active": true,
+  "rollback_target": {
+    "type": "hardcoded_default",
+    "binding_version": null,
+    "playbook_version": null
+  }
+}

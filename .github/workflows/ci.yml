@@ -64,6 +64,10 @@ jobs:
         run: npm test
         working-directory: voice-bridge
 
+      - name: Validate approved playbook canary artifacts
+        run: npm run playbook:canary-artifact-validate
+        working-directory: voice-bridge
+
       - name: ASR fixture eval (v1.2.1 live failure)
         run: npm run eval:asr-fixture
         working-directory: voice-bridge

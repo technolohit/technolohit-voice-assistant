@@ -45,6 +45,19 @@ thnhit/technhvoice:rag-api-v1.0.0
 thnhit/technhvoice:rag-api-latest
 ```
 
+The Docker Publish workflow always publishes voice-bridge. It publishes
+rag-api only when `rag-api/**` changed since the nearest previous semantic
+version tag. The workflow fetches full tag history and reports whether rag-api
+was published or skipped. Manual runs may set `publish_rag_api=auto|true|false`;
+use `auto` unless an explicit rebuild is required.
+
+For a voice-only release such as Phase 12B `v1.36.0`, expected output is:
+
+```text
+voice-bridge-v1.36.0: published
+rag-api-v1.36.0: skipped (rag-api unchanged)
+```
+
 Production deploys should use immutable tags:
 
 ```text
@@ -165,6 +178,13 @@ Runs on:
 
 - Git tags matching `v*.*.*`
 - manual dispatch
+
+Tag behavior:
+
+- voice-bridge is always built and published;
+- rag-api uses the diff from the nearest previous reachable semver tag;
+- no previous semver tag means conservative rag-api publication;
+- workflow summary records the decision and reason.
 
 This avoids failing normal `main` pushes before Docker Hub secrets are configured.
 

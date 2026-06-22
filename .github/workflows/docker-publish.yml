@@ -14,6 +14,15 @@ on:
         options:
           - "true"
           - "false"
+      publish_rag_api:
+        description: "Publish rag-api: auto detects changes since previous semver tag"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - "auto"
+          - "true"
+          - "false"
 
 permissions:
   contents: read
@@ -30,6 +39,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set build metadata
         id: meta
@@ -50,6 +62,14 @@ jobs:
           echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
           echo "version_tag=${version_tag}" >> "$GITHUB_OUTPUT"
           echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine RAG API publication
+        id: rag_changes
+        env:
+          PUBLISH_RAG_API: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_rag_api || 'auto' }}
+          CURRENT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/ci/detect-rag-api-publication.js
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -84,6 +104,7 @@ jobs:
 
       - name: Docker metadata for rag-api
         id: rag_meta
+        if: steps.rag_changes.outputs.publish == 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
@@ -93,6 +114,7 @@ jobs:
             type=raw,value=rag-api-${{ steps.meta.outputs.version_tag }},enable=${{ steps.meta.outputs.version_tag != '' }}
 
       - name: Build and push rag-api
+        if: steps.rag_changes.outputs.publish == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./rag-api
@@ -106,7 +128,16 @@ jobs:
 
       - name: Summary
         shell: bash
+        env:
+          RAG_PUBLISH: ${{ steps.rag_changes.outputs.publish }}
+          RAG_REASON: ${{ steps.rag_changes.outputs.reason }}
+          RAG_TAGS: ${{ steps.rag_meta.outputs.tags }}
         run: |
+          if [[ "${RAG_PUBLISH}" == "true" ]]; then
+            rag_status="published"
+          else
+            rag_status="skipped"
+          fi
           {
             echo "## Docker Images"
             echo
@@ -115,6 +146,12 @@ jobs:
             echo "Voice bridge tags:"
             echo '${{ steps.voice_meta.outputs.tags }}' | sed 's/^/- /'
             echo
-            echo "RAG API tags:"
-            echo '${{ steps.rag_meta.outputs.tags }}' | sed 's/^/- /'
+            echo "RAG API publication: **${rag_status}**"
+            echo
+            echo "Reason: \`${RAG_REASON}\`"
+            if [[ "${RAG_PUBLISH}" == "true" ]]; then
+              echo
+              echo "RAG API tags:"
+              echo "${RAG_TAGS}" | sed 's/^/- /'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

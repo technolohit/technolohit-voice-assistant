@@ -46,6 +46,9 @@ function approvedBinding(overrides = {}) {
       state: "approved",
       approved_by: "phase12a-test",
       approved_at: "2026-06-22T00:00:00Z",
+      canary_only: true,
+      production_approved: false,
+      global_approval: false,
     },
     active: true,
     rollback_target: {
@@ -198,7 +201,16 @@ test("12A: pending, inactive, revoked, unapproved, and non-canary bindings fail 
   assert.equal(load({ active: false }).reason, "binding_inactive");
   assert.equal(load({ status: "revoked" }).reason, "binding_revoked");
   assert.equal(
-    load({ approval: { state: "pending", approved_by: null, approved_at: null } }).reason,
+    load({
+      approval: {
+        state: "pending",
+        approved_by: null,
+        approved_at: null,
+        canary_only: true,
+        production_approved: false,
+        global_approval: false,
+      },
+    }).reason,
     "binding_approval_not_approved",
   );
   assert.equal(load({ scope: "production" }).reason, "binding_scope_not_canary");

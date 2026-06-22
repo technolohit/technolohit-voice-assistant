@@ -10,22 +10,68 @@ Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md]
 
 **Production must return to v3** immediately after QA, even on pass.
 
-## FUTURE Sysadmin gate: Phase 12A playbook binding preflight
+## FUTURE Sysadmin gate: Phase 12B approved playbook canary
 
 This section is readiness guidance only. It has not been executed on production and does not claim a live pass.
 
-Before any future supervised canary using the published playbook:
+Release target:
 
-1. Obtain separate written canary approval and create an approved, active, `scope=canary` binding outside the immutable published playbook.
-2. Set `VOICE_V4_PLAYBOOK_BINDING_PATH` in the authoritative voice-bridge runtime env together with the existing v4 canary gates and `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=true`.
-3. Recreate the voice-bridge container.
-4. Run:
+```text
+thnhit/technhvoice:voice-bridge-v1.36.0
+```
+
+Packaged binding:
+
+```text
+/app/config/playbook-bindings/technolohit.main_voice_sales.v1.canary.approved.json
+```
+
+The canary uses three stages. Do not merge or skip them.
+
+### Stage 1 - safe baseline
+
+Verify v3/off, zero active Asterisk calls, rollback image recorded, then run:
 
 ```bash
+docker exec technolohit-voice-bridge npm run playbook:canary-artifact-validate
+```
+
+This validates packaged bytes only. It does not approve a call.
+
+### Stage 2 - temporary v4/playbook preflight window
+
+Edit only the authoritative `/opt/technolohit-voice/voice-bridge/.env`:
+
+```env
+VOICE_RUNTIME_VERSION=v4
+VOICE_V4_REALTIME_ENABLED=true
+VOICE_V4_CANARY_ENABLED=true
+VOICE_V4_LIVE_AUDIOSOCKET_ENABLED=true
+VOICE_V4_LIVE_CANARY_ALLOWLIST=bridge:
+VOICE_V4_BARGE_IN_ENABLED=true
+VOICE_V4_STT_PROVIDER=openai
+VOICE_V4_TTS_PROVIDER=openai
+VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=true
+VOICE_V4_PLAYBOOK_BINDING_PATH=config/playbook-bindings/technolohit.main_voice_sales.v1.canary.approved.json
+VOICE_RAG_ENABLED=false
+VOICE_RAG_SALES_ANSWERER_ENABLED=false
+```
+
+Recreate voice-bridge, verify rendered Compose and container env, then run:
+
+```bash
+docker exec technolohit-voice-bridge npm run playbook:canary-artifact-validate
 docker exec technolohit-voice-bridge npm run playbook:canary-preflight
 ```
 
-Abort unless output includes:
+### Stage 3 - one supervised call
+
+Place exactly one call only after Codex reviews Stage 2 output and gives written
+approval. After the call, wait for post-call completion, collect the new
+session by a timestamp marker/Asterisk processed-count increment, and restore
+v3/off.
+
+Abort Stage 3 unless runtime output includes:
 
 ```text
 playbook_canary_preflight=pass
@@ -36,7 +82,10 @@ failure_count=0
 failures=none
 ```
 
-The preflight must run before any PSTN canary call. A pending, inactive, revoked, wrong-scope, mismatched, missing, corrupt, candidate, or draft binding is an abort condition and runtime must remain on hardcoded behavior.
+The preflight must run before any PSTN canary call. A pending, inactive,
+revoked, wrong-scope, mismatched, missing, corrupt, candidate, or draft binding
+is an abort condition. The approved artifact is canary-only and does not imply
+production/global approval.
 
 ---
 

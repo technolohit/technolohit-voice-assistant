@@ -125,6 +125,20 @@ export function validatePlaybookRuntimeBinding(binding) {
     failures.push("binding_approval_invalid");
   } else if (!["pending", "approved", "revoked"].includes(binding.approval.state)) {
     failures.push("binding_approval_state_invalid");
+  } else if (
+    binding.status === "approved" ||
+    binding.approval.state === "approved" ||
+    binding.active === true
+  ) {
+    if (binding.approval.canary_only !== true) {
+      failures.push("binding_approval_canary_only_required");
+    }
+    if (binding.approval.production_approved !== false) {
+      failures.push("binding_approval_production_must_be_false");
+    }
+    if (binding.approval.global_approval !== false) {
+      failures.push("binding_approval_global_must_be_false");
+    }
   }
   if (!binding.rollback_target || typeof binding.rollback_target !== "object") {
     failures.push("binding_rollback_target_invalid");

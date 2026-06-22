@@ -20,6 +20,11 @@ This runbook replaces manual `scp` source-folder deploys for the TechnoloHit voi
 
 For production, pin `VOICE_BRIDGE_IMAGE` to the git SHA tag.
 
+Semantic voice-only releases do not require a matching new rag-api image.
+GitHub Actions publishes voice-bridge for every release tag and skips rag-api
+when `rag-api/**` is unchanged since the previous semantic tag. Keep the
+currently approved immutable rag-api image pinned in that case.
+
 ## Local Release
 
 Prerequisites:

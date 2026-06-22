@@ -955,6 +955,37 @@ Phase 12A adds a separate schema-validated runtime binding without modifying the
 
 Implementation evidence: [phase12a_immutable_playbook_runtime_binding_report.md](phase12a_immutable_playbook_runtime_binding_report.md).
 
+### Phase 12B: Approved Canary Binding + Release Readiness
+
+**Status (2026-06-22): IMPLEMENTATION READY; live canary not yet run.**
+
+Phase 12B adds a repository-packaged, separately approved canary binding
+without changing the immutable published playbook or production defaults.
+
+- Approved binding:
+  `voice-bridge/config/playbook-bindings/technolohit.main_voice_sales.v1.canary.approved.json`
+- Non-live release validation:
+  `npm run playbook:canary-artifact-validate`
+- Runtime/server guard remains:
+  `npm run playbook:canary-preflight`
+- Release recommendation:
+  `v1.36.0` / `thnhit/technhvoice:voice-bridge-v1.36.0`
+- Docker Publish always publishes voice-bridge and skips rag-api when
+  `rag-api/**` is unchanged since the previous semantic-version tag.
+
+- [x] Successful: Pending sample remains pending/inactive and cannot activate runtime.
+- [x] Successful: Approved binding is explicit canary-only approval, active only when all runtime gates are enabled.
+- [x] Successful: Exact published version and SHA-256 are test-visible and validated.
+- [x] Successful: Docker build context contains the published playbook and approved binding.
+- [x] Successful: Non-live artifact validator does not claim server/runtime activation.
+- [x] Successful: Default v3/playbook-off runtime fails canary preflight safely.
+- [x] Successful: Voice-only release does not publish a new rag-api tag when rag-api is unchanged.
+- [ ] Successful: `v1.36.0` release is committed, tagged, and published.
+- [ ] Successful: One supervised playbook canary passes and is rolled back to v3/off.
+
+Implementation evidence:
+[phase12b_approved_canary_binding_and_release_readiness_report.md](phase12b_approved_canary_binding_and_release_readiness_report.md).
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:
