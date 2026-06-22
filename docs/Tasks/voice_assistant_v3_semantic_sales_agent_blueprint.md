@@ -919,6 +919,25 @@ Feature flag / rollout:
 
 ### Phase 11: Playbook Eval / Review / Publish Version
 
+**Status (2026-06-22): COMPLETE (governance only).** Mojtaba approved the published v1 content. Runtime activation and canary work have not started.
+
+**Closed prerequisite:** Phase 10 closed at commit `389e0d0254797857b389677e7a5c3b9633355729` (712 tests, playbook eval 33/0/0, decision eval 13/0/0).
+
+**Delivered in Phase 11:**
+
+- Founder review matrix + drift report: `docs/Tasks/phase11_playbook_review_and_publish_candidate_report.md`
+- Immutable publish candidate (inactive): `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.publish-candidate.json` (`technolohit-playbook-v1-20260620-candidate`)
+- Immutable published artifact (inactive): `voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.published.json` (`technolohit-playbook-v1-20260622-published`)
+- Two-mode non-live validation: `voice-bridge/src/v4/playbook-publish-validator.js`, `npm run playbook:publish-validate`, `npm run playbook:publish-validate:published`
+- Phase 11 tests: `voice-bridge/tests/v4-phase11-playbook-publish-validator.test.js`
+- Phase 11A closure report: `docs/Tasks/phase11a_publish_governance_closure_report.md`
+
+**Candidate state:** `status=draft`, `runtime_binding.active=false`, `approved_for_runtime=false`, `founder_approval=pending` (Mojtaba).
+
+**Published state:** `status=published`, `approval.approved_for_runtime=true`, `founder_approval=approved`, `runtime_binding.active=false`, `canary_approval=pending`.
+
+**Explicitly not part of Phase 11:** runtime activation, canary, Docker publish, or v4 flag enablement. Publishing content and activating runtime remain separate approvals.
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:
@@ -959,11 +978,11 @@ Rules:
 - No production rollout starts until canary repeatability passes.
 - Published playbooks must carry explicit approval metadata.
 
-- [ ] Successful: Eval scenarios are loaded from or traceable to playbook version.
-- [ ] Successful: Eval snapshot is privacy-safe and keyed by `playbook_version`.
-- [ ] Successful: All required eval categories pass before canary.
-- [ ] Successful: Review/publish metadata exists.
-- [ ] Successful: Canary remains blocked until eval pass is documented.
+- [x] Successful: Eval scenarios are loaded from or traceable to playbook version (publish candidate `eval_coverage` map).
+- [x] Successful: Eval snapshot is privacy-safe and keyed by `playbook_version` (existing formatters + publish CLI privacy guard).
+- [x] Successful: All required eval categories pass before canary (validated by `playbook:publish-validate` on candidate).
+- [x] Successful: Review/publish metadata exists (`publish_candidate`, `approval`, changelog, source commit SHA).
+- [x] Successful: Canary remains blocked after content publication until a separate activation/canary approval (`runtime_binding.active=false`).
 
 ## Next Implementation Task
 

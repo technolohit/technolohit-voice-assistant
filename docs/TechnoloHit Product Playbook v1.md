@@ -496,11 +496,11 @@ Ja.
 
 If Caller ID is valid:
 
-Vielen Dank. Ich nehme die Rückrufanfrage auf. Unser Team meldet sich telefonisch bei Ihnen.
+Vielen Dank. Ich habe die Anfrage aufgenommen. Unser Team meldet sich telefonisch bei Ihnen.
 
 If no valid phone path:
 
-Vielen Dank. Damit unser Team Sie telefonisch erreichen kann, brauche ich eine Telefonnummer. Alternativ können Sie Ihre Anfrage auch über unser Kontaktformular senden.
+Vielen Dank. Für eine telefonische Rückmeldung ist es am besten, wenn Sie Ihre Anfrage über unser Kontaktformular auf www.technolohit.com senden. Unser Team prüft das dann gezielt.
 
 If caller says:
 

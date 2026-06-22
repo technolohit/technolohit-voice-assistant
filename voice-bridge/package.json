@@ -20,7 +20,9 @@
     "test:intelligence": "node --test tests/intelligence-upgrade.test.js",
     "tts:greeting": "node scripts/generate-greeting-openai.js",
     "audio:convert": "sh scripts/convert-greeting.sh",
-    "audio:build": "npm run tts:greeting && npm run audio:convert"
+    "audio:build": "npm run tts:greeting && npm run audio:convert",
+    "playbook:publish-validate": "node scripts/playbook-publish-validate.js --mode=candidate --playbook=config/playbooks/technolohit.main_voice_sales.v1.publish-candidate.json",
+    "playbook:publish-validate:published": "node scripts/playbook-publish-validate.js --mode=published --playbook=config/playbooks/technolohit.main_voice_sales.v1.published.json"
   },
   "engines": {
     "node": ">=20"
