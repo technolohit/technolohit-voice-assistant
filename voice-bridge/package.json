@@ -22,7 +22,8 @@
     "audio:convert": "sh scripts/convert-greeting.sh",
     "audio:build": "npm run tts:greeting && npm run audio:convert",
     "playbook:publish-validate": "node scripts/playbook-publish-validate.js --mode=candidate --playbook=config/playbooks/technolohit.main_voice_sales.v1.publish-candidate.json",
-    "playbook:publish-validate:published": "node scripts/playbook-publish-validate.js --mode=published --playbook=config/playbooks/technolohit.main_voice_sales.v1.published.json"
+    "playbook:publish-validate:published": "node scripts/playbook-publish-validate.js --mode=published --playbook=config/playbooks/technolohit.main_voice_sales.v1.published.json",
+    "playbook:canary-preflight": "node scripts/playbook-canary-preflight.js"
   },
   "engines": {
     "node": ">=20"

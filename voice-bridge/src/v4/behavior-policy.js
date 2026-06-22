@@ -20,7 +20,10 @@
 
 import { normalizeText } from "./redaction.js";
 import { CLOSING_RESPONSE_TEXT, isClosingIntent } from "./closing-intent.js";
-import { loadTenantPlaybookFromPath, resolvePlaybookPath } from "./playbook-loader.js";
+import {
+  isV4CanaryPathActive,
+  loadPlaybookRuntimeBinding,
+} from "./playbook-runtime-binding.js";
 
 /** Hardcoded Phase 10AK / blueprint contract values (runtime defaults). */
 export const HARDCODED_BEHAVIOR_DEFAULTS = Object.freeze({
@@ -71,7 +74,13 @@ export function isPlaybookRuntimeEligible(playbook, { allowDraft = false } = {})
   return { ok: true, reason: "published_approved_active" };
 }
 
-export function resolveBehaviorPolicy({ config = null, playbook = null, allowDraft = null } = {}) {
+export function resolveBehaviorPolicy({
+  config = null,
+  playbook = null,
+  allowDraft = null,
+  v4PathActive = null,
+  testOnlyBindingRoots = null,
+} = {}) {
   if (!config?.v4?.playbookRuntimeEnabled) {
     return hardcodedPolicy("playbook_runtime_disabled");
   }
@@ -81,14 +90,21 @@ export function resolveBehaviorPolicy({ config = null, playbook = null, allowDra
 
   let candidate = playbook;
   if (!candidate) {
-    const configuredPath = String(config?.v4?.playbookPath ?? "").trim();
-    const loadResult = loadTenantPlaybookFromPath(
-      configuredPath || resolvePlaybookPath()
-    );
+    const canaryActive = v4PathActive ?? isV4CanaryPathActive(config);
+    if (!canaryActive) return hardcodedPolicy("v4_canary_path_inactive");
+    const bindingPath = String(config?.v4?.playbookBindingPath ?? "").trim();
+    if (!bindingPath) return hardcodedPolicy("binding_path_required");
+    const loadResult = loadPlaybookRuntimeBinding({
+      bindingPath,
+      tenantId: config?.v4?.tenantId,
+      agentId: config?.v4?.agentId,
+      testOnlyRoots: testOnlyBindingRoots,
+    });
     if (!loadResult.ok) {
-      return hardcodedPolicy(loadResult.error ?? "playbook_load_failed");
+      return hardcodedPolicy(loadResult.reason ?? "binding_load_failed");
     }
     candidate = loadResult.playbook;
+    return buildPlaybookPolicy(candidate, loadResult.reason);
   }
 
   const eligibility = isPlaybookRuntimeEligible(candidate, { allowDraft: draftAllowed });
@@ -96,13 +112,17 @@ export function resolveBehaviorPolicy({ config = null, playbook = null, allowDra
     return hardcodedPolicy(eligibility.reason);
   }
 
+  return buildPlaybookPolicy(candidate, eligibility.reason);
+}
+
+function buildPlaybookPolicy(candidate, reason) {
   const phrases = Array.isArray(candidate.closing_policy?.phrases)
     ? candidate.closing_policy.phrases.filter((phrase) => normalizeText(phrase))
     : [];
 
-  return {
+  const policy = {
     source: "playbook",
-    reason: eligibility.reason,
+    reason,
     playbook_version: candidate.playbook_version ?? null,
     closing_phrases: phrases.length ? phrases : null,
     closing_response:
@@ -121,6 +141,12 @@ export function resolveBehaviorPolicy({ config = null, playbook = null, allowDra
         ? `${candidate.lead_capture_policy.preferred_wording} Möchten Sie telefonisch oder per E-Mail starten?`
         : HARDCODED_BEHAVIOR_DEFAULTS.callback_lead_capture_response,
   };
+  Object.defineProperty(policy, "playbook", {
+    value: candidate,
+    enumerable: false,
+    writable: false,
+  });
+  return policy;
 }
 
 export function getClosingPhrases(policy = null) {

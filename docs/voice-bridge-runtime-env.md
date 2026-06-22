@@ -105,23 +105,37 @@ VOICE_V4_INTERRUPTION_CONTEXT_SPIKE_ENABLED=false
 
 Production may override agent config via `VOICE_AGENT_CONFIG_PATH` or mount a replacement file. The voice-bridge Docker image includes the default seed at `/app/config/agents/technolohit.main_voice_sales.v4.json`.
 
-### Phase 10AN — playbook-driven behavior (default off)
+### Phase 12A — immutable playbook runtime binding (default off)
 
-Opt-in only. With defaults unchanged, runtime behavior is identical to the hardcoded Phase 10AK values and the playbook file is never loaded at call time. The Phase 10AM draft playbook is **not** production-active.
+Opt-in only. With defaults unchanged, runtime behavior is identical to the hardcoded Phase 10AK values and neither a binding nor playbook file is read at call time. Runtime activation requires an approved, active, canary-scoped binding to the exact immutable published artifact.
 
 ```env
 VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=false
-VOICE_V4_PLAYBOOK_PATH=/app/config/playbooks/technolohit.main_voice_sales.v1.json
+VOICE_V4_PLAYBOOK_BINDING_PATH=
+VOICE_V4_PLAYBOOK_PATH=
 VOICE_V4_PLAYBOOK_ALLOW_DRAFT=false
 ```
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` | `false` | Master switch for playbook-sourced behavior: closing/fallback wording (10AN), company-general answers, product explanations, and approved pricing phrases (10F). |
-| `VOICE_V4_PLAYBOOK_PATH` | empty (resolver falls back to repo default playbook path) | Absolute or package-relative path to a structured tenant playbook JSON file. |
-| `VOICE_V4_PLAYBOOK_ALLOW_DRAFT` | `false` | Explicit test/canary override to allow a `status=draft` playbook. Never enable in production. |
+| `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED` | `false` | Master switch. It is insufficient by itself: the active v4 canary path and a valid binding are also required. |
+| `VOICE_V4_PLAYBOOK_BINDING_PATH` | empty | Absolute or package-relative path to the runtime binding JSON. It must resolve under the package/container `config/playbook-bindings` directory; absolute paths outside that approved root are rejected. |
+| `VOICE_V4_PLAYBOOK_PATH` | empty | Legacy Phase 10AN setting. Phase 12A bound runtime does not read it; retain empty. |
+| `VOICE_V4_PLAYBOOK_ALLOW_DRAFT` | `false` | Legacy test/eval injection override only. Filesystem runtime binding rejects draft and candidate artifacts regardless of this value. |
 
-Safety: missing/invalid/unapproved/inactive playbooks fail closed to hardcoded defaults. Draft playbooks are rejected unless `VOICE_V4_PLAYBOOK_ALLOW_DRAFT=true`.
+The repository sample binding is `voice-bridge/config/playbook-bindings/technolohit.main_voice_sales.v1.canary.pending.json`; it is deliberately `status=pending` and `active=false`. It is not a production activation artifact.
+
+Runtime eligibility requires all of: `VOICE_RUNTIME_VERSION=v4`, realtime enabled, canary enabled, live AudioSocket enabled, playbook runtime enabled, explicit binding path under the approved binding root, approved/active canary binding, and exact SHA-256/version/tenant/agent match. Existing binding files are checked with `realpath`, so a symlink within the approved directory cannot escape to another filesystem location.
+
+The external binding is the only activation authority. The checksum-verified published playbook must retain an explicit boolean `runtime_binding.active=false`; embedded `true`, missing, or non-boolean activation metadata is rejected. Missing, corrupt, outside-root, traversing, symlink-escaping, draft, candidate, revoked, pending, inactive, or mismatched inputs fail closed to hardcoded behavior without crashing.
+
+Privacy-safe preflight:
+
+```bash
+docker exec technolohit-voice-bridge npm run playbook:canary-preflight
+```
+
+Abort unless it exits zero and prints `playbook_canary_preflight=pass`, `binding_valid=true`, `checksum_verified=true`, and `failure_count=0`.
 
 ### Phase 10AR — questionnaire runtime (default off)
 

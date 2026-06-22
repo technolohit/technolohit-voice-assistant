@@ -938,6 +938,23 @@ Feature flag / rollout:
 
 **Explicitly not part of Phase 11:** runtime activation, canary, Docker publish, or v4 flag enablement. Publishing content and activating runtime remain separate approvals.
 
+### Phase 12A: Immutable Playbook Runtime Binding + Canary Readiness
+
+Phase 12A adds a separate schema-validated runtime binding without modifying the immutable Phase 11 published playbook.
+
+- Runtime binding contract: `voice-bridge/src/v4/playbook-runtime-binding.js`
+- Default-safe sample: `voice-bridge/config/playbook-bindings/technolohit.main_voice_sales.v1.canary.pending.json`
+- Canary preflight: `npm run playbook:canary-preflight`
+- Runtime integration: `behavior-policy.js` resolves the binding once per active v4 canary call; the checksum-verified playbook instance is passed to product, questionnaire, and decision consumers.
+- Required gates: v4 runtime + realtime + canary + live AudioSocket + playbook runtime flag + explicit approved active canary binding under `config/playbook-bindings`.
+- Binding trust boundary: absolute and package-relative paths must resolve under the approved binding root; existing files are checked with `realpath` to reject symlink escapes.
+- Activation authority: only the external binding may activate runtime. The checksum-verified published artifact must keep explicit boolean `runtime_binding.active=false`.
+- Rejections: outside-root path, relative traversal, symlink escape, missing/corrupt binding, embedded active/missing/invalid activation metadata, draft/candidate artifact, checksum/version/tenant/agent mismatch, non-canary scope, pending/inactive/revoked/unapproved metadata.
+- Failure behavior: hardcoded defaults, no crash. With the master flag off, no binding or playbook read occurs and v3/default behavior remains unchanged.
+- The repository does not contain an active approved production binding. Sysadmin canary approval and creation of an approved binding remain future operational work.
+
+Implementation evidence: [phase12a_immutable_playbook_runtime_binding_report.md](phase12a_immutable_playbook_runtime_binding_report.md).
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:

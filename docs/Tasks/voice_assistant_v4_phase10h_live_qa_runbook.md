@@ -10,6 +10,34 @@ Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md]
 
 **Production must return to v3** immediately after QA, even on pass.
 
+## FUTURE Sysadmin gate: Phase 12A playbook binding preflight
+
+This section is readiness guidance only. It has not been executed on production and does not claim a live pass.
+
+Before any future supervised canary using the published playbook:
+
+1. Obtain separate written canary approval and create an approved, active, `scope=canary` binding outside the immutable published playbook.
+2. Set `VOICE_V4_PLAYBOOK_BINDING_PATH` in the authoritative voice-bridge runtime env together with the existing v4 canary gates and `VOICE_V4_PLAYBOOK_RUNTIME_ENABLED=true`.
+3. Recreate the voice-bridge container.
+4. Run:
+
+```bash
+docker exec technolohit-voice-bridge npm run playbook:canary-preflight
+```
+
+Abort unless output includes:
+
+```text
+playbook_canary_preflight=pass
+binding_valid=true
+binding_reason=binding_approved_active
+checksum_verified=true
+failure_count=0
+failures=none
+```
+
+The preflight must run before any PSTN canary call. A pending, inactive, revoked, wrong-scope, mismatched, missing, corrupt, candidate, or draft binding is an abort condition and runtime must remain on hardcoded behavior.
+
 ---
 
 ## Paths and containers

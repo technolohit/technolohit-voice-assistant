@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig } from "../src/config.js";
 import { loadAgentConfig } from "../src/v4/agent-config.js";
+import { loadTenantPlaybook } from "../src/v4/playbook-loader.js";
 import {
   HARDCODED_BEHAVIOR_DEFAULTS,
   resolveBehaviorPolicy,
@@ -119,43 +120,52 @@ test("10AN: default env does not load playbook at runtime", () => {
   });
 });
 
-test("10AN: missing playbook fails closed to hardcoded defaults", () => {
+test("10AN/12A: missing binding fails closed to hardcoded defaults", () => {
   withEnv(
     {
       VOICE_V4_PLAYBOOK_RUNTIME_ENABLED: "true",
-      VOICE_V4_PLAYBOOK_PATH: "C:/definitely/missing/playbook.json",
+      VOICE_RUNTIME_VERSION: "v4",
+      VOICE_V4_REALTIME_ENABLED: "true",
+      VOICE_V4_CANARY_ENABLED: "true",
+      VOICE_V4_LIVE_AUDIOSOCKET_ENABLED: "true",
+      VOICE_V4_PLAYBOOK_BINDING_PATH:
+        "config/playbook-bindings/definitely-missing-binding.json",
     },
     () => {
       const policy = resolveBehaviorPolicy({ config: loadConfig() });
       assert.equal(policy.source, "hardcoded_default");
-      assert.equal(policy.reason, "playbook_not_found");
+      assert.equal(policy.reason, "binding_not_found");
       assert.equal(getClosingResponse(policy), CLOSING_RESPONSE_TEXT);
     }
   );
 });
 
-test("10AN: invalid playbook file fails closed to hardcoded defaults", () => {
+test("10AN/12A: invalid binding file fails closed to hardcoded defaults", () => {
   withEnv(
     {
       VOICE_V4_PLAYBOOK_RUNTIME_ENABLED: "true",
       // Valid JSON but not a valid playbook (missing required fields).
-      VOICE_V4_PLAYBOOK_PATH: "package.json",
+      VOICE_RUNTIME_VERSION: "v4",
+      VOICE_V4_REALTIME_ENABLED: "true",
+      VOICE_V4_CANARY_ENABLED: "true",
+      VOICE_V4_LIVE_AUDIOSOCKET_ENABLED: "true",
+      VOICE_V4_PLAYBOOK_BINDING_PATH: "package.json",
     },
     () => {
       const policy = resolveBehaviorPolicy({ config: loadConfig() });
       assert.equal(policy.source, "hardcoded_default");
-      assert.equal(policy.reason, "playbook_validation_failed");
+      assert.match(policy.reason, /^binding_/);
       assert.equal(getClosingResponse(policy), CLOSING_RESPONSE_TEXT);
     }
   );
 });
 
-test("10AN: draft playbook is rejected without explicit draft override", () => {
+test("10AN/12A: runtime enabled without active canary fails closed", () => {
   withEnv({ VOICE_V4_PLAYBOOK_RUNTIME_ENABLED: "true" }, () => {
     // Default path resolves to the real Phase 10AM draft playbook.
     const policy = resolveBehaviorPolicy({ config: loadConfig() });
     assert.equal(policy.source, "hardcoded_default");
-    assert.equal(policy.reason, "draft_playbook_not_allowed");
+    assert.equal(policy.reason, "v4_canary_path_inactive");
     assert.equal(getClosingResponse(policy), CLOSING_RESPONSE_TEXT);
   });
 });
@@ -167,7 +177,13 @@ test("10AN: draft override loads the real draft playbook with equivalent closing
       VOICE_V4_PLAYBOOK_ALLOW_DRAFT: "true",
     },
     () => {
-      const policy = resolveBehaviorPolicy({ config: loadConfig() });
+      const loaded = loadTenantPlaybook();
+      assert.equal(loaded.ok, true);
+      const policy = resolveBehaviorPolicy({
+        config: loadConfig(),
+        playbook: loaded.playbook,
+        allowDraft: true,
+      });
       assert.equal(policy.source, "playbook");
       assert.equal(policy.reason, "draft_override");
       // The draft playbook mirrors Phase 10AK — equivalence check.
@@ -346,6 +362,7 @@ test("10AN: v3 default route remains unchanged", () => {
   assert.equal(config.v4.runtimeVersion, "v3");
   assert.equal(config.v4.playbookRuntimeEnabled, false);
   assert.equal(config.v4.playbookPath, "");
+  assert.equal(config.v4.playbookBindingPath, "");
   assert.equal(config.v4.playbookAllowDraft, false);
   assert.equal(config.rag?.enabled ?? false, false);
 });

@@ -245,6 +245,9 @@ export function loadConfig() {
     false,
   );
   const v4PlaybookPath = String(process.env.VOICE_V4_PLAYBOOK_PATH ?? "").trim();
+  const v4PlaybookBindingPath = String(
+    process.env.VOICE_V4_PLAYBOOK_BINDING_PATH ?? "",
+  ).trim();
   const v4PlaybookAllowDraft = readBool("VOICE_V4_PLAYBOOK_ALLOW_DRAFT", false);
   // Phase 10AR: opt-in questionnaire follow-up after product/pricing answers (default-off).
   const v4QuestionnaireRuntimeEnabled = readBool(
@@ -446,6 +449,7 @@ export function loadConfig() {
       agentConfigPath,
       playbookRuntimeEnabled: v4PlaybookRuntimeEnabled,
       playbookPath: v4PlaybookPath,
+      playbookBindingPath: v4PlaybookBindingPath,
       playbookAllowDraft: v4PlaybookAllowDraft,
       questionnaireRuntimeEnabled: v4QuestionnaireRuntimeEnabled,
       agentBehaviorDecisionEnabled: v4AgentBehaviorDecisionEnabled,

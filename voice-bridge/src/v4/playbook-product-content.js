@@ -28,6 +28,12 @@ export function isPlaybookProductContentRuntimeEnabled(
   const draftAllowed = Boolean(config?.v4?.playbookAllowDraft);
   const validation = validatePlaybook(candidate);
   if (!validation.ok) return false;
+  if (
+    behaviorPolicy?.reason === "binding_approved_active" &&
+    behaviorPolicy?.playbook_version === candidate.playbook_version
+  ) {
+    return true;
+  }
   return isPlaybookRuntimeEligible(candidate, { allowDraft: draftAllowed }).ok;
 }
 
@@ -50,6 +56,12 @@ export function loadPlaybookForProductContent({
   const draftAllowed = Boolean(config?.v4?.playbookAllowDraft);
   const validation = validatePlaybook(candidate);
   if (!validation.ok) return null;
+  if (
+    behaviorPolicy?.reason === "binding_approved_active" &&
+    behaviorPolicy?.playbook_version === candidate.playbook_version
+  ) {
+    return candidate;
+  }
   if (!isPlaybookRuntimeEligible(candidate, { allowDraft: draftAllowed }).ok) return null;
   return candidate;
 }

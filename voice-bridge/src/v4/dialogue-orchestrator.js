@@ -101,7 +101,8 @@ export function createDialogueOrchestrator({
     config,
     // Phase 10AN: resolved once per call; hardcoded defaults unless the
     // opt-in playbook runtime flag is enabled (fail-closed resolver).
-    behaviorPolicy: behaviorPolicy ?? resolveBehaviorPolicy({ config }),
+    behaviorPolicy:
+      behaviorPolicy ?? resolveBehaviorPolicy({ config, v4PathActive }),
     runtimeContext,
     memory: memory ?? runtimeContext?.memory ?? null,
     stateMachine: stateMachine ?? runtimeContext?.stateMachine ?? null,
@@ -369,6 +370,7 @@ export async function decideNextAction(orchestrator, input = {}) {
     closedDomain,
     interruptFollowupTimeout: Boolean(input.interruptFollowupTimeout),
     behaviorPolicy: orchestrator.behaviorPolicy,
+    playbook: orchestrator.behaviorPolicy?.playbook ?? null,
     config: orchestrator.config,
     v4PathActive: Boolean(orchestrator.v4PathActive),
     lastAssistantText: orchestrator.lastAssistantText,
@@ -581,6 +583,7 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
       state: toState,
       intent: orchestrator.lastResolvedIntent ?? resolvedPlan?.intent ?? null,
       plan: resolvedPlan,
+      playbook: orchestrator.behaviorPolicy?.playbook,
     }),
   });
 

@@ -128,7 +128,12 @@ test("10AO: eval snapshot is keyed by playbook_version and contains no raw calle
 
 test("10AO: draft playbook remains rejected for runtime without explicit override", () => {
   withEnv({ VOICE_V4_PLAYBOOK_RUNTIME_ENABLED: "true" }, () => {
-    const policy = resolveBehaviorPolicy({ config: loadConfig() });
+    const loaded = loadTenantPlaybook();
+    assert.equal(loaded.ok, true);
+    const policy = resolveBehaviorPolicy({
+      config: loadConfig(),
+      playbook: loaded.playbook,
+    });
     assert.equal(policy.source, "hardcoded_default");
     assert.equal(policy.reason, "draft_playbook_not_allowed");
   });
