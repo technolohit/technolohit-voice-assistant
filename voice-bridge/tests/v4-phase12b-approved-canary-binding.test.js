@@ -22,6 +22,7 @@ import {
 } from "../src/v4/playbook-canary-artifact-validator.js";
 import { runPlaybookCanaryPreflight } from "../src/v4/playbook-canary-preflight.js";
 import { determineRagApiPublication } from "../../scripts/ci/rag-api-publication-policy.js";
+import { resolveDockerImageMetadata } from "../../scripts/ci/docker-image-metadata-policy.js";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -161,6 +162,44 @@ test("12B: Docker Publish always publishes voice and conditionally publishes RAG
     /- name: Build and push rag-api[\s\S]*?if:\s*steps\.rag_changes\.outputs\.publish == 'true'/,
   );
   assert.match(workflow, /RAG API publication:.*skipped|rag_status/);
+  assert.match(workflow, /resolve-docker-image-metadata\.js/);
+  assert.match(
+    workflow,
+    /org\.opencontainers\.image\.version=\$\{\{ steps\.meta\.outputs\.voice_oci_version \}\}/,
+  );
+  assert.match(
+    workflow,
+    /org\.opencontainers\.image\.version=\$\{\{ steps\.meta\.outputs\.rag_oci_version \}\}/,
+  );
+});
+
+test("12B follow-up: semver tags set deterministic OCI versions", () => {
+  const result = resolveDockerImageMetadata({
+    sha: "1234567890abcdef",
+    refType: "tag",
+    refName: "v1.36.1",
+    eventName: "push",
+  });
+  assert.equal(result.shortSha, "1234567");
+  assert.equal(result.versionTag, "v1.36.1");
+  assert.equal(result.voiceOciVersion, "voice-bridge-v1.36.1");
+  assert.equal(result.ragOciVersion, "rag-api-v1.36.1");
+  assert.equal(result.publishLatest, true);
+});
+
+test("12B follow-up: manual builds use short SHA OCI versions", () => {
+  const result = resolveDockerImageMetadata({
+    sha: "abcdef1234567890",
+    refType: "branch",
+    refName: "main",
+    eventName: "workflow_dispatch",
+    publishLatestInput: "false",
+  });
+  assert.equal(result.shortSha, "abcdef1");
+  assert.equal(result.versionTag, "");
+  assert.equal(result.voiceOciVersion, "voice-bridge-abcdef1");
+  assert.equal(result.ragOciVersion, "rag-api-abcdef1");
+  assert.equal(result.publishLatest, false);
 });
 
 test("12B: approved binding rejects production_approved or global_approval", () => {

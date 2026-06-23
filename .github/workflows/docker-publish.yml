@@ -45,23 +45,13 @@ jobs:
 
       - name: Set build metadata
         id: meta
-        shell: bash
-        run: |
-          set -euo pipefail
-          short_sha="${GITHUB_SHA::7}"
-          version_tag=""
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            version_tag="${GITHUB_REF_NAME}"
-          fi
-
-          publish_latest="true"
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            publish_latest="${{ inputs.publish_latest }}"
-          fi
-
-          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
-          echo "version_tag=${version_tag}" >> "$GITHUB_OUTPUT"
-          echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+          RELEASE_EVENT_NAME: ${{ github.event_name }}
+          PUBLISH_LATEST_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_latest || 'true' }}
+        run: node scripts/ci/resolve-docker-image-metadata.js
 
       - name: Determine RAG API publication
         id: rag_changes
@@ -89,6 +79,8 @@ jobs:
             type=raw,value=voice-bridge-${{ steps.meta.outputs.short_sha }}
             type=raw,value=voice-bridge-latest,enable=${{ steps.meta.outputs.publish_latest == 'true' }}
             type=raw,value=voice-bridge-${{ steps.meta.outputs.version_tag }},enable=${{ steps.meta.outputs.version_tag != '' }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.voice_oci_version }}
 
       - name: Build and push voice-bridge
         uses: docker/build-push-action@v6
@@ -112,6 +104,8 @@ jobs:
             type=raw,value=rag-api-${{ steps.meta.outputs.short_sha }}
             type=raw,value=rag-api-latest,enable=${{ steps.meta.outputs.publish_latest == 'true' }}
             type=raw,value=rag-api-${{ steps.meta.outputs.version_tag }},enable=${{ steps.meta.outputs.version_tag != '' }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.rag_oci_version }}
 
       - name: Build and push rag-api
         if: steps.rag_changes.outputs.publish == 'true'

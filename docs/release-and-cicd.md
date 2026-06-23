@@ -51,6 +51,20 @@ version tag. The workflow fetches full tag history and reports whether rag-api
 was published or skipped. Manual runs may set `publish_rag_api=auto|true|false`;
 use `auto` unless an explicit rebuild is required.
 
+OCI version labels are explicit and do not depend on Docker tag ordering:
+
+- semver tag `v1.36.1` produces `voice-bridge-v1.36.1`;
+- a manual/non-tag build produces `voice-bridge-<shortsha>`;
+- when rag-api is selected for publication, the corresponding labels are
+  `rag-api-vX.Y.Z` or `rag-api-<shortsha>`.
+
+Historical note: `voice-bridge-v1.36.0` has OCI version
+`voice-bridge-74428d3`. This is accepted because its full revision
+`74428d326476e967e49daaf25c63f5959211eede` and immutable RepoDigest
+`sha256:e34527d0a2d940be1a51e8f45dd3f19235b37125d13be324745fc8a379fd1a11`
+were verified. The image was not republished; explicit labels apply to future
+releases only.
+
 For a voice-only release such as Phase 12B `v1.36.0`, expected output is:
 
 ```text
@@ -184,6 +198,8 @@ Tag behavior:
 - voice-bridge is always built and published;
 - rag-api uses the diff from the nearest previous reachable semver tag;
 - no previous semver tag means conservative rag-api publication;
+- OCI version labels use the semver service tag for tag releases and the
+  service-prefixed short SHA for manual/non-tag builds;
 - workflow summary records the decision and reason.
 
 This avoids failing normal `main` pushes before Docker Hub secrets are configured.

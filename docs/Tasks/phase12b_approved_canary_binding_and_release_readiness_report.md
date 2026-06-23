@@ -2,7 +2,8 @@
 
 Date: 2026-06-22
 
-Status: reviewed and ready to commit; no deploy, runtime activation, live canary, or tag has occurred.
+Status: released as `v1.36.0`; deployment stopped safely before activation while
+the published OCI version label was reviewed separately.
 
 ## Scope
 
@@ -85,6 +86,29 @@ The workflow summary reports `published` or `skipped` and the reason. For
 `v1.36.0`, the expected result is voice-bridge published and rag-api skipped
 because no rag-api source changed since `v1.35.3`.
 
+### v1.36.0 release metadata follow-up
+
+The immutable `v1.36.0` image was verified with:
+
+```text
+revision=74428d326476e967e49daaf25c63f5959211eede
+RepoDigest=sha256:e34527d0a2d940be1a51e8f45dd3f19235b37125d13be324745fc8a379fd1a11
+org.opencontainers.image.version=voice-bridge-74428d3
+```
+
+The short-SHA OCI version label is accepted for this already-published image
+because both the immutable digest and full revision match the approved release.
+`v1.36.0` was not republished or mutated.
+
+Root cause: Docker metadata received the short-SHA raw tag before the semver raw
+tag and derived the version label from that first tag. Future workflows set the
+OCI version label explicitly:
+
+- tag `v1.36.1` -> `voice-bridge-v1.36.1`;
+- manual/non-tag build -> `voice-bridge-<shortsha>`;
+- `rag-api-vX.Y.Z` is used only when rag-api is actually published for a tagged
+  release; its conditional publication policy is unchanged.
+
 ## Safety Boundaries
 
 - Production defaults remain `VOICE_RUNTIME_VERSION=v3`.
@@ -93,7 +117,8 @@ because no rag-api source changed since `v1.35.3`.
 - No conversational planner, RAG, questionnaire, callback, or lead behavior changed.
 - No rag-api source changed.
 - No deploy workflow or live server script changed.
-- No Docker build/push, deploy, live QA, commit, push, or tag was performed.
+- This metadata follow-up performs no Docker build/push, deploy, live QA, tag,
+  or mutation of `v1.36.0`.
 - `docs/Tasks/logs.txt` was not touched.
 
 ## Verification
