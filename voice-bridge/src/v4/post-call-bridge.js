@@ -16,7 +16,8 @@ export function buildV4PostCallSummaryMetadata({
   memory = {},
   agentConfig = null,
   leadCandidate = null,
-  options = {}
+  options = {},
+  persistMetadata = null,
 } = {}) {
   const version = agentConfig?.ok
     ? getAgentVersionMetadata(agentConfig.config)
@@ -43,8 +44,12 @@ export function buildV4PostCallSummaryMetadata({
     agent_id: version.agent_id,
     agent_config_version: version.agent_config_version ?? null,
     prompt_playbook_version: version.prompt_playbook_version ?? null,
+    agent_config_playbook_version: version.prompt_playbook_version ?? null,
     knowledge_version: version.knowledge_version ?? null,
     runtime_version: version.runtime_version ?? "v4",
+    playbook_version: persistMetadata?.playbook_version ?? null,
+    playbook_binding_version: persistMetadata?.playbook_binding_version ?? null,
+    playbook_source: persistMetadata?.playbook_source ?? null,
     product_interest: candidate.product_interest ?? "none",
     customer_type: candidate.customer_type ?? null,
     contact_preference: candidate.contact_preference ?? "unknown",
@@ -90,7 +95,8 @@ export function finalizeV4PostCallHandoff(orchestrator, options = {}) {
     memory,
     agentConfig: orchestrator?.agentConfig ?? null,
     leadCandidate,
-    options
+    options,
+    persistMetadata: orchestrator?.persistMetadata ?? orchestrator?.runtimeContext?.persistMetadata ?? null,
   });
   const leadInputs = buildV4PostCallLeadInputs({ memory, leadCandidate, summaryMetadata });
   return {

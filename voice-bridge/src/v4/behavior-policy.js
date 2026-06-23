@@ -43,6 +43,8 @@ function hardcodedPolicy(reason) {
     source: "hardcoded_default",
     reason,
     playbook_version: null,
+    playbook_binding_version: null,
+    playbook_source: null,
     closing_phrases: null,
     ...HARDCODED_BEHAVIOR_DEFAULTS
   };
@@ -104,7 +106,9 @@ export function resolveBehaviorPolicy({
       return hardcodedPolicy(loadResult.reason ?? "binding_load_failed");
     }
     candidate = loadResult.playbook;
-    return buildPlaybookPolicy(candidate, loadResult.reason);
+    return buildPlaybookPolicy(candidate, loadResult.reason, {
+      bindingVersion: loadResult.bindingVersion ?? null,
+    });
   }
 
   const eligibility = isPlaybookRuntimeEligible(candidate, { allowDraft: draftAllowed });
@@ -112,18 +116,27 @@ export function resolveBehaviorPolicy({
     return hardcodedPolicy(eligibility.reason);
   }
 
-  return buildPlaybookPolicy(candidate, eligibility.reason);
+  return buildPlaybookPolicy(candidate, eligibility.reason, {
+    bindingVersion: candidate.runtime_binding?.binding_version ?? null,
+  });
 }
 
-function buildPlaybookPolicy(candidate, reason) {
+function buildPlaybookPolicy(candidate, reason, bindingMeta = {}) {
   const phrases = Array.isArray(candidate.closing_policy?.phrases)
     ? candidate.closing_policy.phrases.filter((phrase) => normalizeText(phrase))
     : [];
+
+  const bindingVersion =
+    typeof bindingMeta.bindingVersion === "string" && bindingMeta.bindingVersion.trim()
+      ? bindingMeta.bindingVersion.trim()
+      : null;
 
   const policy = {
     source: "playbook",
     reason,
     playbook_version: candidate.playbook_version ?? null,
+    playbook_binding_version: bindingVersion,
+    playbook_source: bindingVersion ? "approved_runtime_binding" : "playbook",
     closing_phrases: phrases.length ? phrases : null,
     closing_response:
       candidate.closing_policy?.response || HARDCODED_BEHAVIOR_DEFAULTS.closing_response,

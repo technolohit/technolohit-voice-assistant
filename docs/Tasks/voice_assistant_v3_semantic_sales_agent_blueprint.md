@@ -999,6 +999,22 @@ without changing the immutable published playbook or production defaults.
 Implementation evidence:
 [phase12b_approved_canary_binding_and_release_readiness_report.md](phase12b_approved_canary_binding_and_release_readiness_report.md).
 
+### Phase 12D: First supervised playbook canary (live)
+
+**Status (2026-06-20):** **PARTIAL PASS / ACCEPTANCE FAIL** — one valid v4 canary call (`c411ccac-a282-4115-b883-aafd9d8bea3f`). Handler, binding preflights, product/pricing routing, RAG-off, quality flush, post-call, privacy, and rollback passed. Acceptance failed on runtime playbook provenance, company-general TTS truncation, and incomplete callback evidence when the caller closed during contact preference.
+
+### Phase 12E: Live playbook provenance and spoken integrity
+
+**Status (2026-06-20):** Implemented; pending Codex review before `v1.36.2` tag/deploy.
+
+- Runtime `playbook_version` on `response_plan_created` comes from the verified approved binding only; legacy agent-config prompt version is exposed separately as `agent_config_playbook_version`.
+- Company-general answers survive `prepareLiveAssistantSpeechText()` as complete sentences within 160 chars.
+- Closing during incomplete callback flows records `callback_flow_abandoned` evidence without lead/permission fabrication.
+- Non-live readiness: `npm run runtime:readiness`; startup logs distinguish legacy router stub from per-call live handler selection.
+
+Implementation evidence:
+[phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:

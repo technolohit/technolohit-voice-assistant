@@ -14,6 +14,8 @@ import {
   createCanaryDialogueRuntime
 } from "./canary-runtime-loop.js";
 
+import { isV4CanaryPathActive } from "./playbook-runtime-binding.js";
+
 export { createRuntimeContext };
 
 export function resolveRuntimeRoute(config) {
@@ -100,6 +102,8 @@ export function describeRuntimeRoute(config) {
   const route = resolveRuntimeRoute(config);
   const v4Requested = isV4RuntimeRequested(config);
   const v4RuntimeActive = route.runtime === "v4" && route.active === true;
+  const liveAudioSocketConfigured = Boolean(config?.v4?.liveAudioSocketEnabled);
+  const liveCanaryConfigured = liveAudioSocketConfigured && isV4CanaryPathActive(config);
   return {
     runtime_version_env: String(config?.v4?.runtimeVersion ?? "v3"),
     v4_realtime_enabled: Boolean(config?.v4?.realtimeEnabled),
@@ -109,6 +113,16 @@ export function describeRuntimeRoute(config) {
     selected_runtime_active: route.active,
     v4_requested: v4Requested,
     v4_runtime_active: v4RuntimeActive,
+    startup_router_mode: "legacy_startup_router",
+    live_audiosocket_canary_configured: liveCanaryConfigured,
+    live_handler_selection: "per_call",
+    startup_router_note:
+      v4Requested && !v4RuntimeActive
+        ? "startup_router_stub_inactive; live v4 uses per-call handler selection"
+        : null,
+    per_call_handler_evidence: liveCanaryConfigured
+      ? "call_handler selected=v4_canary reason=v4_live_canary_selected"
+      : null,
     /** @deprecated use selected_runtime_active — kept for one release of log parsers */
     v4_active: route.active,
     stub: route.stub,
@@ -116,6 +130,20 @@ export function describeRuntimeRoute(config) {
     barge_in_ready: Boolean(route.bargeInReady),
     dialogue_ready: Boolean(route.dialogueReady),
     reason: route.reason
+  };
+}
+
+export function describeLiveHandlerReadiness(config) {
+  const route = describeRuntimeRoute(config);
+  return {
+    startup_router_mode: route.startup_router_mode,
+    live_audiosocket_canary_configured: route.live_audiosocket_canary_configured,
+    live_handler_selection: route.live_handler_selection,
+    per_call_handler_evidence: route.per_call_handler_evidence,
+    selected_runtime: route.selected_runtime,
+    selected_runtime_active: route.selected_runtime_active,
+    startup_router_note: route.startup_router_note,
+    reason: route.reason,
   };
 }
 

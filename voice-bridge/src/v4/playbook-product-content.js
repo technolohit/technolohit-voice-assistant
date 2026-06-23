@@ -8,7 +8,7 @@
 import { normalizeText } from "./redaction.js";
 import { COMBINED_LIVE_TTS_CHAR_LIMIT, detectCombinedProductInquiry } from "./playbook-short-answer.js";
 import { isPlaybookRuntimeEligible } from "./behavior-policy.js";
-import { loadTenantPlaybookFromPath, resolvePlaybookPath, validatePlaybook } from "./playbook-loader.js";
+import { validatePlaybook } from "./playbook-loader.js";
 
 export function findPlaybookProduct(playbook, productId) {
   if (!playbook || !productId) return null;
@@ -46,12 +46,10 @@ export function loadPlaybookForProductContent({
   if (behaviorPolicy?.source && behaviorPolicy.source !== "playbook") return null;
 
   let candidate = playbook;
-  if (!candidate) {
-    const configuredPath = String(config?.v4?.playbookPath ?? "").trim();
-    const loaded = loadTenantPlaybookFromPath(configuredPath || resolvePlaybookPath());
-    if (!loaded.ok) return null;
-    candidate = loaded.playbook;
+  if (!candidate && behaviorPolicy?.playbook) {
+    candidate = behaviorPolicy.playbook;
   }
+  if (!candidate) return null;
 
   const draftAllowed = Boolean(config?.v4?.playbookAllowDraft);
   const validation = validatePlaybook(candidate);
@@ -64,6 +62,36 @@ export function loadPlaybookForProductContent({
   }
   if (!isPlaybookRuntimeEligible(candidate, { allowDraft: draftAllowed }).ok) return null;
   return candidate;
+}
+
+function splitSentences(text = "") {
+  const normalized = normalizeText(text);
+  if (!normalized) return [];
+  const matches = normalized.match(/[^.!?]+[.!?]+/g);
+  if (matches?.length) return matches.map((entry) => entry.trim()).filter(Boolean);
+  return [normalized];
+}
+
+function truncateAtSentenceBoundary(text, maxChars) {
+  const sentences = splitSentences(text);
+  let acc = "";
+  for (const sentence of sentences) {
+    const candidate = acc ? `${acc} ${sentence}` : sentence;
+    if (candidate.length <= maxChars) {
+      acc = candidate;
+      continue;
+    }
+    break;
+  }
+  if (acc) return acc;
+  return truncateForLiveTts(text, maxChars);
+}
+
+function ensureTerminalPunctuation(text = "") {
+  const normalized = normalizeText(text);
+  if (!normalized) return "";
+  if (/[.!?]$/.test(normalized)) return normalized;
+  return `${normalized}.`;
 }
 
 function truncateForLiveTts(text, maxChars = COMBINED_LIVE_TTS_CHAR_LIMIT) {
@@ -102,16 +130,23 @@ export function resolveCompanyAnswer(playbook, options = {}) {
     includeFollowUp && typeof company.diagnostic_follow_up === "string"
       ? company.diagnostic_follow_up.trim()
       : null;
+  const baseNormalized = normalizeText(base);
 
-  if (!followUp) return truncateForLiveTts(base, maxChars);
+  if (!followUp) {
+    return truncateAtSentenceBoundary(baseNormalized, maxChars) || truncateForLiveTts(baseNormalized, maxChars);
+  }
 
-  const combined = `${base} ${followUp}`;
+  const combined = `${baseNormalized} ${followUp}`;
   if (combined.length <= maxChars) return combined;
 
-  const followUpBudget = followUp.length + 1;
-  const baseBudget = Math.max(48, maxChars - followUpBudget);
-  const trimmedBase = truncateForLiveTts(base, baseBudget);
-  return truncateForLiveTts(`${trimmedBase} ${followUp}`, maxChars);
+  const leadSentence = splitSentences(baseNormalized)[0] ?? baseNormalized;
+  const withFollowUp = `${ensureTerminalPunctuation(leadSentence)} ${followUp}`;
+  if (withFollowUp.length <= maxChars) return withFollowUp;
+
+  const baseOnly = truncateAtSentenceBoundary(baseNormalized, maxChars);
+  if (baseOnly) return baseOnly;
+
+  return truncateForLiveTts(baseNormalized, maxChars);
 }
 
 export function resolveProductExplanation(playbook, productId, options = {}) {

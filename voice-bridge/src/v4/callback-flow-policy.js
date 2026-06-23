@@ -160,3 +160,41 @@ export function buildCallbackReassuranceText(memory = {}) {
   }
   return "Ja, ich bin noch da. Ihre Anfrage ist aufgenommen, unser Team meldet sich telefonisch bei Ihnen.";
 }
+
+const CALLBACK_ABANDON_STAGE_BY_FLOW_STATE = Object.freeze({
+  [CALLBACK_FLOW_STATES.CONTACT_PREFERENCE_PENDING]: "collecting_contact_preference",
+  [CALLBACK_FLOW_STATES.CALLBACK_PERMISSION_PENDING]: "callback_permission_pending",
+  [CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING]: "phone_number_pending",
+});
+
+/** Evidence when closing wins during an incomplete callback/contact flow. */
+export function buildCallbackAbandonEvidence(memory = {}) {
+  if (!isCallbackFlowActive(memory) || isPostDecisionCallbackStage(memory)) {
+    return {};
+  }
+  const stage = resolveCallbackFlowState(memory);
+  const abandonStage = CALLBACK_ABANDON_STAGE_BY_FLOW_STATE[stage];
+  if (!abandonStage) return {};
+  return {
+    callback_flow_abandoned: true,
+    callback_abandon_stage: abandonStage,
+    lead_skipped_reason: "caller_closed_before_callback_completion",
+  };
+}
+
+export function buildClosingDuringCallbackMemoryPatch(memory = {}) {
+  const patch = {
+    current_state: "completed",
+    call_closing: true,
+    interruption_context: null,
+    lead_ready: false,
+  };
+  if (!isCallbackFlowActive(memory) || isPostDecisionCallbackStage(memory)) {
+    return patch;
+  }
+  return {
+    ...patch,
+    contact_flow_pending: false,
+    callback_flow_state: CALLBACK_FLOW_STATES.NONE,
+  };
+}

@@ -22,6 +22,16 @@ thnhit/technhvoice:voice-bridge-v1.36.1
 
 Do **not** use `voice-bridge-v1.36.0` for Phase 12B canary — its packaged artifact validator fails (Phase 12C).
 
+Pin **`voice-bridge-v1.36.2`** (Phase 12E) for the next supervised playbook canary after Codex review. Phase 12D call `c411ccac-a282-4115-b883-aafd9d8bea3f` is **PARTIAL PASS / ACCEPTANCE FAIL** — see [phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
+
+Non-live handler readiness (does not prove live routing):
+
+```bash
+cd voice-bridge && npm run runtime:readiness
+```
+
+Per-call pass evidence remains mandatory: `call_handler selected=v4_canary reason=v4_live_canary_selected`.
+
 Packaged binding:
 
 ```text
@@ -926,7 +936,22 @@ and retried. On a failed live call, `rag_attempt_fallback_reasons` must never be
 `rag_error_reason` must always be set, and `rag_attempt_count=1` with a transient (or
 empty) reason while `max_attempts>1` is a regression — abort and report.
 
-**Phase 10AT / v1.35.2 callback permission validation, extended by Phase 10AU / v1.35.3:**
+**Phase 10AT / v1.35.2 callback permission validation, extended by Phase 10AU / v1.35.3 and Phase 12E:**
+
+### Supervised callback script (required before closing) — Phase 12E
+
+Human tester must complete **all** turns in order. Closing before step 5 is a **test-protocol failure** (abort the session; do not classify as callback-runtime failure).
+
+| Step | Caller | Expected assistant |
+|------|--------|-------------------|
+| 1 | `Bitte rufen Sie mich zurück.` | Asks contact preference (`collect_contact_preference`) |
+| 2 | `Telefonisch bitte.` | Asks callback permission (`collect_callback_permission`) |
+| 3 | `Ja.` | Confirms callback (`callback_finalized` or `callback_manual_review` without caller ID) |
+| 4 | (optional reassurance) `Hallo?` | `callback_reassurance` only |
+| 5 | `Danke, das reicht erstmal.` | `closing` |
+
+If the caller says `Danke, das reicht erstmal` during step 1 or 2 (before permission grant), the runtime must still close safely with `callback_flow_abandoned=true`, `callback_abandon_stage` set, `lead_skipped_reason=caller_closed_before_callback_completion`, and **no** lead/permission. Classify the **test** as failed for skipping required turns.
+
 After the assistant asks "Darf unser Team Sie unter Ihrer Nummer zurückmelden?", a caller
 "Ja." (also "ja gerne", "okay", "einverstanden") must finalize the callback flow:
 

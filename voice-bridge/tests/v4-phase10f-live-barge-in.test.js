@@ -5,6 +5,7 @@ import { loadConfig } from "../src/config.js";
 import { createSttAdapter } from "../src/v4/stt-adapter.js";
 import { createTtsAdapter, createTtsChunkEvent } from "../src/v4/tts-adapter.js";
 import { validateQualityEventInput } from "../src/v4/quality-events.js";
+import { assertNoRawPhoneInPayload } from "../src/v4/privacy-sanitize.js";
 import { RESPONSE_TYPES } from "../src/v4/response-planner.js";
 import { V4_STATES } from "../src/v4/state-machine.js";
 import { isPlaybackCancelSpikeEnabled } from "../src/playback-session.js";
@@ -270,7 +271,7 @@ test("10F: barge-in enabled cancels playback after inbound speech frames", async
       for (const event of cancelEvents) {
         const validation = validateQualityEventInput(event);
         assert.equal(validation.ok, true, validation.errors?.join("; "));
-        assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+        assert.ok(assertNoRawPhoneInPayload(event.payload), event.eventType);
         const payloadJson = JSON.stringify(event.payload);
         assert.doesNotMatch(payloadJson, /Willkommen/i);
       }

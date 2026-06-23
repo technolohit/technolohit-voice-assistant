@@ -2,7 +2,9 @@
 
 Date: 2026-06-22
 
-Status: released as `v1.36.0`; **do not deploy for Phase 12B canary** — runtime `playbook:canary-artifact-validate` fails (ENOENT `/app/Dockerfile`). Use **`v1.36.1`** (Phase 12C fix).
+Status: released as `v1.36.0`; **do not deploy for Phase 12B canary** — runtime `playbook:canary-artifact-validate` fails (ENOENT `/app/Dockerfile`). Use **`v1.36.1`** (Phase 12C fix). Next canary pin after Phase 12E: **`v1.36.2`**.
+
+**Phase 12D note:** First supervised live playbook canary (`c411ccac-a282-4115-b883-aafd9d8bea3f`) was **PARTIAL PASS / ACCEPTANCE FAIL** — remediated in Phase 12E ([report](phase12e_live_playbook_provenance_and_spoken_integrity_report.md)).
 
 ## Scope
 

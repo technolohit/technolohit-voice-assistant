@@ -40,7 +40,9 @@ import {
   resolveClosedDomainIntent,
   closedDomainQualityPayload
 } from "./closed-domain-intent.js";
+import { playbookProvenanceQualityPayload } from "./playbook-provenance.js";
 import { planContextQualityPayload } from "./product-context-persistence.js";
+import { buildPersistMetadata } from "./persist-metadata.js";
 import { resolveRagProductScope } from "./rag-product-scope.js";
 import {
   resolveInterruptionRecovery,
@@ -96,13 +98,23 @@ export function createDialogueOrchestrator({
   callerPhoneRaw = null,
   behaviorPolicy = null
 } = {}) {
+  const resolvedBehaviorPolicy =
+    behaviorPolicy ?? resolveBehaviorPolicy({ config, v4PathActive });
+  const resolvedPersistMetadata = buildPersistMetadata(
+    config,
+    agentConfig?.ok ? agentConfig : agentConfig ?? null,
+    resolvedBehaviorPolicy,
+  );
+  if (runtimeContext && typeof runtimeContext === "object") {
+    runtimeContext.persistMetadata = resolvedPersistMetadata;
+  }
   return {
     phase: "phase5_dialogue_orchestrator",
     config,
     // Phase 10AN: resolved once per call; hardcoded defaults unless the
     // opt-in playbook runtime flag is enabled (fail-closed resolver).
-    behaviorPolicy:
-      behaviorPolicy ?? resolveBehaviorPolicy({ config, v4PathActive }),
+    behaviorPolicy: resolvedBehaviorPolicy,
+    persistMetadata: resolvedPersistMetadata,
     runtimeContext,
     memory: memory ?? runtimeContext?.memory ?? null,
     stateMachine: stateMachine ?? runtimeContext?.stateMachine ?? null,
@@ -575,6 +587,12 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
       { activeInterruptSequenceId: orchestrator.activeInterruptSequenceId },
     ),
     ...questionnaireQualityPayload(resolvedPlan),
+    ...(resolvedPlan?.callback_abandon ?? {}),
+    ...playbookProvenanceQualityPayload({
+      config: orchestrator.config,
+      behaviorPolicy: orchestrator.behaviorPolicy,
+      agentConfigResult: orchestrator.agentConfig,
+    }),
     ...behaviorDecisionQualityPayload({
       config: orchestrator.config,
       v4PathActive: Boolean(orchestrator.v4PathActive),

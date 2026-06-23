@@ -21,7 +21,12 @@ const VERSION_METADATA_KEYS = new Set([
   "runtime_version",
   "agent_config_version",
   "prompt_playbook_version",
+  "agent_config_playbook_version",
   "knowledge_version",
+  "playbook_version",
+  "playbook_binding_version",
+  "playbook_source",
+  "playbook_provenance_reason",
 ]);
 
 /** Epoch-ms / latency telemetry — excluded from digit-based phone heuristics (Phase 10R). */
@@ -78,6 +83,13 @@ const PHONE_SCAN_EXEMPT_KEYS = new Set([
   "previous_product_context",
   "matched_product",
   "response_type",
+  "playbook_version",
+  "playbook_binding_version",
+  "playbook_source",
+  "playbook_provenance_reason",
+  "agent_config_playbook_version",
+  "callback_abandon_stage",
+  "lead_skipped_reason",
   "marker_chars",
   "continuation_chars",
   "effective_transcript_chars",

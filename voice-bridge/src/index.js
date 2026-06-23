@@ -5,7 +5,7 @@ import { loadConfig } from "./config.js";
 import { isDbConfigured } from "./db.js";
 import { loadVoiceBridgeEnv } from "./load-env.js";
 import * as persist from "./persist.js";
-import { describeRuntimeRoute } from "./v4/runtime-router.js";
+import { describeRuntimeRoute, describeLiveHandlerReadiness } from "./v4/runtime-router.js";
 import { loadAgentConfig } from "./v4/agent-config.js";
 import { finalizeAllActiveCallsOnShutdown } from "./call-finish.js";
 import { checkRagApiHealth } from "./rag-client.js";
@@ -90,9 +90,16 @@ server.listen(config.listenPort, config.listenHost, () => {
   }
 
   const runtimeRoute = describeRuntimeRoute(config);
+  const liveReadiness = describeLiveHandlerReadiness(config);
   console.log(
-    `[voice-runtime] selected_runtime=${runtimeRoute.selected_runtime} selected_runtime_active=${runtimeRoute.selected_runtime_active} v4_requested=${runtimeRoute.v4_requested} v4_runtime_active=${runtimeRoute.v4_runtime_active} reason=${runtimeRoute.reason} stt_provider=${config.v4.sttProvider} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId} rag_enabled=${config.rag.enabled} rag_sales_answerer_enabled=${config.rag.salesAnswererEnabled} rag_api_configured=${Boolean(config.rag.apiUrl)}`
+    `[voice-runtime] selected_runtime=${runtimeRoute.selected_runtime} selected_runtime_active=${runtimeRoute.selected_runtime_active} v4_requested=${runtimeRoute.v4_requested} v4_runtime_active=${runtimeRoute.v4_runtime_active} reason=${runtimeRoute.reason} startup_router_mode=${liveReadiness.startup_router_mode} live_audiosocket_canary_configured=${liveReadiness.live_audiosocket_canary_configured} live_handler_selection=${liveReadiness.live_handler_selection} stt_provider=${config.v4.sttProvider} tenant_id=${config.v4.tenantId} agent_id=${config.v4.agentId} rag_enabled=${config.rag.enabled} rag_sales_answerer_enabled=${config.rag.salesAnswererEnabled} rag_api_configured=${Boolean(config.rag.apiUrl)}`
   );
+  if (liveReadiness.startup_router_note) {
+    console.log(`[voice-runtime] ${liveReadiness.startup_router_note}`);
+  }
+  if (liveReadiness.per_call_handler_evidence) {
+    console.log(`[voice-runtime] per_call_evidence_required=${liveReadiness.per_call_handler_evidence}`);
+  }
 
   if (config.rag.enabled || config.rag.salesAnswererEnabled) {
     checkRagApiHealth(config, { timeoutMs: Math.min(config.rag.timeoutMs, 700) })

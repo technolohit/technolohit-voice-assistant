@@ -15,6 +15,7 @@ import {
 import { createLiveCanaryRuntime } from "../src/v4/canary-runtime-loop.js";
 import { createSttAdapter } from "../src/v4/stt-adapter.js";
 import { validateQualityEventInput } from "../src/v4/quality-events.js";
+import { assertNoRawPhoneInPayload } from "../src/v4/privacy-sanitize.js";
 import { RESPONSE_TYPES } from "../src/v4/response-planner.js";
 import { createTtsAdapter } from "../src/v4/tts-adapter.js";
 import {
@@ -373,7 +374,7 @@ test("10B: VAD quality events contain no phone-like payload data", async () => {
     for (const event of runtime.qualityEventsBuffer) {
       const validation = validateQualityEventInput(event);
       assert.equal(validation.ok, true, validation.errors?.join("; "));
-      assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+      assert.ok(assertNoRawPhoneInPayload(event.payload), event.eventType);
     }
   });
 });
@@ -493,7 +494,7 @@ test("10C: phone-like transcript is redacted in candidate and quality events", a
     assert.match(runtime.lastCallerTurnCandidate.transcript, /\[phone_redacted\]/);
     for (const event of runtime.qualityEventsBuffer) {
       if (event.eventType === "stt_final") {
-        assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+        assert.ok(assertNoRawPhoneInPayload(event.payload), event.eventType);
       }
     }
   });
@@ -645,7 +646,7 @@ test("10D: phone-like transcript is redacted in memory and quality events", asyn
     assert.doesNotMatch(memoryJson, /\+?\d{8,}/);
     assert.match(memoryJson, /\[phone_redacted\]/);
     for (const event of runtime.qualityEventsBuffer) {
-      assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+      assert.ok(assertNoRawPhoneInPayload(event.payload), event.eventType);
     }
   });
 });
@@ -836,7 +837,7 @@ test("10E: TTS and playback quality events contain no raw phone", async () => {
       ) {
         const validation = validateQualityEventInput(event);
         assert.equal(validation.ok, true, validation.errors?.join("; "));
-        assert.doesNotMatch(JSON.stringify(event.payload), /\+?\d{8,}/);
+        assert.ok(assertNoRawPhoneInPayload(event.payload), event.eventType);
       }
     }
   });

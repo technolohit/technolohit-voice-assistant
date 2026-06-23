@@ -12,6 +12,11 @@ const SKIP_PHONE_SCAN_KEYS = new Set([
   "knowledge_version",
   "agent_config_version",
   "prompt_playbook_version",
+  "agent_config_playbook_version",
+  "playbook_version",
+  "playbook_binding_version",
+  "playbook_source",
+  "playbook_provenance_reason",
   "runtime_version",
   "idempotency_key"
 ]);

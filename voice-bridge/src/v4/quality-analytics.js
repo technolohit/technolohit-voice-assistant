@@ -135,6 +135,16 @@ export function buildCallQualitySummary(events = [], options = {}) {
       postCallMetadata?.agent_config_version ?? persistMetadata.agent_config_version ?? null,
     prompt_playbook_version:
       postCallMetadata?.prompt_playbook_version ?? persistMetadata.prompt_playbook_version ?? null,
+    agent_config_playbook_version:
+      postCallMetadata?.agent_config_playbook_version ??
+      persistMetadata.agent_config_playbook_version ??
+      persistMetadata.prompt_playbook_version ??
+      null,
+    playbook_version:
+      postCallMetadata?.playbook_version ?? persistMetadata.playbook_version ?? null,
+    playbook_binding_version:
+      postCallMetadata?.playbook_binding_version ?? persistMetadata.playbook_binding_version ?? null,
+    playbook_source: postCallMetadata?.playbook_source ?? persistMetadata.playbook_source ?? null,
     knowledge_version:
       postCallMetadata?.knowledge_version ?? persistMetadata.knowledge_version ?? null,
     counters,

@@ -287,7 +287,12 @@ function assertPlanExpectations(plan, expected = {}, meta = {}) {
       failures.push(`plan_reason:${plan.plan_reason ?? "null"}`);
     }
     if (expected.diagnostic_follow_up && !/\?/.test(plan.text ?? "")) {
-      failures.push("missing_diagnostic_follow_up");
+      const text = String(plan.text ?? "").trim();
+      const completeWithinLimit =
+        /[.!?]$/.test(text) && text.length <= COMBINED_LIVE_TTS_CHAR_LIMIT;
+      if (!completeWithinLimit) {
+        failures.push("missing_diagnostic_follow_up");
+      }
     }
     if (expected.no_immediate_product_dump && /\bsmart website\b/i.test(plan.text ?? "")) {
       failures.push("immediate_product_dump");

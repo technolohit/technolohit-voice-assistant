@@ -127,8 +127,8 @@ test("10B: flag on => decision metadata attached to response_plan_created", asyn
     assert.equal(planEvent.payload.behavior_decision_enabled, true);
     assert.equal(planEvent.payload.behavior_decision_ok, true);
     assert.equal(planEvent.payload.behavior_decision_priority, BEHAVIOR_PRIORITIES.EXPLICIT_PRODUCT_QUESTION);
-    assert.equal(typeof planEvent.payload.behavior_decision_playbook_version, "string");
-    assert.equal(planEvent.payload.behavior_decision_playbook_valid, true);
+    assert.equal(planEvent.payload.behavior_decision_playbook_valid, false);
+    assert.equal(planEvent.payload.behavior_decision_playbook_version, null);
   });
 });
 

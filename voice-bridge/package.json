@@ -24,7 +24,8 @@
     "playbook:publish-validate": "node scripts/playbook-publish-validate.js --mode=candidate --playbook=config/playbooks/technolohit.main_voice_sales.v1.publish-candidate.json",
     "playbook:publish-validate:published": "node scripts/playbook-publish-validate.js --mode=published --playbook=config/playbooks/technolohit.main_voice_sales.v1.published.json",
     "playbook:canary-preflight": "node scripts/playbook-canary-preflight.js",
-    "playbook:canary-artifact-validate": "node scripts/playbook-canary-artifact-validate.js"
+    "playbook:canary-artifact-validate": "node scripts/playbook-canary-artifact-validate.js",
+    "runtime:readiness": "node scripts/runtime-readiness.js"
   },
   "engines": {
     "node": ">=20"

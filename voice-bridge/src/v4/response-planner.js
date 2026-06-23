@@ -40,6 +40,8 @@ import {
   buildCallbackReassuranceText,
   hasValidCallerPhone,
   isCallbackFlowActive,
+  buildCallbackAbandonEvidence,
+  buildClosingDuringCallbackMemoryPatch,
 } from "./callback-flow-policy.js";
 import { resolveCallerIdCallbackPhrases } from "./caller-id-callback-policy.js";
 import { evaluateSpokenPhoneCapture } from "./spoken-phone-capture.js";
@@ -443,20 +445,18 @@ function buildResponsePlanCore({
   // Phase 10AK: closing / stop intent is highest priority and must be planned
   // before scoped product QA, RAG, interrupt follow-up, and lead capture.
   if (resolvedIntent === "closing") {
-    // Phase 10AN: getClosingResponse(null) === getWarmGoodbyeResponseText(),
-    // so behavior is identical unless an opt-in playbook policy is provided.
+    const callbackAbandonEvidence = buildCallbackAbandonEvidence(memory);
     return planBase(RESPONSE_TYPES.CLOSING, {
       text: sanitizeResponseText(getClosingResponse(behaviorPolicy)),
       next_state: V4_STATES.COMPLETED,
-      memory_patch: {
-        current_state: V4_STATES.COMPLETED,
-        call_closing: true,
-        interruption_context: null
-      },
+      memory_patch: buildClosingDuringCallbackMemoryPatch(memory),
       quality_event_type: "turn_started",
-      plan_reason: "closing_intent",
+      plan_reason: callbackAbandonEvidence.callback_flow_abandoned
+        ? "closing_intent_callback_abandoned"
+        : "closing_intent",
       rag_allowed: false,
-      lead_transition_allowed: false
+      lead_transition_allowed: false,
+      callback_abandon: callbackAbandonEvidence,
     });
   }
 

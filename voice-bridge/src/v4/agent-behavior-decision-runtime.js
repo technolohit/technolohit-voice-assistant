@@ -7,7 +7,6 @@
  * is otherwise unchanged.
  */
 
-import { loadTenantPlaybook, DEFAULT_PLAYBOOK_FILENAME } from "./playbook-loader.js";
 import {
   resolveAgentBehaviorDecision,
   isAgentBehaviorDecisionRuntimeEnabled,
@@ -15,17 +14,8 @@ import {
 import { resolveCallbackFlowState } from "./callback-flow-policy.js";
 import { RESPONSE_TYPES } from "./response-planner.js";
 
-let cachedDefaultPlaybook = undefined;
-
 export function resetAgentBehaviorDecisionPlaybookCache() {
-  cachedDefaultPlaybook = undefined;
-}
-
-function loadDefaultPlaybookForDecision() {
-  if (cachedDefaultPlaybook !== undefined) return cachedDefaultPlaybook;
-  const loaded = loadTenantPlaybook(DEFAULT_PLAYBOOK_FILENAME);
-  cachedDefaultPlaybook = loaded.ok ? loaded.playbook : null;
-  return cachedDefaultPlaybook;
+  // Retained for test compatibility; runtime no longer caches draft playbooks.
 }
 
 export function isAgentBehaviorDecisionEnabled(config = null) {
@@ -115,8 +105,7 @@ export function buildAgentBehaviorDecisionMetadata({
   }
 
   try {
-    const resolvedPlaybook =
-      playbook === undefined ? loadDefaultPlaybookForDecision() : playbook;
+    const resolvedPlaybook = playbook ?? null;
     const derived = deriveDecisionInputs({ memory, intent, plan });
     const decision = resolveFn({
       transcript,

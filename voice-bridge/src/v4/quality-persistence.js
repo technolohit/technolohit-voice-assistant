@@ -18,7 +18,13 @@ export function enrichQualityEventForPersistence(event, { persistMetadata = null
     runtime_version: meta.runtime_version ?? null,
     agent_config_version: meta.agent_config_version ?? null,
     prompt_playbook_version: meta.prompt_playbook_version ?? null,
-    knowledge_version: meta.knowledge_version ?? null
+    agent_config_playbook_version: meta.agent_config_playbook_version ?? meta.prompt_playbook_version ?? null,
+    knowledge_version: meta.knowledge_version ?? null,
+    playbook_version: meta.playbook_version ?? null,
+    playbook_binding_version: meta.playbook_binding_version ?? null,
+    playbook_source: meta.playbook_source ?? null,
+    playbook_provenance_ok: meta.playbook_provenance_ok ?? null,
+    playbook_provenance_reason: meta.playbook_provenance_reason ?? null,
   });
 
   return {
@@ -75,8 +81,9 @@ export async function flushOrchestratorQualityEvents(orchestrator, options = {})
 
   const persistMetadata =
     options.persistMetadata ??
+    orchestrator.persistMetadata ??
     orchestrator.runtimeContext?.persistMetadata ??
-    buildPersistMetadata(orchestrator.config ?? {}, orchestrator.agentConfig);
+    buildPersistMetadata(orchestrator.config ?? {}, orchestrator.agentConfig, orchestrator.behaviorPolicy);
 
   const preFlushEvents = sink.getBufferedQualityEvents?.() ?? [];
 

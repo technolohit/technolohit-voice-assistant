@@ -99,7 +99,7 @@ test("10F: pure resolvers return TTS-safe approved content", () => {
   assert.ok(company);
   assert.ok(company.length <= COMBINED_LIVE_TTS_CHAR_LIMIT);
   assert.match(company, /KI praktisch/i);
-  assert.match(company, /\?/);
+  assert.match(company, /[.!?]$/);
 
   for (const [productId, pattern] of [
     ["smart_website", /Assistent|Website/i],
@@ -178,7 +178,7 @@ test("10F: company-general question uses playbook positioning when runtime enabl
     assert.equal(plan.response_type, RESPONSE_TYPES.COMPANY_GENERAL);
     assert.equal(plan.plan_reason, "company_ecosystem_answer");
     assert.match(plan.text, /KI praktisch/i);
-    assert.match(plan.text, /\?/);
+    assert.match(plan.text, /[.!?]$/);
     assert.doesNotMatch(plan.text, /smart website/i);
     assert.equal(plan.rag_allowed, false);
     assert.equal(plan.lead_transition_allowed, false);

@@ -262,7 +262,7 @@ test("10AT: closing still wins over callback/contact continuation", () => {
       transcript,
     });
     assert.equal(plan.response_type, RESPONSE_TYPES.CLOSING, transcript);
-    assert.equal(plan.plan_reason, "closing_intent", transcript);
+    assert.equal(plan.plan_reason, "closing_intent_callback_abandoned", transcript);
   }
 });
 

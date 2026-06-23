@@ -147,7 +147,28 @@ export function trimLiveResponseText(text, config, options = {}) {
   const maxChars = maxLiveResponseChars(config, options);
   const normalized = normalizeText(text);
   if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, maxChars).trim()}…`;
+
+  const sentenceMatches = normalized.match(/[^.!?]+[.!?]+/g);
+  if (sentenceMatches?.length) {
+    let acc = "";
+    for (const sentence of sentenceMatches) {
+      const candidate = acc ? `${acc} ${sentence.trim()}` : sentence.trim();
+      if (candidate.length <= maxChars) {
+        acc = candidate;
+        continue;
+      }
+      if (acc) return acc;
+      break;
+    }
+    if (acc) return acc;
+  }
+
+  const slice = normalized.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  if (lastSpace > Math.floor(maxChars * 0.6)) {
+    return `${slice.slice(0, lastSpace).trim()}…`;
+  }
+  return `${slice.trim()}…`;
 }
 
 export function containsUnsafeTtsText(text) {
