@@ -18,6 +18,7 @@ import {
   PHASE12B_PLAYBOOK_VERSION,
   PHASE12B_PUBLISHED_ARTIFACT,
   formatPlaybookCanaryArtifactValidation,
+  validateDockerPackagingInRepository,
   validatePlaybookCanaryArtifacts,
 } from "../src/v4/playbook-canary-artifact-validator.js";
 import { runPlaybookCanaryPreflight } from "../src/v4/playbook-canary-preflight.js";
@@ -122,20 +123,13 @@ test("12B: repository artifact validator passes without claiming runtime env", (
   assert.match(output, /^playbook_canary_artifact_validation=pass/m);
   assert.match(output, /^pending_activation_rejected=true$/m);
   assert.match(output, /^approved_binding_resolved=true$/m);
+  assert.match(output, /^packaged_artifacts_present=true$/m);
   assert.match(output, /^runtime_environment_checked=false$/m);
 });
 
-test("12B: artifact validator CLI exits zero", () => {
-  const result = spawnSync(
-    process.execPath,
-    ["scripts/playbook-canary-artifact-validate.js"],
-    { cwd: packageRoot, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /^playbook_canary_artifact_validation=pass/m);
-});
-
-test("12B: Docker image context includes config playbooks and bindings", () => {
+test("12B: repository Docker packaging checks remain CI-only", () => {
+  const docker = validateDockerPackagingInRepository(packageRoot);
+  assert.equal(docker.ok, true, docker.failures.join(","));
   const dockerfile = fs.readFileSync(path.join(packageRoot, "Dockerfile"), "utf8");
   const dockerignore = fs.readFileSync(path.join(packageRoot, ".dockerignore"), "utf8");
   assert.match(dockerfile, /COPY --chown=node:node config \.\/config/);

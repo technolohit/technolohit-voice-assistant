@@ -17,8 +17,10 @@ This section is readiness guidance only. It has not been executed on production 
 Release target:
 
 ```text
-thnhit/technhvoice:voice-bridge-v1.36.0
+thnhit/technhvoice:voice-bridge-v1.36.1
 ```
+
+Do **not** use `voice-bridge-v1.36.0` for Phase 12B canary — its packaged artifact validator fails (Phase 12C).
 
 Packaged binding:
 

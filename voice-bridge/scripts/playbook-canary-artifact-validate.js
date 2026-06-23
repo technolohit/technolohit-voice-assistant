@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
 import {
+  assertPlaybookCanaryArtifactOutputIsPrivacySafe,
   formatPlaybookCanaryArtifactValidation,
   validatePlaybookCanaryArtifacts,
 } from "../src/v4/playbook-canary-artifact-validator.js";
 
 const result = validatePlaybookCanaryArtifacts();
-console.log(formatPlaybookCanaryArtifactValidation(result));
+const output = formatPlaybookCanaryArtifactValidation(result);
+assertPlaybookCanaryArtifactOutputIsPrivacySafe(output);
+console.log(output);
 process.exit(result.ok ? 0 : 1);

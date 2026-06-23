@@ -2,8 +2,7 @@
 
 Date: 2026-06-22
 
-Status: released as `v1.36.0`; deployment stopped safely before activation while
-the published OCI version label was reviewed separately.
+Status: released as `v1.36.0`; **do not deploy for Phase 12B canary** — runtime `playbook:canary-artifact-validate` fails (ENOENT `/app/Dockerfile`). Use **`v1.36.1`** (Phase 12C fix).
 
 ## Scope
 
@@ -61,8 +60,10 @@ It verifies:
 - embedded playbook runtime binding remains inactive;
 - pending sample is rejected for activation;
 - approved binding is canary-only and resolves the immutable published bytes;
-- Dockerfile copies `config/`, which contains both playbooks and bindings;
+- packaged runtime artifacts are present inside the image (`config/playbooks`, `config/playbook-bindings`);
 - no runtime environment is claimed or inspected.
+
+**Phase 12C note:** v1.36.0 shipped a validator that incorrectly required `/app/Dockerfile` and failed inside the runtime image. Use **`v1.36.1`** or newer for deployment Stage 1 validation. Dockerfile copy checks remain repository CI tests only (`validateDockerPackagingInRepository`).
 
 `npm run playbook:canary-preflight` remains the separate server/runtime guard
 and must fail under the default v3/off environment.
@@ -158,7 +159,7 @@ f8bb259a09d409242b876939ebefb63bf7031bb6bccbaa70e8e1b56cb786a21c
 Only after Codex authorization:
 
 1. Record the safe v3/off baseline and rollback image.
-2. Pull and pin `voice-bridge-v1.36.0`.
+2. Pull and pin `voice-bridge-v1.36.1` (not `v1.36.0`).
 3. Validate packaged artifacts with `playbook:canary-artifact-validate`.
 4. Open a temporary v4/playbook canary env window using the exact values in
    the Phase 10H runbook.

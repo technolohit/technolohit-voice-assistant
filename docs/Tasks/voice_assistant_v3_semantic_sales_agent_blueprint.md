@@ -955,9 +955,21 @@ Phase 12A adds a separate schema-validated runtime binding without modifying the
 
 Implementation evidence: [phase12a_immutable_playbook_runtime_binding_report.md](phase12a_immutable_playbook_runtime_binding_report.md).
 
+### Phase 12C: Runtime Artifact Validator Fix
+
+**Status (2026-06-22):** Fix implemented; release `v1.36.1` for canary deployment.
+
+- Incident: `v1.36.0` image fails `playbook:canary-artifact-validate` with ENOENT on `/app/Dockerfile`.
+- Fix: runtime validator inspects packaged `config/` artifacts only; Dockerfile checks moved to CI tests.
+- `v1.36.0`: release image valid, artifact-validation CLI broken — **must not deploy for Phase 12B canary**.
+- Recommended pin: `thnhit/technhvoice:voice-bridge-v1.36.1`
+
+Implementation evidence:
+[phase12c_runtime_artifact_validator_fix_report.md](phase12c_runtime_artifact_validator_fix_report.md).
+
 ### Phase 12B: Approved Canary Binding + Release Readiness
 
-**Status (2026-06-22): IMPLEMENTATION READY; live canary not yet run.**
+**Status (2026-06-22):** Released as `v1.36.0`; superseded for deployment by `v1.36.1` (12C validator fix).
 
 Phase 12B adds a repository-packaged, separately approved canary binding
 without changing the immutable published playbook or production defaults.
@@ -969,7 +981,7 @@ without changing the immutable published playbook or production defaults.
 - Runtime/server guard remains:
   `npm run playbook:canary-preflight`
 - Release recommendation:
-  `v1.36.0` / `thnhit/technhvoice:voice-bridge-v1.36.0`
+  `v1.36.1` / `thnhit/technhvoice:voice-bridge-v1.36.1` (replaces broken `v1.36.0` validator)
 - Docker Publish always publishes voice-bridge and skips rag-api when
   `rag-api/**` is unchanged since the previous semantic-version tag.
 
@@ -980,7 +992,8 @@ without changing the immutable published playbook or production defaults.
 - [x] Successful: Non-live artifact validator does not claim server/runtime activation.
 - [x] Successful: Default v3/playbook-off runtime fails canary preflight safely.
 - [x] Successful: Voice-only release does not publish a new rag-api tag when rag-api is unchanged.
-- [ ] Successful: `v1.36.0` release is committed, tagged, and published.
+- [x] Successful: `v1.36.0` release is committed, tagged, and published.
+- [x] Successful: Phase 12C fixes runtime artifact validator; `v1.36.1` recommended for canary pin.
 - [ ] Successful: One supervised playbook canary passes and is rolled back to v3/off.
 
 Implementation evidence:

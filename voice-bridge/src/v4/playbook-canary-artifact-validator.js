@@ -1,8 +1,9 @@
 /**
- * Phase 12B non-live repository artifact validation.
+ * Phase 12B/12C packaged playbook canary artifact validation.
  *
- * This validates immutable bytes and approval metadata only. It does not
- * inspect or claim that runtime/server environment gates are enabled.
+ * Validates immutable bytes and approval metadata for artifacts present inside
+ * the runtime image (/app). It does not read Dockerfile or .dockerignore.
+ * Docker build-context checks belong in repository CI tests only.
  */
 
 import crypto from "node:crypto";
@@ -14,7 +15,10 @@ import {
   validatePlaybookRuntimeBinding,
 } from "./playbook-runtime-binding.js";
 
-const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const defaultPackageRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 
 export const PHASE12B_PLAYBOOK_VERSION =
   "technolohit-playbook-v1-20260622-published";
@@ -27,8 +31,40 @@ export const PHASE12B_PENDING_BINDING =
 export const PHASE12B_APPROVED_BINDING =
   "config/playbook-bindings/technolohit.main_voice_sales.v1.canary.approved.json";
 
-function readJson(relativePath) {
-  const absolutePath = path.join(packageRoot, relativePath);
+const PACKAGED_ARTIFACT_PATHS = [
+  PHASE12B_PUBLISHED_ARTIFACT,
+  PHASE12B_PENDING_BINDING,
+  PHASE12B_APPROVED_BINDING,
+];
+
+const PRIVACY_UNSAFE_OUTPUT_PATTERNS = [
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
+  /\b\+?\d{2,}[\d\s().-]{6,}\d\b/,
+  /\b(sk-[a-zA-Z0-9]{10,}|AKIA[0-9A-Z]{16})\b/,
+  /TechnoloHit hilft Unternehmen/i,
+  /Darf unser Team Sie unter dieser Nummer/i,
+  /(?:\/|\\)(?:Users|home|opt|app)[\\/]/i,
+];
+
+function hasNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function resolveValidatorPackageRoot(packageRoot = null) {
+  return path.resolve(packageRoot ?? defaultPackageRoot);
+}
+
+function runtimeRootsForPackage(packageRoot) {
+  const resolved = resolveValidatorPackageRoot(packageRoot);
+  return {
+    packageRoot: resolved,
+    bindingRoot: path.join(resolved, "config", "playbook-bindings"),
+    playbooksRoot: path.join(resolved, "config", "playbooks"),
+  };
+}
+
+function readJson(relativePath, packageRoot) {
+  const absolutePath = path.join(resolveValidatorPackageRoot(packageRoot), relativePath);
   return {
     absolutePath,
     bytes: fs.readFileSync(absolutePath),
@@ -40,23 +76,77 @@ function addFailure(failures, condition, code) {
   if (!condition) failures.push(code);
 }
 
-export function validatePlaybookCanaryArtifacts() {
+function packagedArtifactsPresent(packageRoot) {
+  const root = resolveValidatorPackageRoot(packageRoot);
+  return PACKAGED_ARTIFACT_PATHS.every((relativePath) =>
+    fs.existsSync(path.join(root, relativePath)),
+  );
+}
+
+/**
+ * Repository-only Docker packaging checks (CI tests). Not for runtime CLI.
+ */
+export function validateDockerPackagingInRepository(packageRoot = defaultPackageRoot) {
   const failures = [];
+  const root = resolveValidatorPackageRoot(packageRoot);
+  const dockerfilePath = path.join(root, "Dockerfile");
+  const dockerignorePath = path.join(root, ".dockerignore");
+
+  if (!fs.existsSync(dockerfilePath)) {
+    failures.push("dockerfile_missing");
+    return { ok: false, failures };
+  }
+
+  const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
+  const dockerCopiesConfig = /COPY\s+--chown=node:node\s+config\s+\.\/config/.test(
+    dockerfile,
+  );
+  addFailure(failures, dockerCopiesConfig, "dockerfile_does_not_copy_config");
+
+  if (fs.existsSync(dockerignorePath)) {
+    const dockerignore = fs.readFileSync(dockerignorePath, "utf8");
+    addFailure(
+      failures,
+      !/(^|\n)config(?:\/|\n)/.test(dockerignore),
+      "dockerignore_excludes_config",
+    );
+  }
+
+  for (const relativePath of PACKAGED_ARTIFACT_PATHS) {
+    addFailure(
+      failures,
+      fs.existsSync(path.join(root, relativePath)),
+      `packaged_artifact_missing:${relativePath}`,
+    );
+  }
+
+  return { ok: failures.length === 0, failures, dockerCopiesConfig };
+}
+
+export function validatePlaybookCanaryArtifacts({ packageRoot = null } = {}) {
+  const failures = [];
+  const roots = runtimeRootsForPackage(packageRoot);
+  const artifactsPresent = packagedArtifactsPresent(roots.packageRoot);
+  addFailure(failures, artifactsPresent, "packaged_artifacts_missing");
+
   let published;
   let pending;
   let approved;
 
   try {
-    published = readJson(PHASE12B_PUBLISHED_ARTIFACT);
-    pending = readJson(PHASE12B_PENDING_BINDING);
-    approved = readJson(PHASE12B_APPROVED_BINDING);
+    published = readJson(PHASE12B_PUBLISHED_ARTIFACT, roots.packageRoot);
+    pending = readJson(PHASE12B_PENDING_BINDING, roots.packageRoot);
+    approved = readJson(PHASE12B_APPROVED_BINDING, roots.packageRoot);
   } catch {
     return {
       ok: false,
-      failures: ["artifact_read_or_parse_failed"],
+      failures: failures.length ? failures : ["artifact_read_or_parse_failed"],
       publishedSha256: "none",
       pendingRejected: false,
       approvedResolved: false,
+      packagedArtifactsPresent: artifactsPresent,
+      bindingVersion: "none",
+      playbookVersion: "none",
     };
   }
 
@@ -79,6 +169,11 @@ export function validatePlaybookCanaryArtifacts() {
     published.value.runtime_binding?.active === false,
     "published_embedded_binding_not_inactive",
   );
+  addFailure(
+    failures,
+    published.value.approval?.approved_for_runtime === true,
+    "published_approval_invalid",
+  );
 
   const pendingSchema = validatePlaybookRuntimeBinding(pending.value);
   failures.push(...pendingSchema.failures.map((code) => `pending_${code}`));
@@ -99,6 +194,7 @@ export function validatePlaybookCanaryArtifacts() {
     bindingPath: pending.absolutePath,
     tenantId: "technolohit",
     agentId: "main_voice_sales",
+    testOnlyRoots: roots,
   });
   const pendingRejected =
     pendingLoad.ok === false &&
@@ -145,6 +241,7 @@ export function validatePlaybookCanaryArtifacts() {
     bindingPath: approved.absolutePath,
     tenantId: "technolohit",
     agentId: "main_voice_sales",
+    testOnlyRoots: roots,
   });
   const approvedResolved =
     approvedLoad.ok === true &&
@@ -152,19 +249,13 @@ export function validatePlaybookCanaryArtifacts() {
     approvedLoad.playbookVersion === PHASE12B_PLAYBOOK_VERSION;
   addFailure(failures, approvedResolved, "approved_binding_resolution_failed");
 
-  const dockerfile = fs.readFileSync(path.join(packageRoot, "Dockerfile"), "utf8");
-  const dockerCopiesConfig = /COPY\s+--chown=node:node\s+config\s+\.\/config/.test(
-    dockerfile,
-  );
-  addFailure(failures, dockerCopiesConfig, "dockerfile_does_not_copy_config");
-
   return {
     ok: failures.length === 0,
     failures,
     publishedSha256,
     pendingRejected,
     approvedResolved,
-    dockerCopiesConfig,
+    packagedArtifactsPresent: artifactsPresent,
     bindingVersion: approved.value.binding_version ?? "none",
     playbookVersion: approved.value.playbook_version ?? "none",
   };
@@ -178,9 +269,22 @@ export function formatPlaybookCanaryArtifactValidation(result) {
     `published_sha256=${result?.publishedSha256 ?? "none"}`,
     `pending_activation_rejected=${result?.pendingRejected ? "true" : "false"}`,
     `approved_binding_resolved=${result?.approvedResolved ? "true" : "false"}`,
-    `docker_config_copy_verified=${result?.dockerCopiesConfig ? "true" : "false"}`,
+    `packaged_artifacts_present=${result?.packagedArtifactsPresent ? "true" : "false"}`,
     `runtime_environment_checked=false`,
     `failure_count=${result?.failures?.length ?? 0}`,
     `failures=${result?.failures?.join(",") || "none"}`,
   ].join("\n");
+}
+
+export function assertPlaybookCanaryArtifactOutputIsPrivacySafe(output) {
+  const text = String(output ?? "");
+  for (const pattern of PRIVACY_UNSAFE_OUTPUT_PATTERNS) {
+    if (pattern.test(text)) {
+      throw new Error("privacy_violation:unsafe_cli_output");
+    }
+  }
+  if (hasNonEmptyString(text) && /\bconfig\/playbooks\b/.test(text)) {
+    throw new Error("privacy_violation:raw_artifact_path");
+  }
+  return true;
 }
