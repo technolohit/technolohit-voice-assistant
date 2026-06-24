@@ -10,6 +10,7 @@ import {
   isRagLeadSource
 } from "./lead-validator.js";
 import { deriveLeadNextAction } from "../lead-policy.js";
+import { resolvePostCallLeadSkipReason } from "./callback-flow-policy.js";
 
 export const INCOMPLETE_SPOKEN_PHONE_EXAMPLES = ["0170", "123", "+49 170", "null"];
 
@@ -65,6 +66,9 @@ export function buildLeadCandidateFromMemory(memory = {}, options = {}) {
   }
 
   const callbackReady = callbackValidation.allowed && nextAction === "team_callback";
+  const validationReason = callbackValidation.allowed
+    ? callbackValidation.reason
+    : resolvePostCallLeadSkipReason(memory, callbackValidation, phoneCheck);
 
   return {
     tenant_id: memory.tenant_id ?? null,
@@ -82,7 +86,7 @@ export function buildLeadCandidateFromMemory(memory = {}, options = {}) {
     next_action: nextAction,
     validation: {
       allowed: callbackValidation.allowed,
-      reason: callbackValidation.reason
+      reason: validationReason
     },
     source,
     phone_masked: callerPhoneNormalized ? maskPhoneForExternal(callerPhoneNormalized) : null,

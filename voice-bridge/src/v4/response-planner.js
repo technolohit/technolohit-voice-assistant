@@ -978,6 +978,7 @@ function buildResponsePlanCore({
         contact_flow_pending: false,
         phone_capture_attempted: true,
         callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW,
+        lead_skipped_reason: "phone_capture_failed",
         current_state: V4_STATES.LISTENING,
       },
       quality_event_type: "lead_skipped",
@@ -993,6 +994,8 @@ function buildResponsePlanCore({
       behaviorPolicy,
       playbook: activePlaybook,
     });
+    const manualReviewReason =
+      resolvedIntent === "phone_capture_refused" ? "phone_capture_refused" : "phone_capture_failed";
     return planBase(RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW, {
       text: sanitizeResponseText(callerIdPhrases.failurePhrase),
       next_state: V4_STATES.LISTENING,
@@ -1003,13 +1006,11 @@ function buildResponsePlanCore({
         contact_flow_pending: false,
         phone_capture_attempted: true,
         callback_flow_state: CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW,
+        lead_skipped_reason: manualReviewReason,
         current_state: V4_STATES.LISTENING,
       },
       quality_event_type: "lead_skipped",
-      plan_reason:
-        resolvedIntent === "phone_capture_refused"
-          ? "phone_capture_refused"
-          : "phone_capture_failed",
+      plan_reason: manualReviewReason,
       rag_allowed: false,
       lead_transition_allowed: false,
     });

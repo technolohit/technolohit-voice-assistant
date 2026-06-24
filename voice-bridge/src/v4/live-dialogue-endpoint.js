@@ -29,6 +29,13 @@ function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
 }
 
+function safeTranscriptPreview(text, maxLen = 48) {
+  const redacted = redactPhoneLikeText(text);
+  if (!redacted) return "";
+  if (redacted.length <= maxLen) return redacted;
+  return `${redacted.slice(0, maxLen)}…`;
+}
+
 function bufferQualityEvent(runtime, event) {
   if (!runtime || !event) return;
   if (!Array.isArray(runtime.qualityEventsBuffer)) {
@@ -134,7 +141,10 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     return { ok: false, reason: "dialogue_already_processed" };
   }
 
-  const transcript = redactPhoneLikeText(String(callerCandidate.transcript ?? "").trim());
+  // Phase 12H: keep raw STT for deterministic phone capture during callback flow.
+  // Redaction happens in call-session memory, currentTurn snapshots, and quality
+  // payloads — not before intent detection / spoken-phone-capture parsing.
+  const transcript = String(callerCandidate.transcript ?? "").trim();
   if (!transcript) {
     return { ok: false, reason: "empty_transcript" };
   }
@@ -145,7 +155,7 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     V4_STATES.LISTENING;
 
   console.log(
-    `[v4-live] dialogue_started state=${stateBefore} transcript_chars=${transcript.length} ${liveLogIds(ctx)}`
+    `[v4-live] dialogue_started state=${stateBefore} transcript_chars=${transcript.length} transcript_preview="${safeTranscriptPreview(transcript)}" ${liveLogIds(ctx)}`
   );
 
   try {

@@ -1015,6 +1015,21 @@ Implementation evidence:
 Implementation evidence:
 [phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
 
+### Phase 12G: Missing-caller-ID callback phone capture (live)
+
+**Status (2026-06-20):** **FAIL** — STT delivered `Meine Nummer ist 01511 2345678.` but runtime emitted `callback_manual_review` / `phone_capture_failed` and post-call `callback_permission_missing`. Root cause: live dialogue redacted phone digits before spoken-phone parsing.
+
+### Phase 12H: Callback phone capture handoff fix
+
+**Status (2026-06-20):** Released as `voice-bridge-v1.36.3` after Codex approval.
+
+- Live STT transcript stays raw for planning during `phone_number_pending`; redaction applies only to persistence, quality, and post-call surfaces.
+- German numeric mobile formats (`01511 2345678`, spaced digits, spoken digits) capture and normalize to protected `orchestrator.callerPhoneNormalized`.
+- Post-call manual-review outcomes report `phone_capture_failed` instead of misleading `callback_permission_missing`.
+
+Implementation evidence:
+[phase12h_callback_phone_capture_handoff_fix_report.md](phase12h_callback_phone_capture_handoff_fix_report.md).
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:

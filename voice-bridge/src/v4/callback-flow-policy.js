@@ -167,6 +167,29 @@ const CALLBACK_ABANDON_STAGE_BY_FLOW_STATE = Object.freeze({
   [CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING]: "phone_number_pending",
 });
 
+/**
+ * Post-call skip reason must reflect callback-flow outcome, not generic
+ * permission checks when phone capture already failed or manual review was chosen.
+ */
+export function resolvePostCallLeadSkipReason(memory = {}, callbackValidation = {}, phoneCheck = {}) {
+  const flowState = resolveCallbackFlowState(memory);
+  if (flowState === CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW) {
+    const explicit = normalizeText(memory?.lead_skipped_reason ?? "").toLowerCase();
+    if (explicit) return explicit;
+    if (!phoneCheck?.ok && memory?.phone_capture_attempted === true) {
+      return "phone_capture_failed";
+    }
+    if (callbackValidation?.reason === "callback_permission_missing" && !phoneCheck?.ok) {
+      return "callback_manual_review_no_phone";
+    }
+    return "callback_manual_review";
+  }
+  if (flowState === CALLBACK_FLOW_STATES.CALLBACK_DENIED) {
+    return "callback_permission_denied";
+  }
+  return callbackValidation?.reason ?? "not_callback_ready";
+}
+
 /** Evidence when closing wins during an incomplete callback/contact flow. */
 export function buildCallbackAbandonEvidence(memory = {}) {
   if (!isCallbackFlowActive(memory) || isPostDecisionCallbackStage(memory)) {
