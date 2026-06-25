@@ -1076,6 +1076,32 @@ Phase 12A–12K complete. Approved playbook binding, live provenance, missing-ca
 
 **Next track:** limited operational canary and release readiness (not broad v4 GA). Production default remains **v3 / RAG-off** until explicit leadership approval.
 
+### Phase 12L: Production readiness polish gate
+
+**Status (2026-06-25):** **BLOCKED** — Lead Dashboard phone verification failed; n8n email `undefined` ops fix pending redeploy.
+
+| Workstream | Result |
+|------------|--------|
+| n8n email `undefined` | Root cause: Email node mapping; repo fallback hardening + **sysadmin redeploy required** |
+| Lead dashboard (Phase 12K lead) | **BLOCKED** — `normalized_phone` empty despite `phone_present=true` (see Phase 12M) |
+| RAG | **Off** — unchanged |
+| Production state audit | Read-only v3/off checklist documented |
+
+Implementation evidence:
+[phase12l_production_readiness_polish_gate_report.md](phase12l_production_readiness_polish_gate_report.md).
+
+### Phase 12M: Callback phone protected persistence
+
+**Status (2026-06-25):** Implemented — target **`voice-bridge-v1.36.5`** after Codex review. **Not deployed.**
+
+- Spoken capture stays on `orchestrator.callerPhoneNormalized` during the call (not in public plan/quality/summary).
+- Post-call handoff exposes `protectedNormalizedPhone` for lead persistence only.
+- `voice.leads.normalized_phone` populated when `callback_ready` / `team_callback`.
+- `call_sessions.caller_phone_*` remains empty for missing-caller-ID capture (by design).
+
+Implementation evidence:
+[phase12m_callback_phone_protected_persistence_fix_report.md](phase12m_callback_phone_protected_persistence_fix_report.md).
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:
@@ -1128,11 +1154,15 @@ Do **not** start broad runtime rewrites or production v4 GA next.
 
 Phase 12 is **closed** (supervised callback phone-capture canary **PASS** on `voice-bridge-v1.36.4`).
 
-The next track is **limited operational canary / release readiness**:
+**Phase 12L (current):** production readiness polish — n8n notification email mapping, Lead Dashboard verification. **Blocked** on Phase 12M lead phone persistence.
+
+**Phase 12M (in progress):** protected callback phone persistence to `voice.leads` — target `v1.36.5` after Codex review.
+
+**Phase 13 — limited operational canary / release readiness:** **BLOCKED** until Phase 12M ships and 12L gate passes (readable n8n email + lead reveal verified).
 
 ```text
 - Repeat supervised canary evidence on a narrow allowlist window (v3 rollback mandatory).
-- Confirm post-call, notification, privacy, and playbook provenance on each window.
+- Confirm post-call, notification (email + Telegram readable), privacy, and playbook provenance on each window.
 - Optional Phase 13 observability: populate callback_permission / callback_ready / next_action on response_plan_created (not a Phase 12 blocker).
 - No production v4 GA until leadership explicitly approves after operational canary repeatability.
 ```

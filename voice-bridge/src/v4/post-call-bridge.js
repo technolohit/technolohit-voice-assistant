@@ -5,11 +5,28 @@
 import { getAgentVersionMetadata } from "./agent-config.js";
 import { serializeMemoryForPersistence } from "./call-session-memory.js";
 import { buildLeadCandidateFromMemory } from "./lead-candidate.js";
+import { validatePhoneForCallback } from "./lead-validator.js";
+import { normalizeCallerPhone } from "../caller-id.js";
 import { sanitizeOutboundObject, assertNoRawPhoneInPayload } from "./privacy-sanitize.js";
 
 export function mergeV4SummaryMetadataPatch(base = {}, v4Patch = null) {
   if (!v4Patch || typeof v4Patch !== "object") return base;
   return sanitizeOutboundObject({ ...base, ...v4Patch });
+}
+
+/**
+ * Protected normalized phone for voice.leads only — never merged into summary metadata,
+ * quality events, or notification payloads.
+ */
+export function resolveProtectedNormalizedPhoneForLeadPersistence(
+  leadCandidate,
+  { callerPhoneNormalized = "", callerPhoneRaw = "" } = {}
+) {
+  if (!leadCandidate?.callback_ready) return "";
+  const normalized = normalizeCallerPhone(callerPhoneNormalized || callerPhoneRaw || "");
+  if (!normalized) return "";
+  const check = validatePhoneForCallback({ callerPhoneNormalized: normalized, callerPhoneRaw });
+  return check.ok ? normalized : "";
 }
 
 export function buildV4PostCallSummaryMetadata({
@@ -99,10 +116,15 @@ export function finalizeV4PostCallHandoff(orchestrator, options = {}) {
     persistMetadata: orchestrator?.persistMetadata ?? orchestrator?.runtimeContext?.persistMetadata ?? null,
   });
   const leadInputs = buildV4PostCallLeadInputs({ memory, leadCandidate, summaryMetadata });
+  const protectedNormalizedPhone = resolveProtectedNormalizedPhoneForLeadPersistence(leadCandidate, {
+    callerPhoneNormalized: options.callerPhoneNormalized ?? orchestrator?.callerPhoneNormalized,
+    callerPhoneRaw: options.callerPhoneRaw ?? orchestrator?.callerPhoneRaw,
+  });
   return {
     leadCandidate,
     summaryMetadata,
     leadInputs,
+    protectedNormalizedPhone,
     privacy_ok: assertNoRawPhoneInPayload({ summaryMetadata, leadCandidate })
   };
 }

@@ -66,6 +66,8 @@ const EMAIL_CRED = { smtp: { id: "", name: "Ionos-Email-Tech" } };
 const TELEGRAM_CHAT_ID = "1978700853";
 const NOTIFY_EMAIL_TO = "info@technolohit.com";
 const CLASSIFIED = "$('Classify Notification').first().json";
+const EMAIL_SUBJECT_EXPR = `={{ ${CLASSIFIED}.email_subject || '[Voice] Lead notification' }}`;
+const EMAIL_TEXT_EXPR = `={{ ${CLASSIFIED}.email_text || ${CLASSIFIED}.telegram_text || 'Voice post-call notification (body missing — verify Tech-Voice-notif Classify Notification output).' }}`;
 
 const normalizeCode = `const body = $json.body ?? $json;
 const summary = body.summary ?? {};
@@ -469,9 +471,9 @@ function buildWorkflow(existingWebhookNode) {
       parameters: {
         fromEmail: "voice-assistant@technolohit.com",
         toEmail: NOTIFY_EMAIL_TO,
-        subject: `={{ ${CLASSIFIED}.email_subject }}`,
+        subject: EMAIL_SUBJECT_EXPR,
         emailFormat: "text",
-        text: `={{ ${CLASSIFIED}.email_text }}`,
+        text: EMAIL_TEXT_EXPR,
         options: {}
       },
       credentials: EMAIL_CRED,
@@ -510,9 +512,9 @@ function buildWorkflow(existingWebhookNode) {
       parameters: {
         fromEmail: "voice-assistant@technolohit.com",
         toEmail: NOTIFY_EMAIL_TO,
-        subject: `={{ ${CLASSIFIED}.email_subject }}`,
+        subject: EMAIL_SUBJECT_EXPR,
         emailFormat: "text",
-        text: `={{ ${CLASSIFIED}.email_text }}`,
+        text: EMAIL_TEXT_EXPR,
         options: {}
       },
       credentials: EMAIL_CRED,

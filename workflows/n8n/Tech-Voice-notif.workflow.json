@@ -239,9 +239,9 @@
       "parameters": {
         "fromEmail": "voice-assistant@technolohit.com",
         "toEmail": "info@technolohit.com",
-        "subject": "={{ $('Classify Notification').first().json.email_subject }}",
+        "subject": "={{ $('Classify Notification').first().json.email_subject || '[Voice] Lead notification' }}",
         "emailFormat": "text",
-        "text": "={{ $('Classify Notification').first().json.email_text }}",
+        "text": "={{ $('Classify Notification').first().json.email_text || $('Classify Notification').first().json.telegram_text || 'Voice post-call notification (body missing — verify Tech-Voice-notif Classify Notification output).' }}",
         "options": {}
       },
       "credentials": {
@@ -302,9 +302,9 @@
       "parameters": {
         "fromEmail": "voice-assistant@technolohit.com",
         "toEmail": "info@technolohit.com",
-        "subject": "={{ $('Classify Notification').first().json.email_subject }}",
+        "subject": "={{ $('Classify Notification').first().json.email_subject || '[Voice] Lead notification' }}",
         "emailFormat": "text",
-        "text": "={{ $('Classify Notification').first().json.email_text }}",
+        "text": "={{ $('Classify Notification').first().json.email_text || $('Classify Notification').first().json.telegram_text || 'Voice post-call notification (body missing — verify Tech-Voice-notif Classify Notification output).' }}",
         "options": {}
       },
       "credentials": {

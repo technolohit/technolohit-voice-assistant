@@ -1,17 +1,24 @@
 import * as db from "./db.js";
 import { shouldCreateCallbackReadyLead } from "./lead-policy.js";
 import { sanitizeOutboundObject } from "./v4/privacy-sanitize.js";
+import { normalizeCallerPhone } from "./caller-id.js";
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function normalizePhone(value) {
-  const raw = normalizeText(value);
-  if (!raw) return "";
-  const compact = raw.replace(/[^\d+]/g, "");
-  if (!compact) return "";
-  return compact.startsWith("00") ? `+${compact.slice(2)}` : compact;
+  return normalizeCallerPhone(value);
+}
+
+/**
+ * Protected phone for voice.leads: v4 spoken capture lives on post-call handoff;
+ * caller-ID path may still use call_sessions columns.
+ */
+export function resolveLeadNormalizedPhoneForPostCall(ctx, session) {
+  const handoffPhone = normalizePhone(ctx?.v4PostCallHandoff?.protectedNormalizedPhone ?? "");
+  if (handoffPhone) return handoffPhone;
+  return normalizePhone(session?.caller_phone_normalized || session?.caller_phone_raw);
 }
 
 function summaryField(metadata, key) {
@@ -19,7 +26,7 @@ function summaryField(metadata, key) {
   return normalizeText(metadata[key]);
 }
 
-function shouldCreateLead(summaryMeta, config) {
+function shouldCreateLead(summaryMeta, config, normalizedPhone) {
   const contactPreference = summaryField(summaryMeta, "contact_preference");
   const permission = summaryField(summaryMeta, "permission");
   const emailDirected = String(summaryMeta?.email_directed ?? "") === "true";
@@ -32,6 +39,7 @@ function shouldCreateLead(summaryMeta, config) {
   if (!explicitRoute) return false;
   if (contactPreference === "phone" && permission !== "granted") return false;
   if (contactPreference === "phone" && !phonePresent) return false;
+  if (contactPreference === "phone" && phonePresent && !normalizedPhone) return false;
   if (config?.leadPolicy?.strictCallback !== false && !shouldCreateCallbackReadyLead(summaryMeta)) {
     return false;
   }
@@ -66,7 +74,7 @@ export async function runPostCallLeadExtraction(config, ctx, summary) {
   if (!session) return { action: "skipped", reason: "missing_call_session" };
 
   const existingLead = await db.getLeadByCallSessionId(config, callSessionId);
-  const normalizedPhone = normalizePhone(session.caller_phone_normalized || session.caller_phone_raw);
+  const normalizedPhone = resolveLeadNormalizedPhoneForPostCall(ctx, session);
   const metadataPatch = sanitizeOutboundObject({
     summary_id: summary?.summaryId ?? "",
     summary_type: "auto",
@@ -102,7 +110,7 @@ export async function runPostCallLeadExtraction(config, ctx, summary) {
       : { action: "skipped", reason: "lead_update_failed" };
   }
 
-  if (!shouldCreateLead(summaryMeta, config)) {
+  if (!shouldCreateLead(summaryMeta, config, normalizedPhone)) {
     return { action: "skipped", reason: "guard_not_met" };
   }
 

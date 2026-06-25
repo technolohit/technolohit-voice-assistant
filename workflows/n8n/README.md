@@ -8,6 +8,7 @@ This folder stores n8n workflow exports used by the voice assistant repo. Secret
 - Purpose: async post-call Telegram + email notifications for voice leads
 - Production webhook path: `voice/post-call`
 - Message rendering: `Classify Notification` prepares `telegram_text`, `email_subject`, and `email_text`; send nodes reference these fields with n8n expressions.
+- Email nodes read from `Classify Notification` (not the Telegram node output) and include fallbacks so a stale production mapping cannot send a bare `undefined` body.
 
 ### Redeploy
 

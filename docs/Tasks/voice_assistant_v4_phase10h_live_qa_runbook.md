@@ -1136,6 +1136,43 @@ not a Phase 10AK failure if both rows contain the correct closing response and n
 plan/RAG occurs after the latest closing row. Treat possible dedupe as QA/observability
 cleanup only.
 
+### G.3m Phase 12L production readiness polish gate
+
+**Status:** ops gate before Phase 13 — **not** a voice runtime change phase.
+
+| Blocker | Action |
+|---------|--------|
+| n8n email shows `undefined` | Redeploy `Tech-Voice-notif` from repo; verify Email nodes read `$('Classify Notification').first().json.email_text` (not `$json.email_text` from Telegram output) |
+| Lead dashboard | **BLOCKED** — `normalized_phone` empty for Phase 12K lead (Phase 12M) |
+| Production drift | Read-only audit: `VOICE_RUNTIME_VERSION=v3`, all RAG/v4 flags off, image `voice-bridge-v1.36.4`, Asterisk active calls = 0 |
+
+```bash
+node scripts/test-voice-lead-notification.cjs callback
+```
+
+Pass: email body readable (no literal `undefined`); Telegram + email succeed on test execution.
+
+Full checklist: [phase12l_production_readiness_polish_gate_report.md](phase12l_production_readiness_polish_gate_report.md).
+
+**RAG:** remains **off** — no RAG canary in Phase 12L.
+
+### G.3n Phase 12M protected callback phone persistence
+
+**Status:** fix ready for Codex review — target **`voice-bridge-v1.36.5`**. **Not deployed.**
+
+| Check | Pass criterion |
+|-------|----------------|
+| Dialogue | Missing-caller-ID capture → `callback_finalized` (unchanged from 12K) |
+| Protected runtime | Full phone only on `orchestrator.callerPhoneNormalized` during call |
+| Public surfaces | No raw phone in plan, memory, quality, summary metadata, notification |
+| Lead persistence | `voice.leads.normalized_phone` populated from `v4PostCallHandoff.protectedNormalizedPhone` |
+| `call_sessions` phone columns | May remain empty for spoken capture (by design) |
+| Dashboard | Masked phone on list/detail; Reveal + audit after fix |
+
+Re-verify Phase 12K lead `741f6e28-ffb8-4e66-8a23-2bc10551bb40` after `v1.36.5` deploy **or** approved one-time SQL backfill (see [phase12m_callback_phone_protected_persistence_fix_report.md](phase12m_callback_phone_protected_persistence_fix_report.md)).
+
+**Phase 13 blocked** until 12M live verification + 12L n8n email pass.
+
 ### G.4 Session close + privacy-oriented payload scan
 
 ```sql

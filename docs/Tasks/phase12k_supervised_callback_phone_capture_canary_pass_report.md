@@ -1,7 +1,7 @@
 # Phase 12K — Supervised Callback Phone Capture Canary Pass Report
 
 Date: 2026-06-25  
-Status: **PASS** — Phase 12 **closed**  
+Status: **PASS (dialogue)** / **operational persistence incomplete on v1.36.4** — see Phase 12M
 Image: `thnhit/technhvoice:voice-bridge-v1.36.4`  
 Commit: `d33adc7` (Phase 12J lock phone capture turn taking)
 
@@ -12,6 +12,8 @@ Supervised missing-caller-ID callback phone capture canary on the approved playb
 `collect_contact_preference` → `request_phone_once` → `collect_callback_permission` → `callback_finalized` → `closing`
 
 Production was restored to **v3 / RAG-off** after evidence capture.
+
+**Phase 12M follow-up:** Live dialogue and callback finalization passed, but `voice.leads.normalized_phone` was empty for `lead_id=741f6e28-ffb8-4e66-8a23-2bc10551bb40` while summary showed `phone_present=true`. Operational persistence fix targets **`voice-bridge-v1.36.5`**. Phase 12L Lead Dashboard reveal verification was blocked.
 
 ## Release artifact
 
@@ -34,6 +36,7 @@ Production was restored to **v3 / RAG-off** after evidence capture.
 | `playbook_source` | `approved_runtime_binding` |
 | RAG | **off** (`rag_used=false` on callback turns) |
 | `lead_created_count` | **1** |
+| `normalized_phone` persisted | **No** on `v1.36.4` (Phase 12M fix) |
 | Privacy scan (phone-like in payloads) | **0** matches |
 | Notification | HTTP **200** (`action=sent`, `reason=ok`) |
 | Rollback | **v3 / RAG-off** restored after call |
@@ -79,7 +82,9 @@ Production was restored to **v3 / RAG-off** after evidence capture.
 | 12J | Fix shipped (`v1.36.4`) — locked phone capture sub-state |
 | **12K** | **PASS** — supervised missing-caller-ID callback capture |
 
-**Final classification: PASS. Phase 12 closed.**
+**Final classification: PASS (dialogue). Operational phone persistence: INCOMPLETE on v1.36.4.**
+
+Phase 12 runtime behavior arc closed at 12K; ops readiness continues in 12L/12M.
 
 ## Observability follow-up (non-blocking)
 
