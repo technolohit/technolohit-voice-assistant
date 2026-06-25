@@ -283,6 +283,21 @@ test("phase11a: published artifact passes published-mode validation while inacti
   assert.equal(result.decision_eval.pending, 0);
 });
 
+test("phase11a: published validation uses artifact conformance, candidate uses live runtime eval", async () => {
+  const published = await runPublishValidation({
+    mode: PUBLISH_VALIDATION_MODES.PUBLISHED,
+    playbookPath: publishedPath,
+  });
+  const candidate = await runPublishValidation({
+    mode: PUBLISH_VALIDATION_MODES.CANDIDATE,
+    playbookPath: candidatePath,
+  });
+  assert.equal(published.ok, true, JSON.stringify(published.failures));
+  assert.equal(candidate.ok, true, JSON.stringify(candidate.failures));
+  assert.equal(candidate.playbook_eval.fail, 0);
+  assert.ok(candidate.playbook_eval.pass >= 30);
+});
+
 test("phase11a: mode and artifact mismatch fails closed", async () => {
   const candidateAsPublished = await runPublishValidation({
     mode: PUBLISH_VALIDATION_MODES.PUBLISHED,

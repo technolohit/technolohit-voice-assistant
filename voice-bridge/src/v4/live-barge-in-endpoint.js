@@ -26,6 +26,7 @@ import {
 import { markInterrupted } from "./audio-session.js";
 import { resetUtteranceBuffer, ensureInterruptUtteranceAfterBargeIn } from "./live-stt-endpoint.js";
 import { beginInterruptFollowupWaitOnBargeIn } from "./interrupt-followup-wait.js";
+import { isPhoneCaptureLocked } from "./phone-capture-policy.js";
 import {
   buildBargeInDetectedEvent,
   buildPlaybackCancelRequestedEvent,
@@ -113,6 +114,78 @@ export function ensureLiveBargeInDetector(runtime, config) {
   return runtime.bargeInDetector;
 }
 
+function isPhoneCaptureContinuationState(runtime) {
+  const memory = runtime?.orchestrator?.memory ?? runtime?.runtimeContext?.memory ?? {};
+  if (isPhoneCaptureLocked(memory)) return true;
+  const responseType =
+    runtime?.lastAssistantPlanCandidate?.response_type ??
+    runtime?.playback?.label ??
+    null;
+  return responseType === "request_phone_once" || responseType === "request_phone_once_retry";
+}
+
+/**
+ * Cancel playback during phone capture without product interruption recovery.
+ */
+export function executeLivePhoneCapturePlaybackCancel(
+  config,
+  ctx,
+  runtime,
+  atMs = Date.now(),
+  triggerPayload = null,
+  playback = runtime?.playback,
+) {
+  const ts = Number(atMs) || Date.now();
+  const cancelResult = requestPlaybackCancel(playback, "phone_capture_continuation", ts);
+  runtime.playback = cancelResult.controller;
+
+  if (runtime.livePlaybackSession) {
+    runtime.livePlaybackSession.cancelled = true;
+    runtime.livePlaybackSession.cancelReason = "phone_capture_continuation";
+    runtime.livePlaybackSession.cancelRequestedAt = ts;
+  }
+
+  const cancelMetrics = getPlaybackMetrics(runtime.playback);
+  const cancelLatencyMs = cancelMetrics.cancel_latency_ms ?? null;
+  const framesBeforeCancel =
+    runtime.livePlaybackSession?.framesSent ?? cancelMetrics.frames_sent ?? 0;
+
+  console.log(
+    `[v4-live] phone_capture_playback_cancel cancel_latency_ms=${cancelLatencyMs ?? "unknown"} frames_sent_before_cancel=${framesBeforeCancel} ${liveLogIds(ctx)}`,
+  );
+
+  runtime.pendingInterruptionRecovery = false;
+  runtime.highPriorityInterruptionTurn = false;
+  runtime.interruptionContext = null;
+  runtime.bargeInCount = (runtime.bargeInCount ?? 0) + 1;
+  runtime.bargeInHandledPlaybackId = playback?.playbackId ?? null;
+
+  ensureListeningAfterBargeIn(runtime);
+  if (runtime.runtimeContext?.memory) {
+    runtime.runtimeContext.memory = {
+      ...runtime.runtimeContext.memory,
+      current_state: V4_STATES.COLLECTING_PHONE_NUMBER,
+      callback_flow_state: "phone_number_pending",
+      interruption_context: null,
+      updated_at: Date.now(),
+    };
+    if (runtime.orchestrator) {
+      runtime.orchestrator.memory = runtime.runtimeContext.memory;
+    }
+  }
+  ensureInterruptUtteranceAfterBargeIn(runtime, ctx, triggerPayload);
+  runtime.bargeInDetector = resetBargeInDetector(runtime.bargeInDetector);
+
+  return {
+    ok: true,
+    observed: true,
+    cancelled: true,
+    cancelLatencyMs,
+    framesSentBeforeCancel: framesBeforeCancel,
+    reason: "phone_capture_continuation",
+  };
+}
+
 /**
  * Observe inbound PCM during assistant playback; cancel when speech threshold met.
  */
@@ -168,6 +241,10 @@ export function observeLiveCanaryBargeIn(
         cancelled: false,
         reason: "threshold_not_met",
       };
+    }
+
+    if (isPhoneCaptureContinuationState(runtime)) {
+      return executeLivePhoneCapturePlaybackCancel(config, ctx, runtime, atMs, payload, playback);
     }
 
     if (runtime.bargeInHandledPlaybackId === playback.playbackId) {

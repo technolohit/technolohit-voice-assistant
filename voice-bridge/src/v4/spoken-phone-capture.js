@@ -59,6 +59,46 @@ function parseSpokenWordDigits(transcript = "") {
   return `${hasPlus ? "+" : ""}${digits.join("")}`;
 }
 
+function countSpokenDigitWords(transcript = "") {
+  let count = 0;
+  for (const word of normalizeSpokenTokens(transcript).split(/\s+/).filter(Boolean)) {
+    if (word === "plus") continue;
+    if (DIGIT_WORDS.has(word)) count += 1;
+  }
+  return count;
+}
+
+function extractDigitRunLength(transcript = "") {
+  const runs = String(transcript ?? "").match(/\d[\d\s()./-]*/g) ?? [];
+  let max = 0;
+  for (const run of runs) {
+    const digits = run.replace(/\D/g, "");
+    if (digits.length > max) max = digits.length;
+  }
+  return max;
+}
+
+/**
+ * True when the utterance looks like an in-progress phone number, not a final failure.
+ */
+export function looksLikePartialPhoneCapture(transcript = "") {
+  const text = normalizeText(transcript);
+  if (!text) return false;
+
+  const capture = evaluateSpokenPhoneCapture(text);
+  if (capture.ok) return false;
+
+  const digitRun = extractDigitRunLength(text);
+  const spokenDigits = countSpokenDigitWords(text);
+  const hasPhoneCue = /\b(nummer|telefonnummer|meine nummer|nummer ist|telefon)\b/i.test(text);
+
+  if (digitRun >= 3 && digitRun < 8) return true;
+  if (spokenDigits >= 3 && spokenDigits < 8) return true;
+  if (hasPhoneCue && (digitRun >= 1 || spokenDigits >= 1)) return true;
+
+  return false;
+}
+
 export function parseSpokenPhoneCandidate(transcript = "") {
   const fromDigits = parseDigitStringCandidate(transcript);
   if (fromDigits) return normalizeCallerPhone(fromDigits);

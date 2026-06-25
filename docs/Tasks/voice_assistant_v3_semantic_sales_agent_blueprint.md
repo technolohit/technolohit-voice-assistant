@@ -1030,6 +1030,22 @@ Implementation evidence:
 Implementation evidence:
 [phase12h_callback_phone_capture_handoff_fix_report.md](phase12h_callback_phone_capture_handoff_fix_report.md).
 
+### Phase 12I: Callback phone capture re-test (live)
+
+**Status (2026-06-20):** **FAIL** — v4 canary and playbook binding were correct (`handler=v4_canary`, `reason=v4_live_canary_selected`). Flow reached `request_phone_once`, but `Meine Nummer ist 01511 2345678.` produced `phone_capture_failed` → `callback_manual_review`, then `barge_in_detected`. Root cause: phone-capture turn-taking and state-lock failure (not STT or parser).
+
+### Phase 12J: Phone capture state lock and turn-taking repair
+
+**Status (2026-06-20):** Ready for Codex review — target `voice-bridge-v1.36.4`.
+
+- Locked routing while `PHONE_NUMBER_PENDING`: no product Q&A, RAG, questionnaire, or generic fallback.
+- Partial/incomplete transcripts retry once (`request_phone_once_retry`) before `callback_manual_review`.
+- Manual review after retry uses `phone_capture_failed_after_retry`, not `callback_permission_missing`.
+- Barge-in during `request_phone_once` feeds phone capture; extended endpoint silence (default 1200 ms).
+
+Implementation evidence:
+[phase12j_phone_capture_state_lock_and_turn_taking_report.md](phase12j_phone_capture_state_lock_and_turn_taking_report.md).
+
 Goal: make playbook versions testable and reviewable before any canary.
 
 Required eval coverage:

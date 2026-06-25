@@ -88,6 +88,7 @@ export function shouldUseRagForTurn({ config = null, state, intent, memory = {},
     resolvedIntent === "callback_permission_denied" ||
     resolvedIntent === "callback_flow_attention" ||
     resolvedIntent === "phone_number_candidate" ||
+    resolvedIntent === "phone_capture_partial" ||
     resolvedIntent === "phone_capture_refused" ||
     resolvedIntent === "phone_capture_failed"
   ) {

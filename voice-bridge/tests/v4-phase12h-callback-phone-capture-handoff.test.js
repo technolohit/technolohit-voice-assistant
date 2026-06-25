@@ -306,13 +306,14 @@ test("12H: failure path yields callback_manual_review without callback_permissio
     const memory = callbackMemory(V4_STATES.COLLECTING_PHONE_NUMBER, {
       contact_preference: "phone",
       phone_capture_attempted: true,
+      phone_capture_attempt_count: 1,
       callback_flow_state: CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING,
     });
     const orchestrator = createOrchestrator({ memory, callerPhoneNormalized: null });
     const action = await runTurn(orchestrator, "null eins zwei");
 
     assert.equal(action.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
-    assert.equal(action.plan.plan_reason, "phone_capture_failed");
+    assert.equal(action.plan.plan_reason, "phone_capture_failed_after_retry");
     assert.equal(
       resolveCallbackFlowState(orchestrator.memory),
       CALLBACK_FLOW_STATES.CALLBACK_MANUAL_REVIEW
@@ -321,7 +322,7 @@ test("12H: failure path yields callback_manual_review without callback_permissio
     closeCall(orchestrator);
     assert.equal(orchestrator.leadCandidate.callback_ready, false);
     assert.notEqual(orchestrator.leadCandidate.validation.reason, "callback_permission_missing");
-    assert.equal(orchestrator.leadCandidate.validation.reason, "phone_capture_failed");
+    assert.equal(orchestrator.leadCandidate.validation.reason, "phone_capture_failed_after_retry");
     assert.equal(orchestrator.leadCandidate.next_action, "manual_followup");
   });
 });

@@ -1,1 +1,7 @@
 *.sh text eol=lf
+
+# Immutable playbook artifacts and bindings must byte-hash identically on Windows/Linux.
+voice-bridge/config/playbooks/*.published.json text eol=lf
+voice-bridge/config/playbooks/*.publish-candidate.json text eol=lf
+voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json text eol=lf
+voice-bridge/config/playbook-bindings/*.json text eol=lf

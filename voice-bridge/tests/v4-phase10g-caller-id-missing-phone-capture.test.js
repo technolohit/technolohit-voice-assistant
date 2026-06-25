@@ -168,7 +168,7 @@ test("valid spoken phone -> permission question", async () => {
   });
 });
 
-test("short phone -> manual review without second ask", async () => {
+test("short phone -> retry once then manual review", async () => {
   await withEnv(canaryEnv(), async () => {
     const memory = callbackMemory(V4_STATES.COLLECTING_PHONE_NUMBER, {
       contact_preference: "phone",
@@ -177,10 +177,25 @@ test("short phone -> manual review without second ask", async () => {
     });
     const orchestrator = createOrchestrator({ memory, callerPhoneNormalized: null });
     const action = await runTurn(orchestrator, "null eins zwei");
-    assert.equal(action.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
-    assert.equal(action.plan.plan_reason, "phone_capture_failed");
+    assert.equal(action.plan.response_type, RESPONSE_TYPES.REQUEST_PHONE_RETRY);
+    assert.equal(action.plan.plan_reason, "phone_capture_partial_or_incomplete");
+    assert.equal(
+      resolveCallbackFlowState(orchestrator.memory),
+      CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING
+    );
 
-    const retry = await runTurn(orchestrator, "0171 512345678");
+    const failed = await runTurn(orchestrator, "null eins zwei");
+    assert.equal(failed.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
+    assert.equal(failed.plan.plan_reason, "phone_capture_failed_after_retry");
+
+    const memoryAfterFail = callbackMemory(V4_STATES.COLLECTING_PHONE_NUMBER, {
+      contact_preference: "phone",
+      phone_capture_attempted: true,
+      phone_capture_attempt_count: 1,
+      callback_flow_state: CALLBACK_FLOW_STATES.PHONE_NUMBER_PENDING,
+    });
+    const recovery = createOrchestrator({ memory: memoryAfterFail, callerPhoneNormalized: null });
+    const retry = await runTurn(recovery, "0171 512345678");
     assert.notEqual(retry.plan.response_type, RESPONSE_TYPES.REQUEST_PHONE_ONCE);
   });
 });

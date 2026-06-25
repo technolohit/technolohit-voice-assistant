@@ -23,6 +23,10 @@ import {
   evaluateSpokenPhoneCapture,
   isPhoneCaptureRefusal,
 } from "./spoken-phone-capture.js";
+import {
+  isPhoneCaptureLocked,
+  resolvePhoneCaptureTranscriptIntent,
+} from "./phone-capture-policy.js";
 import { detectContactFormHandoffIntent } from "./contact-form-handoff-intent.js";
 import { isCompanyGeneralQuestion } from "./company-general-intent.js";
 
@@ -183,18 +187,14 @@ export function detectTranscriptIntent(
     return "company_general";
   }
 
-  // Phase 10G: while the one-time phone capture question is open, parse the
-  // next spoken phone candidate deterministically. Explicit product questions
-  // still win (same contract as permission pending).
-  if (
-    isPhoneNumberPendingStage(memory) &&
-    !PRODUCT_QUESTION_HINT.test(lower) &&
-    !isTopicRepairPhrase(transcript)
-  ) {
-    if (isPhoneCaptureRefusal(transcript)) return "phone_capture_refused";
-    const capture = evaluateSpokenPhoneCapture(transcript);
-    if (capture.ok) return "phone_number_candidate";
-    return "phone_capture_failed";
+  // Phase 12J: locked phone-capture sub-state outranks product QA, RAG,
+  // interruption recovery, and fallback clarification until capture completes.
+  if (isPhoneCaptureLocked(memory)) {
+    if (contactFormHandoffEnabled) {
+      const handoffIntent = detectContactFormHandoffIntent(transcript);
+      if (handoffIntent) return handoffIntent;
+    }
+    return resolvePhoneCaptureTranscriptIntent(transcript, memory);
   }
 
   // Phase 10AT: while the callback permission question is open, a short

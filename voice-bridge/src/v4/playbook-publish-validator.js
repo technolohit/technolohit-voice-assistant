@@ -16,7 +16,10 @@ import {
   PRICING_POLICY_REQUIRED_PRODUCT_IDS,
   REQUIRED_LEAD_TIERS,
 } from "./playbook-loader.js";
-import { runPlaybookEvalSuite } from "./playbook-eval-scenarios.js";
+import {
+  runPlaybookEvalSuite,
+  runPublishedArtifactEvalConformanceSuite,
+} from "./playbook-eval-scenarios.js";
 import { runDecisionEvalSuite } from "./agent-behavior-decision-eval.js";
 import { loadConfig } from "../config.js";
 
@@ -509,7 +512,10 @@ export async function validatePlaybookForPublish({
     // active runtime binding, so validate an in-memory draft projection of the
     // same content rather than weakening activation guards.
     const evalPlaybook = buildGovernanceEvalPlaybook(playbook, mode);
-    const playbookSuite = await runPlaybookEvalSuite({ playbook: evalPlaybook });
+    const playbookSuite =
+      mode === PUBLISH_VALIDATION_MODES.PUBLISHED
+        ? await runPublishedArtifactEvalConformanceSuite({ playbook: evalPlaybook })
+        : await runPlaybookEvalSuite({ playbook: evalPlaybook });
     playbookEval = playbookSuite.summary ?? playbookEval;
     if (!playbookSuite.ok || playbookEval.fail > 0) failures.push("playbook_eval_failed");
     if (playbookEval.pending > 0) failures.push("playbook_eval_pending");

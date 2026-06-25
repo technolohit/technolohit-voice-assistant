@@ -547,6 +547,72 @@ function runPendingScenarioDocumentationCheck(scenario, playbook, policy) {
   return failures;
 }
 
+/**
+ * Published artifacts keep frozen eval expectations. Governance validation checks
+ * scenario registry and playbook documentation alignment without replaying live
+ * runtime behavior against evolved code (draft/candidate eval does that).
+ */
+export async function runPublishedArtifactEvalConformanceSuite({
+  playbook,
+  config = null,
+  behaviorPolicy = null,
+} = {}) {
+  const validation = validatePlaybookEvalScenarios(playbook);
+  if (!validation.ok) {
+    return {
+      playbook_version: playbook?.playbook_version ?? null,
+      tenant_id: playbook?.tenant_id ?? null,
+      agent_id: playbook?.agent_id ?? null,
+      ok: false,
+      validation_errors: validation.errors,
+      summary: { total: 0, pass: 0, pending: 0, fail: validation.errors.length },
+      results: [],
+    };
+  }
+
+  const resolvedConfig = config ?? loadConfig();
+  const resolvedPolicy =
+    behaviorPolicy ??
+    resolveBehaviorPolicy({
+      config: resolvedConfig,
+      playbook,
+      allowDraft: true,
+    });
+  const results = [];
+
+  for (const scenario of validation.scenarios) {
+    const docFailures = runPendingScenarioDocumentationCheck(
+      scenario,
+      playbook,
+      resolvedPolicy,
+    );
+    results.push({
+      id: scenario.id,
+      category: scenario.category,
+      status: docFailures.length ? "fail" : "pass",
+      reason: docFailures.length ? docFailures.join(";") : "published_artifact_conformance",
+      runtime_mode: "published_artifact_conformance",
+      caller_chars: String(scenario.caller ?? "").length,
+    });
+  }
+
+  const summary = {
+    total: results.length,
+    pass: results.filter((entry) => entry.status === "pass").length,
+    pending: results.filter((entry) => entry.status === PENDING_SCENARIO_STATUS).length,
+    fail: results.filter((entry) => entry.status === "fail").length,
+  };
+
+  return {
+    playbook_version: playbook.playbook_version,
+    tenant_id: playbook.tenant_id,
+    agent_id: playbook.agent_id,
+    ok: summary.fail === 0,
+    summary,
+    results,
+  };
+}
+
 export async function runEvalScenario({
   scenario,
   agentConfig,

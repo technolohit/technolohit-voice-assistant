@@ -24,7 +24,9 @@ Do **not** use `voice-bridge-v1.36.0` for Phase 12B canary — its packaged arti
 
 Pin **`voice-bridge-v1.36.2`** (Phase 12E) for supervised playbook canary through Phase 12G. Phase 12G live missing-caller-ID phone capture **FAILED** — see [phase12h_callback_phone_capture_handoff_fix_report.md](phase12h_callback_phone_capture_handoff_fix_report.md).
 
-Pin **`voice-bridge-v1.36.3`** (Phase 12H) for the next supervised callback phone-capture re-test after Codex review. Phase 12D call `c411ccac-a282-4115-b883-aafd9d8bea3f` remains **PARTIAL PASS / ACCEPTANCE FAIL** for provenance/TTS/callback-abandon evidence — see [phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
+Pin **`voice-bridge-v1.36.3`** (Phase 12H) for supervised callback phone-capture re-test. Phase 12I live re-test **FAILED** — turn-taking/state-lock during `PHONE_NUMBER_PENDING`; see [phase12j_phone_capture_state_lock_and_turn_taking_report.md](phase12j_phone_capture_state_lock_and_turn_taking_report.md).
+
+Pin **`voice-bridge-v1.36.4`** (Phase 12J) for the next supervised missing-caller-ID phone-capture re-test after Codex review. Phase 12D call `c411ccac-a282-4115-b883-aafd9d8bea3f` remains **PARTIAL PASS / ACCEPTANCE FAIL** for provenance/TTS/callback-abandon evidence — see [phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
 
 Non-live handler readiness (does not prove live routing):
 

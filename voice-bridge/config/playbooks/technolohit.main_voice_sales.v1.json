@@ -482,6 +482,7 @@
     "allowed_callback_response_types": [
       "collect_contact_preference",
       "request_phone_once",
+      "request_phone_once_retry",
       "collect_callback_permission",
       "callback_finalized",
       "callback_manual_review",
@@ -735,13 +736,14 @@
       "memory_patch": {
         "contact_preference": "phone",
         "phone_capture_attempted": true,
+        "phone_capture_attempt_count": 1,
         "callback_flow_state": "phone_number_pending",
         "current_state": "collecting_phone_number"
       },
       "state": "collecting_phone_number",
       "expected": {
         "response_type": "callback_manual_review",
-        "plan_reason": "phone_capture_failed",
+        "plan_reason": "phone_capture_failed_after_retry",
         "no_lead_ready": true
       }
     },
@@ -789,7 +791,7 @@
       "state": "collecting_phone_number",
       "expected": {
         "no_questionnaire": true,
-        "response_type": "callback_manual_review"
+        "response_type": "request_phone_once_retry"
       }
     },
     {

@@ -14,6 +14,7 @@ import {
 } from "./audio-session.js";
 import { observeAudioFrame } from "./vad-endpointing.js";
 import { pcmFrameRms } from "./pcm-rms.js";
+import { resolvePhoneCaptureEndpointSilenceMs } from "./phone-capture-policy.js";
 import {
   buildVadSpeechStartEvent,
   buildVadEndpointDetectedEvent,
@@ -241,7 +242,13 @@ export async function processLiveCanaryInboundFrame(
   let endpointTriggered = false;
 
   runtime.audioSession = appendInboundFrame(runtime.audioSession, { rms });
-  runtime.vadState = observeAudioFrame(prevVad, payload, frameMs);
+  const captureMemory =
+    runtime?.orchestrator?.memory ?? runtime?.runtimeContext?.memory ?? {};
+  const endpointSilenceMs = resolvePhoneCaptureEndpointSilenceMs(config, captureMemory);
+  if (Number(runtime.vadState?.endpointSilenceMs) !== endpointSilenceMs) {
+    runtime.vadState = { ...runtime.vadState, endpointSilenceMs };
+  }
+  runtime.vadState = observeAudioFrame(runtime.vadState, payload, frameMs);
   const vad = runtime.vadState;
 
   if (!prevSpeechActive && vad.speechActive && vad.speechStartedAt) {

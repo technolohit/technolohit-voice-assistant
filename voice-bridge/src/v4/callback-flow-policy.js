@@ -48,6 +48,7 @@ export const CALLBACK_FLOW_CONTINUATION_INTENTS = new Set([
   "contact_phone",
   "contact_email",
   "phone_number_candidate",
+  "phone_capture_partial",
   "phone_capture_refused",
   "phone_capture_failed",
   "callback_permission_granted",
@@ -177,6 +178,11 @@ export function resolvePostCallLeadSkipReason(memory = {}, callbackValidation = 
     const explicit = normalizeText(memory?.lead_skipped_reason ?? "").toLowerCase();
     if (explicit) return explicit;
     if (!phoneCheck?.ok && memory?.phone_capture_attempted === true) {
+      const explicit = normalizeText(memory?.lead_skipped_reason ?? "").toLowerCase();
+      if (explicit === "phone_capture_failed_after_retry") return explicit;
+      const attempts = Number(memory?.phone_capture_attempt_count ?? 0);
+      const maxRetries = Number(memory?.phone_capture_max_retries ?? 1);
+      if (attempts >= maxRetries) return "phone_capture_failed_after_retry";
       return "phone_capture_failed";
     }
     if (callbackValidation?.reason === "callback_permission_missing" && !phoneCheck?.ok) {

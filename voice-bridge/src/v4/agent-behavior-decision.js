@@ -171,6 +171,7 @@ function mapCallbackResponseType(callbackState, intent, phoneContext = {}) {
     return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
   }
   if (intent === "phone_number_candidate") return DECISION_RESPONSE_TYPES.COLLECT_CALLBACK_PERMISSION;
+  if (intent === "phone_capture_partial") return DECISION_RESPONSE_TYPES.REQUEST_PHONE_ONCE;
   if (intent === "phone_capture_refused" || intent === "phone_capture_failed") {
     return DECISION_RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW;
   }
@@ -230,8 +231,9 @@ function mapCallbackReason(callbackState, intent) {
   if (intent === "callback_request") return "callback_request_intent";
   if (intent === "contact_phone") return "contact_phone_preference";
   if (intent === "phone_number_candidate") return "phone_number_captured";
+  if (intent === "phone_capture_partial") return "phone_capture_partial_or_incomplete";
   if (intent === "phone_capture_refused") return "phone_capture_refused";
-  if (intent === "phone_capture_failed") return "phone_capture_failed";
+  if (intent === "phone_capture_failed") return "phone_capture_failed_after_retry";
   if (intent === "contact_email") return "contact_email_preference";
   return `active_callback_flow:${callbackState}`;
 }

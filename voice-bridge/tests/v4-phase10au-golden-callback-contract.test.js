@@ -330,9 +330,9 @@ test("10AU golden contract: same sequence without caller ID — legacy block rep
     await runTurn(orchestrator, GOLDEN_TURNS[2]);
 
     const turn4 = await runTurn(orchestrator, GOLDEN_TURNS[3]);
-    assert.equal(turn4.intent, "phone_capture_failed");
-    assert.equal(turn4.plan.response_type, RESPONSE_TYPES.CALLBACK_MANUAL_REVIEW);
-    assert.equal(turn4.plan.plan_reason, "phone_capture_failed");
+    assert.equal(turn4.intent, "phone_capture_partial");
+    assert.equal(turn4.plan.response_type, RESPONSE_TYPES.REQUEST_PHONE_RETRY);
+    assert.equal(turn4.plan.plan_reason, "phone_capture_partial_or_incomplete");
     assert.equal(orchestrator.memory.lead_ready, false);
   });
 });

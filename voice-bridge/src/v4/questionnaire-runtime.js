@@ -52,6 +52,7 @@ const CALLBACK_INTENTS = new Set([
   "contact_phone",
   "contact_email",
   "phone_number_candidate",
+  "phone_capture_partial",
   "phone_capture_refused",
   "phone_capture_failed",
   "callback_permission_granted",

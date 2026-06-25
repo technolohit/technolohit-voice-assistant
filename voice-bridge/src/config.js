@@ -280,6 +280,10 @@ export function loadConfig() {
     0,
     readInt("VOICE_V4_ENDPOINT_MIN_SPEECH_MS", 240),
   );
+  const v4PhoneCaptureEndpointSilenceMs = Math.max(
+    0,
+    readInt("VOICE_V4_PHONE_CAPTURE_ENDPOINT_SILENCE_MS", 1200),
+  );
   const v4SttProvider = String(process.env.VOICE_V4_STT_PROVIDER ?? "mock")
     .trim()
     .toLowerCase();
@@ -432,6 +436,7 @@ export function loadConfig() {
       vadSpeechFrames: v4VadSpeechFrames,
       endpointSilenceMs: v4EndpointSilenceMs,
       endpointMinSpeechMs: v4EndpointMinSpeechMs,
+      phoneCaptureEndpointSilenceMs: v4PhoneCaptureEndpointSilenceMs,
       sttProvider: v4SttProvider,
       ttsProvider: v4TtsProvider,
       ttsCacheEnabled: v4TtsCacheEnabled,
