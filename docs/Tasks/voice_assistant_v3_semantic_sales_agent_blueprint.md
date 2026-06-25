@@ -1005,7 +1005,7 @@ Implementation evidence:
 
 ### Phase 12E: Live playbook provenance and spoken integrity
 
-**Status (2026-06-20):** Implemented; pending Codex review before `v1.36.2` tag/deploy.
+**Status (2026-06-20):** Released as `voice-bridge-v1.36.2` after Codex approval.
 
 - Runtime `playbook_version` on `response_plan_created` comes from the verified approved binding only; legacy agent-config prompt version is exposed separately as `agent_config_playbook_version`.
 - Company-general answers survive `prepareLiveAssistantSpeechText()` as complete sentences within 160 chars.
@@ -1036,7 +1036,7 @@ Implementation evidence:
 
 ### Phase 12J: Phone capture state lock and turn-taking repair
 
-**Status (2026-06-20):** Ready for Codex review — target `voice-bridge-v1.36.4`.
+**Status (2026-06-20):** Released as `voice-bridge-v1.36.4` after Codex approval.
 
 - Locked routing while `PHONE_NUMBER_PENDING`: no product Q&A, RAG, questionnaire, or generic fallback.
 - Partial/incomplete transcripts retry once (`request_phone_once_retry`) before `callback_manual_review`.
@@ -1045,6 +1045,36 @@ Implementation evidence:
 
 Implementation evidence:
 [phase12j_phone_capture_state_lock_and_turn_taking_report.md](phase12j_phone_capture_state_lock_and_turn_taking_report.md).
+
+### Phase 12K: Supervised missing-caller-ID callback phone capture canary (live)
+
+**Status (2026-06-25):** **PASS** — Phase 12 **closed**.
+
+| Evidence | Result |
+|----------|--------|
+| Image | `thnhit/technhvoice:voice-bridge-v1.36.4` |
+| `call_session_id` | `7a76318a-05b4-4853-b1cb-bf8bc0478cfb` |
+| `bridge_call_id` | `4737af80-f805-4b3e-bc6c-8ec4b33c1464` |
+| Calls | Exactly **one** supervised PSTN call |
+| Handler | `v4_canary` / `v4_live_canary_selected` |
+| `playbook_version` | `technolohit-playbook-v1-20260622-published` |
+| RAG | **off** |
+| Callback sequence | `collect_contact_preference` → `request_phone_once` → `collect_callback_permission` → `callback_finalized` → `closing` |
+| `lead_created_count` | **1** |
+| Privacy scan | **0** phone-like matches |
+| Notification | HTTP **200** |
+| Rollback | **v3 / RAG-off** restored |
+
+Passing canary image: **`voice-bridge-v1.36.4`** (`sha256:c9f9c61fd0d6c4f604bff4d6517a5c989a14437d3236eebe73f6c83b84a3d444`).
+
+Implementation evidence:
+[phase12k_supervised_callback_phone_capture_canary_pass_report.md](phase12k_supervised_callback_phone_capture_canary_pass_report.md).
+
+### Phase 12: CLOSED (2026-06-25)
+
+Phase 12A–12K complete. Approved playbook binding, live provenance, missing-caller-ID phone capture, and supervised callback canary are **accepted** on `v1.36.4`.
+
+**Next track:** limited operational canary and release readiness (not broad v4 GA). Production default remains **v3 / RAG-off** until explicit leadership approval.
 
 Goal: make playbook versions testable and reviewable before any canary.
 
@@ -1094,24 +1124,24 @@ Rules:
 
 ## Next Implementation Task
 
-Do **not** start broad runtime rewrites next.
+Do **not** start broad runtime rewrites or production v4 GA next.
 
-The next implementation task should be Phase 9 only:
+Phase 12 is **closed** (supervised callback phone-capture canary **PASS** on `voice-bridge-v1.36.4`).
+
+The next track is **limited operational canary / release readiness**:
 
 ```text
-Product Playbook Consolidation:
-compare docs/TechnoloHit Product Playbook v1.md with
-voice-bridge/config/playbooks/technolohit.main_voice_sales.v1.json,
-strengthen the schema/validator, add missing product/pricing/contact/lead/eval data,
-and report gaps. No live behavior change.
+- Repeat supervised canary evidence on a narrow allowlist window (v3 rollback mandatory).
+- Confirm post-call, notification, privacy, and playbook provenance on each window.
+- Optional Phase 13 observability: populate callback_permission / callback_ready / next_action on response_plan_created (not a Phase 12 blocker).
+- No production v4 GA until leadership explicitly approves after operational canary repeatability.
 ```
 
-Required before code changes start:
+Required before widening traffic:
 
-- Team accepts this Agent Behavior Layer roadmap.
-- Team accepts Markdown as founder-approved source and JSON/YAML as runtime source.
-- Team accepts that Phase 9 must not change live behavior.
-- Team accepts that no further canary is requested until playbook/eval gates are in place or explicitly waived.
+- Team accepts Phase 12 closeout and `v1.36.4` as the passing playbook-canary image.
+- Team accepts production default remains v3 / RAG-off between windows.
+- Team accepts limited operational canary scope before any GA decision.
 
 Do not touch yet:
 

@@ -10,23 +10,31 @@ Wiring: [voice_assistant_v4_phase10_live_audiosocket_canary_wiring_blueprint.md]
 
 **Production must return to v3** immediately after QA, even on pass.
 
-## FUTURE Sysadmin gate: Phase 12B approved playbook canary
+## FUTURE Sysadmin gate: Phase 12B approved playbook canary — **CLOSED (Phase 12K PASS)**
 
-This section is readiness guidance only. It has not been executed on production and does not claim a live pass.
+Phase 12 supervised playbook canary track **passed** on **`voice-bridge-v1.36.4`**. Production default remains **v3 / RAG-off** between windows. Next track: **limited operational canary / release readiness** (not v4 GA).
 
-Release target:
+**Passing image pin:**
 
 ```text
-thnhit/technhvoice:voice-bridge-v1.36.1
+thnhit/technhvoice:voice-bridge-v1.36.4
 ```
 
-Do **not** use `voice-bridge-v1.36.0` for Phase 12B canary — its packaged artifact validator fails (Phase 12C).
+**linux/amd64 digest:**
 
-Pin **`voice-bridge-v1.36.2`** (Phase 12E) for supervised playbook canary through Phase 12G. Phase 12G live missing-caller-ID phone capture **FAILED** — see [phase12h_callback_phone_capture_handoff_fix_report.md](phase12h_callback_phone_capture_handoff_fix_report.md).
+```text
+sha256:c9f9c61fd0d6c4f604bff4d6517a5c989a14437d3236eebe73f6c83b84a3d444
+```
 
-Pin **`voice-bridge-v1.36.3`** (Phase 12H) for supervised callback phone-capture re-test. Phase 12I live re-test **FAILED** — turn-taking/state-lock during `PHONE_NUMBER_PENDING`; see [phase12j_phone_capture_state_lock_and_turn_taking_report.md](phase12j_phone_capture_state_lock_and_turn_taking_report.md).
+Do **not** use `voice-bridge-v1.36.0` for playbook canary — its packaged artifact validator fails (Phase 12C).
 
-Pin **`voice-bridge-v1.36.4`** (Phase 12J) for the next supervised missing-caller-ID phone-capture re-test after Codex review. Phase 12D call `c411ccac-a282-4115-b883-aafd9d8bea3f` remains **PARTIAL PASS / ACCEPTANCE FAIL** for provenance/TTS/callback-abandon evidence — see [phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
+Historical pins (superseded):
+
+- `voice-bridge-v1.36.2` (Phase 12E) — through Phase 12G; Phase 12G **FAILED** — [phase12h_callback_phone_capture_handoff_fix_report.md](phase12h_callback_phone_capture_handoff_fix_report.md)
+- `voice-bridge-v1.36.3` (Phase 12H) — Phase 12I re-test **FAILED** — [phase12j_phone_capture_state_lock_and_turn_taking_report.md](phase12j_phone_capture_state_lock_and_turn_taking_report.md)
+- `voice-bridge-v1.36.4` (Phase 12J) — Phase **12K PASS** — [phase12k_supervised_callback_phone_capture_canary_pass_report.md](phase12k_supervised_callback_phone_capture_canary_pass_report.md)
+
+Phase 12D call `c411ccac-a282-4115-b883-aafd9d8bea3f` remains **PARTIAL PASS / ACCEPTANCE FAIL** for provenance/TTS/callback-abandon evidence — see [phase12e_live_playbook_provenance_and_spoken_integrity_report.md](phase12e_live_playbook_provenance_and_spoken_integrity_report.md).
 
 Non-live handler readiness (does not prove live routing):
 
@@ -1058,6 +1066,68 @@ Known accepted Phase 10AK result:
 - post-call summary: PASS
 - privacy scan: PASS
 - rollback: PASS
+
+### G.3l Phase 12K final acceptance — missing-caller-ID callback phone capture
+
+**Status: PASS** — Phase 12 **closed** (2026-06-25).
+
+Supervised script (missing caller ID — all turns required):
+
+| Step | Caller | Expected `response_type` |
+|------|--------|--------------------------|
+| 1 | `Bitte rufen Sie mich zurück.` | `collect_contact_preference` |
+| 2 | `Telefonisch bitte.` | `request_phone_once` |
+| 3 | `Meine Nummer ist 01511 2345678.` | `collect_callback_permission` |
+| 4 | `Ja.` | `callback_finalized` |
+| 5 | `Danke, das reicht erstmal.` | `closing` |
+
+**Final acceptance evidence checklist (Phase 12K):**
+
+| # | Check | Pass criterion |
+|---|-------|----------------|
+| 1 | Image pin | `thnhit/technhvoice:voice-bridge-v1.36.4` |
+| 2 | Digest | `sha256:c9f9c61fd0d6c4f604bff4d6517a5c989a14437d3236eebe73f6c83b84a3d444` |
+| 3 | Call count | Exactly **one** supervised PSTN call |
+| 4 | Handler | `call_handler selected=v4_canary reason=v4_live_canary_selected` |
+| 5 | Playbook | `playbook_version=technolohit-playbook-v1-20260622-published` on `response_plan_created` |
+| 6 | RAG | **off** — no `rag_retrieval_started` during callback capture |
+| 7 | Callback sequence | `collect_contact_preference` → `request_phone_once` → `collect_callback_permission` → `callback_finalized` → `closing` |
+| 8 | Lead | `lead_created_count=1` (callback-ready) |
+| 9 | Privacy | Corrected G.4 scan — **0** phone-like matches |
+| 10 | Notification | HTTP **200** |
+| 11 | Post-call | `call_summaries` row + `post_call_summary_created` event |
+| 12 | Rollback | Production **v3 / RAG-off** after evidence |
+
+```sql
+SELECT created_at,
+       payload->>'response_type' AS response_type,
+       payload->>'plan_reason' AS plan_reason,
+       payload->>'playbook_version' AS playbook_version,
+       payload->>'rag_used' AS rag_used
+FROM voice.call_quality_events
+WHERE call_session_id = '<CALL_SESSION_ID>'::uuid
+  AND event_type = 'response_plan_created'
+ORDER BY created_at;
+```
+
+Known accepted Phase 12K result:
+
+- `voice-bridge-v1.36.4`
+- `call_session_id=7a76318a-05b4-4853-b1cb-bf8bc0478cfb`
+- `bridge_call_id=4737af80-f805-4b3e-bc6c-8ec4b33c1464`
+- handler: `v4_canary`
+- playbook: `technolohit-playbook-v1-20260622-published`
+- RAG: off
+- callback sequence: PASS
+- `lead_created_count=1`
+- privacy scan: 0
+- notification: HTTP 200
+- rollback: PASS
+- **classification: PASS**
+
+**Observability follow-up (non-blocking):** `response_plan_created` may still omit explicit `callback_permission`, `callback_ready`, and `next_action` fields on some turns. Populating these in quality payloads is a **Phase 13** improvement — **not** a blocker for Phase 12 closure or limited operational canary readiness.
+
+Full report: [phase12k_supervised_callback_phone_capture_canary_pass_report.md](phase12k_supervised_callback_phone_capture_canary_pass_report.md).
 
 Low-priority follow-up:
 

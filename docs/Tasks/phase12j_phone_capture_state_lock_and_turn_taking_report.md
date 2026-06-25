@@ -1,8 +1,8 @@
 # Phase 12J — Phone Capture State Lock and Turn-Taking Repair Report
 
 Date: 2026-06-20  
-Release target (after Codex review): **`voice-bridge-v1.36.4`**  
-Status: **Ready for Codex review** — not committed, tagged, deployed, or live-QA’d
+Release: **`voice-bridge-v1.36.4`** (`thnhit/technhvoice:voice-bridge-v1.36.4`)
+Status: **Released** — commit `d33adc7`, tag `v1.36.4`
 
 ## Context: Phase 12I live failure
 
