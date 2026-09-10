@@ -66,6 +66,10 @@ import {
   sanitizePhoneCaptureTranscriptForPersistence,
   shouldRedactPhoneCaptureTranscript
 } from "./phone-capture-privacy.js";
+import {
+  isPhoneCaptureLocked,
+  resolveProtectedPhoneCaptureTurn,
+} from "./phone-capture-policy.js";
 
 function bufferEvent(orchestrator, eventType, payload = {}, metricValue = null) {
   const event = buildQualityEventInput({
@@ -136,6 +140,8 @@ export function createDialogueOrchestrator({
     postCallHandoff: null,
     callerPhoneNormalized: callerPhoneNormalized ?? null,
     callerPhoneRaw: callerPhoneRaw ?? null,
+    protectedPhoneCaptureFragment: "",
+    protectedPhoneCaptureSegmentCount: 0,
     playback: null,
     status: "created"
   };
@@ -236,7 +242,14 @@ export function acceptUserTranscript(orchestrator, transcript = "") {
 }
 
 export async function decideNextAction(orchestrator, input = {}) {
-  const transcript = input.transcript ?? orchestrator.currentTurn?.transcript ?? "";
+  const callerTranscript = input.transcript ?? orchestrator.currentTurn?.transcript ?? "";
+  const phoneCaptureTurn = isPhoneCaptureLocked(orchestrator.memory)
+    ? resolveProtectedPhoneCaptureTurn(
+        callerTranscript,
+        orchestrator.protectedPhoneCaptureFragment,
+      )
+    : null;
+  const transcript = phoneCaptureTurn?.planningTranscript ?? callerTranscript;
   const closedDomain =
     input.closedDomain ??
     resolveClosedDomainIntent({
@@ -251,7 +264,7 @@ export async function decideNextAction(orchestrator, input = {}) {
     ...closedDomainQualityPayload(closedDomain, orchestrator.memory),
     interrupt_sequence_id:
       input.interrupt_sequence_id ?? orchestrator.activeInterruptSequenceId ?? null,
-    effective_transcript_chars: String(transcript ?? "").length,
+    effective_transcript_chars: String(callerTranscript ?? "").length,
     waiting_for_interruption_followup: Boolean(input.waitingForInterruptionFollowup),
     interrupt_marker_detected: Boolean(input.interruptMarkerDetected),
     interrupt_followup_timeout: Boolean(input.interruptFollowupTimeout),
@@ -403,10 +416,34 @@ export async function decideNextAction(orchestrator, input = {}) {
   plan.rag_used = Boolean(ragResult?.used_rag);
   plan.rag_fallback_used = Boolean(ragGate.allowed && !ragResult?.used_rag);
 
-  if (orchestrator.currentTurn && shouldRedactPhoneCaptureTranscript(orchestrator.memory, transcript)) {
+  if (phoneCaptureTurn) {
+    const nextSegmentCount = phoneCaptureTurn.fragmentDetected
+      ? phoneCaptureTurn.restarted
+        ? 1
+        : Number(orchestrator.protectedPhoneCaptureSegmentCount ?? 0) + 1
+      : Number(orchestrator.protectedPhoneCaptureSegmentCount ?? 0);
+
+    if (plan?.response_type === "request_phone_once_retry") {
+      orchestrator.protectedPhoneCaptureFragment = phoneCaptureTurn.protectedFragment;
+      orchestrator.protectedPhoneCaptureSegmentCount = nextSegmentCount;
+      plan.phone_capture_segment_count = nextSegmentCount;
+    } else {
+      if (phoneCaptureTurn.captureComplete) {
+        plan.phone_capture_accumulated = phoneCaptureTurn.usedAccumulated;
+        plan.phone_capture_segment_count = Math.max(1, nextSegmentCount);
+      }
+      orchestrator.protectedPhoneCaptureFragment = "";
+      orchestrator.protectedPhoneCaptureSegmentCount = 0;
+    }
+  }
+
+  if (
+    orchestrator.currentTurn &&
+    shouldRedactPhoneCaptureTranscript(orchestrator.memory, callerTranscript)
+  ) {
     orchestrator.currentTurn.transcript = sanitizePhoneCaptureTranscriptForPersistence(
       orchestrator.memory,
-      transcript
+      callerTranscript
     );
   }
 
@@ -580,6 +617,12 @@ export function commitAssistantPlanWithoutPlayback(orchestrator, text = null, pl
     assistant_response_preview: buildSafeTextPreview(responseText, 260),
     intent: resolvedPlan?.intent ?? null,
     next_state: toState,
+    ...(Number.isFinite(Number(resolvedPlan?.phone_capture_segment_count))
+      ? {
+          phone_capture_segment_count: Number(resolvedPlan.phone_capture_segment_count),
+          phone_capture_accumulated: Boolean(resolvedPlan.phone_capture_accumulated),
+        }
+      : {}),
     ...planContextQualityPayload(
       memory,
       orchestrator.lastClosedDomain,

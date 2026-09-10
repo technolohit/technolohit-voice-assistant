@@ -1092,7 +1092,7 @@ Implementation evidence:
 
 ### Phase 12M: Callback phone protected persistence
 
-**Status (2026-06-25):** Implemented — target **`voice-bridge-v1.36.5`** after Codex review. **Not deployed.**
+**Status (2026-09-10):** Released as **`voice-bridge-v1.36.5`**. Phase 12N live verification did not reach callback finalization, so protected lead persistence was not exercised.
 
 - Spoken capture stays on `orchestrator.callerPhoneNormalized` during the call (not in public plan/quality/summary).
 - Post-call handoff exposes `protectedNormalizedPhone` for lead persistence only.
@@ -1101,6 +1101,31 @@ Implementation evidence:
 
 Implementation evidence:
 [phase12m_callback_phone_protected_persistence_fix_report.md](phase12m_callback_phone_protected_persistence_fix_report.md).
+
+### Phase 12N: v1.36.5 operational canary and multi-endpoint phone remediation
+
+**Status (2026-09-10):** Part B artifact verification **PASS**; Part D supervised canary **BLOCKED**; remediation implemented locally for target **`voice-bridge-v1.36.6`**.
+
+Production evidence from the single supervised call:
+
+- `call_session_id=fb53e18a-c14d-40d1-ae8e-bd520b215d04`
+- `bridge_call_id=4b738efd-9abc-4f02-955a-5dfb0fedc653`
+- `v4_canary` / `v4_live_canary_selected` confirmed
+- callback path ended `request_phone_once_retry` -> `callback_manual_review`
+- terminal reason `phone_capture_failed_after_retry`
+- no lead was created, correctly, because callback finalization never occurred
+- post-call summary and HTTP 200 notification completed
+- rollback restored v3/RAG-off with Asterisk active calls 0
+
+Remediation:
+
+- retain partial numeric or German spoken-digit fragments across VAD/STT endpoints only in protected in-call orchestrator state
+- combine and validate the candidate before moving to callback permission
+- clear protected fragments on success, refusal, closing, or terminal failure
+- expose only safe segment count / accumulation evidence; redact partial and complete phone transcripts from public surfaces
+
+Implementation evidence:
+[phase12n_multi_endpoint_phone_capture_remediation_report.md](phase12n_multi_endpoint_phone_capture_remediation_report.md).
 
 Goal: make playbook versions testable and reviewable before any canary.
 
@@ -1152,13 +1177,15 @@ Rules:
 
 Do **not** start broad runtime rewrites or production v4 GA next.
 
-Phase 12 is **closed** (supervised callback phone-capture canary **PASS** on `voice-bridge-v1.36.4`).
+The Phase 12 feature track was closed after the `v1.36.4` dialogue canary, but its production-readiness extension remains open after the Phase 12N `v1.36.5` operational canary exposed multi-endpoint phone capture failure.
 
-**Phase 12L (current):** production readiness polish — n8n notification email mapping, Lead Dashboard verification. **Blocked** on Phase 12M lead phone persistence.
+**Phase 12L (current):** production readiness polish — n8n notification email mapping and Lead Dashboard verification remain open.
 
-**Phase 12M (in progress):** protected callback phone persistence to `voice.leads` — target `v1.36.5` after Codex review.
+**Phase 12M:** protected callback phone persistence shipped in `v1.36.5`; live verification was not reached because Phase 12N callback capture failed first.
 
-**Phase 13 — limited operational canary / release readiness:** **BLOCKED** until Phase 12M ships and 12L gate passes (readable n8n email + lead reveal verified).
+**Phase 12N remediation (in progress):** protected multi-endpoint phone accumulation — target `v1.36.6`, followed by exactly one supervised canary after immutable artifact verification.
+
+**Phase 13 — limited operational canary / release readiness:** **BLOCKED** until Phase 12N callback finalization and protected lead persistence pass live, and the Phase 12L n8n email + dashboard Reveal gates pass.
 
 ```text
 - Repeat supervised canary evidence on a narrow allowlist window (v3 rollback mandatory).
@@ -1169,7 +1196,7 @@ Phase 12 is **closed** (supervised callback phone-capture canary **PASS** on `vo
 
 Required before widening traffic:
 
-- Team accepts Phase 12 closeout and `v1.36.4` as the passing playbook-canary image.
+- Team accepts `v1.36.5` as insufficient for naturally split phone capture and requires the `v1.36.6` remediation canary before Phase 13.
 - Team accepts production default remains v3 / RAG-off between windows.
 - Team accepts limited operational canary scope before any GA decision.
 

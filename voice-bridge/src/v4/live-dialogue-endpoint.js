@@ -24,13 +24,16 @@ import {
 } from "./interrupt-followup-latency.js";
 import { buildInterruptFollowupLatencyMetricsEvent } from "./quality-events.js";
 import { clearStaleInterruptionRecovery } from "./interrupt-followup-wait.js";
+import { shouldRedactPhoneCaptureTranscript } from "./phone-capture-privacy.js";
 
 function liveLogIds(ctx) {
   return `bridge_call_id=${ctx?.bridgeCallId ?? "pending"} call_session_id=${ctx?.callSessionId ?? "pending"}`;
 }
 
-function safeTranscriptPreview(text, maxLen = 48) {
-  const redacted = redactPhoneLikeText(text);
+export function safeTranscriptPreview(text, maxLen = 48, memory = {}) {
+  const redacted = shouldRedactPhoneCaptureTranscript(memory, text)
+    ? "[phone_redacted]"
+    : redactPhoneLikeText(text);
   if (!redacted) return "";
   if (redacted.length <= maxLen) return redacted;
   return `${redacted.slice(0, maxLen)}…`;
@@ -155,7 +158,7 @@ export async function runLiveDialogueOnCallerTranscript(config, ctx, runtime, ca
     V4_STATES.LISTENING;
 
   console.log(
-    `[v4-live] dialogue_started state=${stateBefore} transcript_chars=${transcript.length} transcript_preview="${safeTranscriptPreview(transcript)}" ${liveLogIds(ctx)}`
+    `[v4-live] dialogue_started state=${stateBefore} transcript_chars=${transcript.length} transcript_preview="${safeTranscriptPreview(transcript, 48, runtime?.runtimeContext?.memory)}" ${liveLogIds(ctx)}`
   );
 
   try {

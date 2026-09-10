@@ -7,13 +7,18 @@
  */
 
 import { isPhoneNumberPendingStage } from "./callback-flow-policy.js";
-import { parseSpokenPhoneCandidate } from "./spoken-phone-capture.js";
+import {
+  looksLikePartialPhoneCapture,
+  parseSpokenPhoneCandidate,
+} from "./spoken-phone-capture.js";
 
 export const PHONE_REDACTED_TEXT = "[phone_redacted]";
 
 export function shouldRedactPhoneCaptureTranscript(memory = {}, transcript = "") {
   if (!isPhoneNumberPendingStage(memory)) return false;
-  return Boolean(parseSpokenPhoneCandidate(transcript));
+  return Boolean(
+    parseSpokenPhoneCandidate(transcript) || looksLikePartialPhoneCapture(transcript)
+  );
 }
 
 export function sanitizePhoneCaptureTranscriptForPersistence(memory = {}, transcript = "") {

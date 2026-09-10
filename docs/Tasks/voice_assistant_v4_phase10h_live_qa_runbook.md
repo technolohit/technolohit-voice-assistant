@@ -1158,7 +1158,7 @@ Full checklist: [phase12l_production_readiness_polish_gate_report.md](phase12l_p
 
 ### G.3n Phase 12M protected callback phone persistence
 
-**Status:** fix ready for Codex review — target **`voice-bridge-v1.36.5`**. **Not deployed.**
+**Status:** released as **`voice-bridge-v1.36.5`**. Phase 12N live verification was not reached because phone capture failed before callback finalization.
 
 | Check | Pass criterion |
 |-------|----------------|
@@ -1171,7 +1171,39 @@ Full checklist: [phase12l_production_readiness_polish_gate_report.md](phase12l_p
 
 Re-verify Phase 12K lead `741f6e28-ffb8-4e66-8a23-2bc10551bb40` after `v1.36.5` deploy **or** approved one-time SQL backfill (see [phase12m_callback_phone_protected_persistence_fix_report.md](phase12m_callback_phone_protected_persistence_fix_report.md)).
 
-**Phase 13 blocked** until 12M live verification + 12L n8n email pass.
+### G.3o Phase 12N multi-endpoint phone capture remediation
+
+**Status:** `v1.36.5` supervised canary blocked at `phone_capture_failed_after_retry`; target **`voice-bridge-v1.36.6`** after code review and release verification.
+
+The D5B read-only triage proved `v4_canary` routing, post-call completion, HTTP 200 notification, privacy, and rollback were healthy. No lead was expected because callback permission/finalization was not reached.
+
+One-call script after `v1.36.6` immutable artifact verification:
+
+| Step | Caller | Expected `response_type` |
+|------|--------|--------------------------|
+| 1 | `Bitte rufen Sie mich zurück.` | `collect_contact_preference` |
+| 2 | `Telefonisch bitte.` | `request_phone_once` |
+| 3a | Speak the first part of the approved test number, then pause naturally | `request_phone_once_retry` only if STT closes the partial endpoint |
+| 3b | Speak the remaining digits | `collect_callback_permission` |
+| 4 | `Ja.` | `callback_finalized` |
+| 5 | `Danke, das reicht erstmal.` | `closing` |
+
+Required evidence:
+
+- exactly one new session after the canary marker
+- `handler=v4_canary`, `route_reason=v4_live_canary_selected`
+- no `callback_manual_review` or `phone_capture_failed_after_retry`
+- when split: `phone_capture_accumulated=true`, `phone_capture_segment_count >= 2`
+- `lead_created_count=1`; `voice.leads.normalized_phone` present only in protected storage
+- masked phone appears in Lead Dashboard and Reveal writes the access-audit row
+- no raw/partial digits in quality events, memory, summary, notification, email, or Telegram
+- n8n email contains no literal `undefined`
+- RAG remains off
+- wait for post-call completion, capture evidence, then restore v3/RAG-off
+
+Abort before dialing if image/digest, published binding, artifact preflight, STT/TTS, handler readiness, or active-call checks fail. Do not place a second call in the same window.
+
+**Phase 13 blocked** until Phase 12N live callback/persistence verification + Phase 12L n8n email and dashboard gates pass.
 
 ### G.4 Session close + privacy-oriented payload scan
 

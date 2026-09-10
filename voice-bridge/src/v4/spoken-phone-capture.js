@@ -68,6 +68,33 @@ function countSpokenDigitWords(transcript = "") {
   return count;
 }
 
+/**
+ * Extract an incomplete phone fragment while the deterministic callback flow
+ * is waiting for digits. The caller context decides whether the fragment is
+ * meaningful; this helper deliberately does not persist or log the result.
+ */
+export function extractPhoneCaptureFragment(transcript = "") {
+  const tokens = normalizeSpokenTokens(transcript).match(/\+|\d+|[a-z]+/g) ?? [];
+  const digits = [];
+  let hasPlus = false;
+
+  for (const token of tokens) {
+    if (token === "+" && digits.length === 0) {
+      hasPlus = true;
+      continue;
+    }
+    if (/^\d+$/.test(token)) {
+      digits.push(token);
+      continue;
+    }
+    const digit = DIGIT_WORDS.get(token);
+    if (digit !== undefined) digits.push(digit);
+  }
+
+  if (!digits.length) return "";
+  return normalizeCallerPhone(`${hasPlus ? "+" : ""}${digits.join("")}`);
+}
+
 function extractDigitRunLength(transcript = "") {
   const runs = String(transcript ?? "").match(/\d[\d\s()./-]*/g) ?? [];
   let max = 0;

@@ -9,9 +9,12 @@ import {
 } from "./callback-flow-policy.js";
 import {
   evaluateSpokenPhoneCapture,
+  extractPhoneCaptureFragment,
   isPhoneCaptureRefusal,
   looksLikePartialPhoneCapture,
 } from "./spoken-phone-capture.js";
+
+const MAX_PROTECTED_PHONE_DIGITS = 15;
 
 export const PHONE_CAPTURE_RETRY_TEXT =
   "Ich habe die Nummer noch nicht vollständig verstanden. Bitte nennen Sie sie langsam, Ziffer für Ziffer.";
@@ -34,6 +37,61 @@ export function resolvePhoneCaptureAttemptCount(memory = {}) {
 
 export function shouldRetryPhoneCapture(memory = {}) {
   return resolvePhoneCaptureAttemptCount(memory) < resolvePhoneCaptureMaxRetries(memory);
+}
+
+function digitCount(value = "") {
+  return String(value).replace(/\D/g, "").length;
+}
+
+function appendProtectedPhoneFragment(previous = "", current = "") {
+  const prior = String(previous ?? "").trim();
+  const next = String(current ?? "").trim();
+  if (!next) return { value: prior, restarted: false };
+  if (!prior) return { value: next, restarted: false };
+
+  // A new national/international prefix means the caller restarted the number.
+  if (next.startsWith("0") || next.startsWith("+")) {
+    return { value: next, restarted: true };
+  }
+  if (prior.endsWith(next)) return { value: prior, restarted: false };
+
+  let overlap = 0;
+  const maxOverlap = Math.min(prior.length, next.length);
+  for (let size = maxOverlap; size >= 3; size -= 1) {
+    if (prior.endsWith(next.slice(0, size))) {
+      overlap = size;
+      break;
+    }
+  }
+
+  const combined = `${prior}${next.slice(overlap)}`;
+  if (digitCount(combined) > MAX_PROTECTED_PHONE_DIGITS) {
+    return { value: next, restarted: true };
+  }
+  return { value: combined, restarted: false };
+}
+
+/**
+ * Resolve one locked phone-capture turn without placing partial digits in
+ * CallSessionMemory. The returned protected fragment belongs on the in-process
+ * orchestrator only.
+ */
+export function resolveProtectedPhoneCaptureTurn(
+  transcript = "",
+  previousProtectedFragment = "",
+) {
+  const fragment = extractPhoneCaptureFragment(transcript);
+  const merged = appendProtectedPhoneFragment(previousProtectedFragment, fragment);
+  const capture = evaluateSpokenPhoneCapture(merged.value);
+
+  return {
+    planningTranscript: capture.ok ? merged.value : transcript,
+    protectedFragment: merged.value,
+    fragmentDetected: Boolean(fragment),
+    captureComplete: capture.ok,
+    usedAccumulated: capture.ok && Boolean(previousProtectedFragment) && !merged.restarted,
+    restarted: merged.restarted,
+  };
 }
 
 /**
