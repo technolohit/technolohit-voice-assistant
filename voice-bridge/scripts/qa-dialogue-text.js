@@ -1073,6 +1073,79 @@ const SCENARIOS = {
       ];
     }
   },
+  v3_named_person_human_contact: {
+    turns: [
+      "Ich möchte mit Herrn Neumann sprechen.",
+      "Ich möchte nochmal mit Herrn Neumann sprechen.",
+      "Ich möchte mit Herrn Neumann über den Preis sprechen."
+    ],
+    assert(results) {
+      const first = results[0];
+      const second = results[1];
+      const mixed = results[2];
+      const approvedPreference =
+        includesAll(first.assistant, ["e-mail"]) && includesAll(first.assistant, ["telefonisch"]);
+      const noAcousticProduct = (text) =>
+        excludes(text, "akustisch") &&
+        excludes(text, "nicht verstanden") &&
+        excludes(text, "smart website") &&
+        excludes(text, "aiseoq") &&
+        excludes(text, "botinteg") &&
+        excludes(text, "worum geht es");
+      return [
+        assertCondition(
+          "named-person maps to handoff_requested",
+          first.normalized_intent === "handoff_requested",
+          `${first.normalized_intent}: ${first.assistant}`
+        ),
+        assertCondition(
+          "asks approved email/phone contact preference",
+          approvedPreference,
+          first.assistant
+        ),
+        assertCondition(
+          "no live-transfer claim",
+          excludes(first.assistant, "verbinde sie jetzt") &&
+            excludes(first.assistant, "stelle sie durch") &&
+            excludes(first.assistant, "live transfer"),
+          first.assistant
+        ),
+        assertCondition(
+          "does not echo synthetic surname",
+          excludes(first.assistant, "neumann"),
+          first.assistant
+        ),
+        assertCondition(
+          "repeated request stays handoff_requested",
+          second.normalized_intent === "handoff_requested",
+          `${second.normalized_intent}: ${second.assistant}`
+        ),
+        assertCondition(
+          "repeated request restates approved preference wording",
+          includesAll(second.assistant, ["e-mail"]) &&
+            includesAll(second.assistant, ["telefonisch"]),
+          second.assistant
+        ),
+        assertCondition(
+          "repeated request has no akustisch / nicht verstanden / product discovery",
+          noAcousticProduct(second.assistant),
+          second.assistant
+        ),
+        assertCondition(
+          "mixed named-person + Preis is handoff_requested not pricing",
+          mixed.normalized_intent === "handoff_requested",
+          `${mixed.normalized_intent}: ${mixed.assistant}`
+        ),
+        assertCondition(
+          "mixed Preis turn keeps approved preference wording without acoustic reask",
+          includesAll(mixed.assistant, ["e-mail"]) &&
+            includesAll(mixed.assistant, ["telefonisch"]) &&
+            noAcousticProduct(mixed.assistant),
+          mixed.assistant
+        )
+      ];
+    }
+  },
   gate6_business_fallback: {
     turns: [
       "Ich interessiere mich für Smart Website.",
@@ -1356,7 +1429,7 @@ Scenarios:
   v3_email_contact_closing,
   v3_pricing_after_contact_capture,
   v3_smart_website_pricing_before_qualification,
-  unclear_input, unknown_intent, gate6_business_fallback,
+  unclear_input, unknown_intent, v3_named_person_human_contact, gate6_business_fallback,
   five_products_overview, clear_close, contact_form_question,
   email_contents_question, lokalki_rag_optional
 

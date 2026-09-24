@@ -35,6 +35,7 @@ import {
   detectProductRelationQuestion,
   shouldClassifyAsHumanOrAiQuestion
 } from "./product-intent-routing.js";
+import { detectHumanContactIntent } from "./human-contact-intent.js";
 import {
   handleSalesCustomerTypeTurn,
   handleSalesNeedDiscoveryTurn,
@@ -823,6 +824,12 @@ function detectIntent(text) {
   ) {
     return "seo_guarantee_question";
   }
+  // Named-person / human-contact before pricing and product discovery.
+  // Closing and active contact-detail/permission are handled earlier in soft intake.
+  {
+    const humanContact = detectHumanContactIntent(text);
+    if (humanContact) return humanContact;
+  }
   if (/\b(preis|preise|kostet|kosten|teuer|budget|angebot)\b/i.test(lower) || /\bwas kostet\b/i.test(lower)) {
     return "pricing_question";
   }
@@ -836,13 +843,6 @@ function detectIntent(text) {
   }
   if (shouldClassifyAsHumanOrAiQuestion(lower)) {
     return "human_or_ai_question";
-  }
-  if (
-    /\b(mit jemandem sprechen|mit einem menschen sprechen|mit einem mensch sprechen|einen menschen sprechen|einen mitarbeiter sprechen|mitarbeiter sprechen|team sprechen|geben sie das bitte weiter|geben sie es bitte weiter|team soll sich melden|jemand soll sich melden|kann mich jemand zuruckrufen|kann mich jemand zurueckrufen)\b/i.test(
-      lower
-    )
-  ) {
-    return "handoff_requested";
   }
   if (/\b(ruckruf|rueckruf|zuruckrufen|zurueckrufen|zuruck rufen|zurueck rufen|rufen sie mich|morgen.*rufen|morgen.*ruck|wann passt|callback|call ?back)\b/i.test(lower)) {
     return "callback_request";
@@ -3149,6 +3149,19 @@ async function maybeCreateSoftIntakeResponse(config, ctx, turnIndex, callerText,
       return requestPhoneDetailIntake(config, ctx, turnIndex, "contact_preference_phone", intake);
     }
 
+    // Repeated recognized handoff: restate approved preference wording.
+    // Do not claim acoustic failure or enter product discovery.
+    // callback_request keeps prior contact-preference / phone matching behavior.
+    if (intent === "handoff_requested") {
+      intake.waitingFor = "contact_preference";
+      intake.handoffRequested = true;
+      return {
+        text: normalizeAssistantResponse(HANDOFF_CONTACT_PREFERENCE_TEXT, config),
+        detectedIntent: intent,
+        intake
+      };
+    }
+
     if (intake.contactDetailRetryCount >= CONTACT_PREFERENCE_RETRY_LIMIT) {
       intake.failed = true;
       intake.failedReason = "contact_preference_unclear_after_retry";
@@ -4028,21 +4041,31 @@ async function createAssistantResponse(config, ctx, turnIndex, callerText, histo
     usedClarificationFallback = true;
   }
 
-  const repeatedProductQuestion = preventRepeatedV3Response({
-    responseText: text,
-    previousAssistantText: history.at(-1)?.assistant ?? "",
-    productId: turnState(ctx).product?.selectedProduct ?? null,
-    category: detectKnownProductQuestion(callerText, responseDetectedIntent),
-    normalizeResponse: (value) => normalizeAssistantResponse(value, config)
-  });
-  if (repeatedProductQuestion.repeated) {
-    text = repeatedProductQuestion.text;
-    finalResponseTemplate = "product_question_repeat_guard";
-    usedTemplateResponse = true;
-    usedLlmResponse = false;
-  }
-
   const intakeState = ensureIntakeState(turnState(ctx));
+  // Only skip the product repeat guard for intentional restatement of the
+  // approved contact-preference wording after a repeated handoff request.
+  const contactPreferencePending =
+    intakeState.waitingFor === "contact_preference" ||
+    (intakeState.contactPreferenceAsked &&
+      !intakeState.contactPreference &&
+      !intakeState.contactDetailRequested);
+  const skipProductRepeatGuard =
+    responseDetectedIntent === "handoff_requested" && contactPreferencePending;
+  if (!skipProductRepeatGuard) {
+    const repeatedProductQuestion = preventRepeatedV3Response({
+      responseText: text,
+      previousAssistantText: history.at(-1)?.assistant ?? "",
+      productId: turnState(ctx).product?.selectedProduct ?? null,
+      category: detectKnownProductQuestion(callerText, responseDetectedIntent),
+      normalizeResponse: (value) => normalizeAssistantResponse(value, config)
+    });
+    if (repeatedProductQuestion.repeated) {
+      text = repeatedProductQuestion.text;
+      finalResponseTemplate = "product_question_repeat_guard";
+      usedTemplateResponse = true;
+      usedLlmResponse = false;
+    }
+  }
   if (
     intakeState.completed &&
     intakeState.postCompletionFollowupUsed &&

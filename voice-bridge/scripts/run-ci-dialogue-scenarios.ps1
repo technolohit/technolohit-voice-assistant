@@ -26,6 +26,7 @@ $scenarios = @(
   "no_rueckruf_output",
   "unclear_input",
   "unknown_intent",
+  "v3_named_person_human_contact",
   "five_products_overview",
   "contact_form_question",
   "email_contents_question"
