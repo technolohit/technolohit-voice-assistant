@@ -1,14 +1,17 @@
 # Production Incident IR-2026-09-24 — Increment A
 
-**Title:** v3 named-person / human-contact intent repair  
-**Date:** 2026-09-24  
-**Status:** Codex approved, merged to main  
-**Implementation commit:** `a40947507560236b40040fd0f5a5cef42b3485ea`  
-**PR:** [#1](https://github.com/technolohit/technolohit-voice-assistant/pull/1) merged  
-**Main CI:** success — https://github.com/technolohit/technolohit-voice-assistant/actions/runs/36020964133  
-**Release target:** `voice-bridge-v1.36.6`  
-**Live production verification:** not yet performed  
-**Scope:** Increment A only — deterministic intent classification. No deploy, no live QA in this increment.
+**Title:** v3 named-person / human-contact intent repair
+**Date:** 2026-09-24
+
+| Field | Value |
+|-------|-------|
+| Status | Codex approved, merged to main |
+| Implementation commit | `a40947507560236b40040fd0f5a5cef42b3485ea` |
+| PR | [#1](https://github.com/technolohit/technolohit-voice-assistant/pull/1) merged |
+| Main CI | success — https://github.com/technolohit/technolohit-voice-assistant/actions/runs/36020964133 |
+| Release target | `voice-bridge-v1.36.6` |
+| Live production verification | not yet performed |
+| Scope | Increment A only — deterministic intent classification. No deploy, no live QA in this increment. |
 
 ## Root cause
 
