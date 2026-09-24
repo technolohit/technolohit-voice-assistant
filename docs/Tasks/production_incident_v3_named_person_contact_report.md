@@ -2,9 +2,13 @@
 
 **Title:** v3 named-person / human-contact intent repair  
 **Date:** 2026-09-24  
-**Status:** Implemented — awaiting Codex re-review (not committed)  
-**Branch:** `incident/ir-2026-09-24-v3-named-person-contact` (from `origin/main`)  
-**Scope:** Increment A only — deterministic intent classification. No deploy, no live QA.
+**Status:** Codex approved, merged to main  
+**Implementation commit:** `a40947507560236b40040fd0f5a5cef42b3485ea`  
+**PR:** [#1](https://github.com/technolohit/technolohit-voice-assistant/pull/1) merged  
+**Main CI:** success — https://github.com/technolohit/technolohit-voice-assistant/actions/runs/36020964133  
+**Release target:** `voice-bridge-v1.36.6`  
+**Live production verification:** not yet performed  
+**Scope:** Increment A only — deterministic intent classification. No deploy, no live QA in this increment.
 
 ## Root cause
 
@@ -77,14 +81,18 @@ Documented gap only: when a named-person / human-contact caller later chooses ph
 
 Documented gap only: operators may need dashboard visibility that the caller asked for a person/team handoff (without storing the spoken name). UI/filters/audit for that signal are **unimplemented** here.
 
+### 3. Phase 12N rebase
+
+`codex/phase12n-phone-capture` remains separate. After this release it must be rebased onto main and retargeted from `v1.36.6` to `v1.36.7`.
+
 ## Remaining risks
 
 - Single-token first names without Herr/Frau or a strong connect phrase are intentionally **not** classified as handoff (reduces product false positives; may miss some ASR-stripped named requests).
 - Very noisy STT that drops “Herr/Frau” and the speak/connect framing may still miss the request.
 - Closing-while-in-permission-state edge cases remain governed by existing soft-intake logic (out of Increment A scope).
-- Production redeploy / supervised verification still required after Codex re-review and release.
+- Live production verification is **not yet performed** after merge/release.
 
-## Verification (local)
+## Verification (pre-merge)
 
 | Check | Result |
 |-------|--------|
@@ -93,5 +101,14 @@ Documented gap only: operators may need dashboard visibility that the caller ask
 | `node --check` (changed JS) | pass |
 | `git diff --check` | pass |
 | `run-ci-dialogue-scenarios.ps1` | **27/27** |
+| PR #1 CI on incident branch | success |
+| Main CI after merge (`a409475`) | success |
 
-**Not committed / not pushed** — awaiting Codex re-review.
+## Release
+
+| Item | Value |
+|------|-------|
+| Target image | `thnhit/technhvoice:voice-bridge-v1.36.6` |
+| Implementation SHA | `a40947507560236b40040fd0f5a5cef42b3485ea` |
+| Live production verification | **not yet performed** |
+| Deploy / live QA in this task | **not performed** |
